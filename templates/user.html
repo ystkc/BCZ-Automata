@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html dir="ltr" lang="zh-CN" >
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <title>用户详情</title>
+    <link rel="shortcut icon" href="favicon.ico" />
+    <link rel="apple-touch-icon" href="favicon.ico" />
+    <link rel="stylesheet" href="lib/style.css">
+  </head>
+
+  <body>
+    <div class="user-info">
+      <div class="info-table">
+        <div class="avatar">
+          <img src="" />
+          <img src="" />
+        </div>
+        <div class="member-info">
+          <span>name</span>
+          <span>已打卡已打卡</span>
+        </div>
+      </div>
+    </div>
+  </body>
+  <script src="lib/script.js"></script>
+  <script>
+    let phone_number_input = document.getElementById('phone_number');
+    let code_input = document.getElementById('code');
+    let send_sms = document.getElementById('send_sms');
+    let login_btn = document.getElementById('login_btn');
+    window.onload = ()=>{
+      let userData = JSON.parse(localStorage.getItem('userData'));
+      document.querySelector('.member-info').innerHTML = '你的用户ID为: ' + userData.user_id + '<br>你的授权令牌为: ' + userData.token;
+    }
+
+    // 发送短信验证码
+    function sendSms(phone) {
+      let payload = {'phone': phone};
+      fetchAPI('send_sms', 'POST', payload);
+    }
+
+    // 用户登陆
+    function userLogin(phone, code) {
+      let payload = {'phone': phone, 'code': code};
+      return fetchAPI('user_login', 'POST', payload);
+    }
+
+</script>
+</html>

@@ -1,0 +1,10 @@
+*.pyc
+*.db
+*.json
+*.txt
+
+
+*.cer
+*.key
+*.pem
+*.pfx

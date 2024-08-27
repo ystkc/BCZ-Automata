@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html dir="ltr" lang="zh-CN" >
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <title>登陆</title>
+    <link rel="shortcut icon" href="favicon.ico" />
+    <link rel="apple-touch-icon" href="favicon.ico" />
+    <link rel="stylesheet" href="lib/style.css">
+  </head>
+
+  <body class="login-bg">
+    <div class="logo login-logo">
+      <img src="img/logo.png" />
+    </div>
+    <div class="login-input">
+      <div class="input">
+        <input id="phone_number" type="number" placeholder="手机号">
+        <span id="send_sms" class="disabled">发送验证码</span>
+      </div>
+      <div class="input">
+        <input id="code" type="text" maxlength="6" placeholder="验证码">
+      </div>
+      <div id="login_btn" class="login-btn disabled">
+        登录
+      </div>
+    </div>
+    <span class="login-footer">
+      <i class="agree"></i>登陆代表你已同意<a href="https://passport.baicizhan.com/privacy/agreement.html" target="_blank">用户协议</a>、<a href="https://passport.baicizhan.com/privacy/privacy.html" target="_blank">隐私政策</a>和<a href="https://passport.baicizhan.com/privacy/children-privacy.html" target="_blank">儿童隐私政策</a>
+    </span>
+  </body>
+  <script src="lib/script.js"></script>
+  <script>
+    let phone_number_input = document.getElementById('phone_number');
+    let code_input = document.getElementById('code');
+    let send_sms = document.getElementById('send_sms');
+    let login_btn = document.getElementById('login_btn');
+    window.onload = ()=>{
+      detectLoginInput();
+      send_sms.addEventListener('click', ()=>{
+        if (!send_sms.classList.contains('disabled')) {
+          sendSms(phone_number_input.value);
+        }
+      });
+      login_btn.addEventListener('click', ()=>{
+        if (!login_btn.classList.contains('disabled')) {
+          userLogin(phone_number_input.value, code_input.value)
+          .then((data)=>{
+            if (!data.user_id) {
+              return;
+            }
+            localStorage.setItem('userData', JSON.stringify(data));
+            document.querySelector('.login-input').classList.add('fade-out-down');
+            document.querySelector('.login-footer').classList.add('fade-out-down');
+            setTimeout(()=>{
+              window.location.href = 'user';
+            }, 500)
+          })
+        }
+      });
+    }
+
+    // 检测登录输入是否合法，并改变交互状态
+    function detectLoginInput () {
+      phone_number_input.addEventListener('input', ()=>{
+        checkInputs();
+      });
+      code_input.addEventListener('input', ()=>{
+        checkInputs();
+      });
+
+      function checkInputs() {
+        let phone_number = phone_number_input.value;
+        let code = code_input.value;
+
+        if (phone_number !== '' && /^1\d{10}$/.test(phone_number)) {
+          send_sms.classList.remove('disabled');
+        } else {
+          send_sms.classList.add('disabled');
+        }
+        if (phone_number !== '' && code !== '' && code.length == 6) {
+          login_btn.classList.remove('disabled');
+        } else {
+          login_btn.classList.add('disabled');
+        }
+      }
+    }
+
+    // 发送短信验证码
+    function sendSms(phone) {
+      let payload = {'phone': phone};
+      fetchAPI('send_sms', 'POST', payload);
+    }
+
+    // 用户登陆
+    function userLogin(phone, code) {
+      let payload = {'phone': phone, 'code': code};
+      return fetchAPI('user_login', 'POST', payload);
+    }
+
+</script>
+</html>
