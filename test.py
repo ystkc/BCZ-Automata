@@ -1,6 +1,7 @@
 import httpx  
 import asyncio  
 import random  
+import json
 import time
   
 def test_task(access_token: list, period_s: int) -> list:
@@ -35,5 +36,7 @@ def test_task(access_token: list, period_s: int) -> list:
     return asyncio.run(run_tasks_and_collect_results(*tasks))
 
 if __name__ == '__main__':
-    print(test_task([{"name": "susan", "token": "%2FzccAhmoy2z6In2q%2Fs6bVDbgL0vuqx%2BjAVGiRHwiZN8%3D"}], 5))
+    with open("susan.json", "r", encoding="utf-8") as f:
+        access_token = json.load(f)
+        print(test_task([{"name": "susan", "token": access_token[0]}], 5))
     # 期望得到4个结果和2个tunnel

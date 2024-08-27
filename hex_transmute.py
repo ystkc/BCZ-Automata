@@ -8,19 +8,6 @@ while line != '':
 
 
 result = {"url":"","method":"","Headers":{}}
-# example:
-'''POST https://system.baicizhan.com/rpc/bcz_system/check_infos/1723850474850 HTTP/1.1
-Accept: application/x-thrift
-User-Agent: bcz_app/android/7.6.1
-Cookie: access_token=irYnVIR41ocNA6cq2OOrWTDunlbQzdAXIVwYYZWek8I%3D; app_name=7060100; device_name=android%2FDCO-AL00-HUAWEI; client_time=1723850474; device_id=032ae8f8427885d7; serial=032ae885d717072114; channel=qq; version=12
-Compress-Type: gzip
-content-encoding: gzip
-Content-Type: application/x-thrift
-Transfer-Encoding: chunked
-Host: system.baicizhan.com
-Connection: Keep-Alive
-Accept-Encoding: gzip
-'''
 
 # parse url
 url_start = res_string.find(' ')

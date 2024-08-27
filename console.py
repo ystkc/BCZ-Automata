@@ -55,69 +55,16 @@ def test_task(access_token: list, period_s: int) -> list:
     return asyncio.run(run_tasks_and_collect_results(*tasks))
 
 serial_init_timestamp = 1701232600 # 原理暂不详
-check_infos_args = {
-    "url": "https://system.baicizhan.com/rpc/bcz_system/check_infos/1723850474850",
-    # 返回相关域名，暂未使用
-    "method": "POST",
-    "content":"MjgNCh+LCAAAAAAAAABjYGAQaFJk5E7OSE3Ojs/MS8svZgAA7nbrZxQAAAANCjANCg0K",
-    "Headers": {
-        "Accept": "application/x-thrift",
-        "User-Agent": "bcz_app/android/7.6.1",
-        "Cookie": {
-            "access_token": "irYnVIR41ocNA6cq2OOrWTDunlbQzdAXIVwYYZWek8I%3D",
-            "app_name": "7060100",
-            "device_name": "android%2FDCO-AL00-HUAWEI",
-            "client_time": "1723850474",
-            "device_id": "032ae8f8427885d7",
-            "serial": "032ae885d717072114",
-            # 一共18位，前十位是device_id前六位和后四位，后八位是client_time - serial_init_timestamp
-            "channel": "qq",
-            "version": "12"
-        },
-        "Compress-Type": "gzip",
-        "content-encoding": "gzip",
-        "Content-Type": "application/x-thrift",
-        "Transfer-Encoding": "chunked",
-        "Host": "system.baicizhan.com",
-        "Connection": "Keep-Alive",
-        "Accept-Encoding": "gzip"
-    }
-}
-get_switches_args = {
-    "url": "https://system.baicizhan.com/rpc/bcz_system/get_switches/1723850475452",
-    "method": "POST",
-    "Headers": {
-        "Accept": "application/x-thrift",
-        "User-Agent": "bcz_app/android/7.6.1",
-        "Cookie": {
-            "access_token": "irYnVIR41ocNA6cq2OOrWTDunlbQzdAXIVwYYZWek8I%3D",
-            "app_name": "7060100",
-            "device_name": "android%2FDCO-AL00-HUAWEI",
-            "client_time": "1723850475",
-            "device_id": "032ae8f8427885d7",
-            "serial": "   032ae885d717072115",
-            "channel": "qq",
-            "version": "12"
-        },
-        "Compress-Type": "gzip",
-        "content-encoding": "gzip",
-        "Content-Type": "application/x-thrift",
-        "Transfer-Encoding": "chunked",
-        "Host": "system.baicizhan.com",
-        "Connection": "Keep-Alive",
-        "Accept-Encoding": "gzip"
-    }
-}
     
         
 default_cookie = {
-    "tfstk":"fOE-nww3xJRImoQ3V8_mxmScjGwdouerG7y6xXckRSFYL7uCLazo9Me8NTu3d_PLvjwCU7XrZShLaWnnxTyH9Hhbw2qhUH4vpRPxxWeFUvGQOWh3rZjgU8oEA1qdjG2y9sXot73SPK6IQADCKrUZu8oEAsqE_5f3U5BWGEsKAtIjUviIdYNBl-GqLvOSd36YhjkIAYTWPqijQvxSdDOjEahdRj-LRm61uatmvHtQVG3-688HjhqjUbygFjHKpoH-yf0cWR87bReQqmU9OgervjkKeuBH7XzipJMtfdx3H7NbXVZcgHcC4LEgXmf2sxovPtBv8euSnildhaIl6yRxHfXq3e8EyPkxstBv8euS3xhG3MTe84UN."
-    ,"access_token":"irYnVIR41ocNA6cq2OOrWTDunlbQzdAXIVwYYZWek8I%3D"
+    "tfstk":""
+    ,"access_token":""
     ,"Pay-Support-H5":"alipay_mob_client:weixin_app:qq_app"
     ,"device_name":"android/DCO-AL00-HUAWEI"
     ,"bcz_dmid":"2a16dfbb"
     ,"device_version":"12"
-    ,"device_id":"032ae8f8427885d7"
+    ,"device_id":""
     ,"app_name":"7060100"
     ,"channel":"qq"
     ,"client_time":"1723800601"

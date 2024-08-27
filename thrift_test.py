@@ -15,23 +15,23 @@ import socket
 import gzip
 import struct
 import time
+import json
 
 
 check_infos_task = {
     "host": "$system",
     "path": 'rpc/bcz_system/check_infos',
     "method": "POST",
-    "content":"MjgNCh+LCAAAAAAAAABjYGAQaFJk5E7OSE3Ojs/MS8svZgAA7nbrZxQAAAANCjANCg0K",
     "Headers": {
         "Accept": "application/x-thrift",
         "User-Agent": "bcz_app/android/7.6.1",
         "Cookie": {
-            "access_token": "irYnVIR41ocNA6cq2OOrWTDunlbQzdAXIVwYYZWek8I%3D",
+            "access_token": "",
             "app_name": "7060100",
             "device_name": "android%2FDCO-AL00-HUAWEI",
-            "client_time": "1723850474",
-            "device_id": "032ae8f8427885d7",
-            "serial": "032ae885d717072114",
+            "client_time": "",
+            "device_id": "",
+            "serial": "",
             "channel": "qq",
             "version": "12"
         },
@@ -52,12 +52,12 @@ check_infos_task = {
         "Accept": "application/x-thrift",
         "User-Agent": "bcz_app/android/7.6.1",
         "Cookie": {
-            "access_token": "irYnVIR41ocNA6cq2OOrWTDunlbQzdAXIVwYYZWek8I%3D",
+            "access_token": "",
             "app_name": "7060100",
             "device_name": "android%2FDCO-AL00-HUAWEI",
-            "client_time": "1723850474",
-            "device_id": "032ae8f8427885d7",
-            "serial": "032ae885d717072114",
+            "client_time": "",
+            "device_id": "",
+            "serial": "",
             "channel": "qq",
             "version": "12"
         },
@@ -78,12 +78,12 @@ get_switches_task = {
         "Accept": "application/x-thrift",
         "User-Agent": "bcz_app/android/7.6.1",
         "Cookie": {
-            "access_token": "irYnVIR41ocNA6cq2OOrWTDunlbQzdAXIVwYYZWek8I%3D",
+            "access_token": "",
             "app_name": "7060100",
             "device_name": "android%2FDCO-AL00-HUAWEI",
-            "client_time": "1723850474",
-            "device_id": "032ae8f8427885d7",
-            "serial": "032ae885d717072114",
+            "client_time": "",
+            "device_id": "",
+            "serial": "",
             "channel": "qq",
             "version": "12"
         },
@@ -96,16 +96,8 @@ get_switches_task = {
         "Accept-Encoding": "gzip"
     }
 }
-user_cookie = {
-            "access_token": "irYnVIR41ocNA6cq2OOrWTDunlbQzdAXIVwYYZWek8I%3D",
-            "app_name": "7060100",
-            "device_name": "android%2FDCO-AL00-HUAWEI",
-            "client_time": "1723850474",
-            "device_id": "032ae8f8427885d7",
-            "serial": "032ae885d717072114",
-            "channel": "qq",
-            "version": "12"
-        }
+with open("user_cookie.json", 'r', encoding='utf-8') as f:
+    user_cookie = json.load(f)
 
 # 实际上，host_dict是有初始值的，只是在启动时会和服务器更新
 host_dict = {
@@ -134,10 +126,15 @@ def getHeaders(task: dict, user_cookie: dict, params: str = '', socket: bool = F
     '''path的前后都不加左斜杠
     返回headers和url(非socket)，返回headers_str(socket)'''
     headers = task['Headers']
-    headers['Cookie'] = user_cookie
     # 将cookie中的时间戳更新
-    headers['Cookie']['client_time'] = str(round(time.time()))
-    headers['Cookie']['serial'] = f"{headers['Cookie']['serial'][10:]}{str(round(time.time())%100000000)}"
+    for k, _ in headers['Cookie'].items():
+        if k == 'client_time':
+            headers['Cookie'][k] = str(round(time.time()))
+        elif k =='serial':
+            headers['Cookie'][k] = f"{headers['Cookie'][k][10:]}{str(round(time.time())%100000000)}"
+        else:
+            # 由于user_cookie并不是所有接口都需要的，所以需要判断一下
+            headers['Cookie'][k] = user_cookie[k]
     # 将cookie转换为字符串
     headers['Cookie'] = '; '.join([f'{k}={v}' for k, v in headers['Cookie'].items()])
     if task['host'][0] == '$':
@@ -280,11 +277,6 @@ if __name__ == '__main__':
 
     print('\033[1;36m[get_switches]\033[0m')
     bcz_switches = get_switches_api()
-    '''
-    struct BczAppSwitch {
-    1: bool allow_fast_login,
-    2: bool allow_try_user
-    }'''
     print(f'allow_fast_login: {bcz_switches.allow_fast_login}\nallow_try_user: {bcz_switches.allow_try_user}')
 
 
