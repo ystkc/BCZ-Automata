@@ -8,7 +8,8 @@ from thrift.transport import TSocket
 from thrift.transport import TSSLSocket
 from thrift.transport import TTransport
 from thrift.protocol import TCompactProtocol
-from src.thriftAPI import check_infos_service, get_switches_service
+from src.thriftAPI.ttypes import get_startup_ad_args, get_startup_ad_result, StartupAdRequest
+from src.thriftAPI import check_infos_service, get_switches_service, get_startup_ad_service
 import requests
 import ssl
 import socket
@@ -16,7 +17,9 @@ import gzip
 import struct
 import time
 import json
-
+import asyncio
+import httpx
+import certifi
 
 check_infos_task = {
     "host": "$system",
@@ -96,6 +99,31 @@ get_switches_task = {
         "Accept-Encoding": "gzip"
     }
 }
+get_startup_ad_task = {
+  "path": "rpc/advertise/get_startup_ad",
+  "host": "$advertise",
+  "method": "POST",
+  "Headers": {
+    "Accept": "application/x-thrift",
+    "User-Agent": "bcz_app/android/7.6.1",
+    "Cookie": {
+      "access_token": "",
+      "app_name": "7060100",
+      "device_name": "android%2FDCO-AL00-HUAWEI",
+      "client_time": "",
+      "device_id": "",
+      "serial": "",
+      "channel": "qq",
+      "version": "12"
+    },
+    "Compress-Type": "gzip",
+    "Content-Type": "application/x-thrift",
+    "Host": "advertise.baicizhan.com",
+    "Connection": "Keep-Alive",
+    "Accept-Encoding": "gzip"
+  }
+}
+
 with open("user_cookie.json", 'r', encoding='utf-8') as f:
     user_cookie = json.load(f)
 
@@ -125,7 +153,7 @@ host_dict = {
 def getHeaders(task: dict, user_cookie: dict, params: str = '', socket: bool = False):
     '''path的前后都不加左斜杠
     返回headers和url(非socket)，返回headers_str(socket)'''
-    headers = task['Headers']
+    headers = task['Headers'].copy()
     # 将cookie中的时间戳更新
     for k, _ in headers['Cookie'].items():
         if k == 'client_time':
@@ -205,79 +233,188 @@ def send_request(method, url, headers, content = None):
         raise Exception(f'http status code: {response.status_code}')
     return response
 
+async_content = []
+def send_async_request(method, url, headers, content = None) -> list | None:
+    '''当url是#时，发送历史的请求
+    当url是其他时，加入队列，等待发送
+    content可以是generator，使用http2尽可能复用tunnel，但需要在5s内'''
+    async def _task(content):  
+        """模拟异步任务"""
+        method = content[0]
+        url = content[1]
+        headers = content[2]
+        content_ = content[3]
+        async with httpx.AsyncClient(http2=True, verify=certifi.where()) as client:
+            client.headers.update(headers)
+            # await asyncio.sleep(random.randint(1500, 2000) / 1000)
+            if method == 'POST':
+                # 考虑content_可能是个generator的情况
+                try:
+                    while True:
+                        response = await client.post(url, data=next(content_))
+                        if response.status_code != 200:
+                            print(f'\033[1;31mhttp status code: {response.status_code}\033[0m')
+                except StopIteration:   
+                    pass
+                except TypeError:
+                    response = await client.post(url, data=content_)
+
+
+            elif method == 'GET':
+                response = await client.get(url)
+            elif method == 'OPTIONS':
+                response = await client.options(url)
+            else:
+                raise Exception('method not support')
+        if response.status_code != 200:
+            print(f'\033[1;31mhttp status code: {response.status_code}\033[0m')
+        return response
+    async def run_tasks_and_collect_results(*tasks):  
+        # 使用asyncio.gather来并发运行所有任务并等待它们完成  
+        results = await asyncio.gather(*tasks)  
+        return results  
+    if url == '#':
+        tasks = []
+        for i in async_content:
+            # 任务开始前给予0-period_s秒的延迟，模拟网络延迟等因素
+            task = _task(i)
+            tasks.append(task)  
+        return asyncio.run(run_tasks_and_collect_results(*tasks))
+    else:
+        content = generator(content)
+        async_content.append([method, url, headers, content])
+    
+
+# 下面是正式task接口
+
 def check_infos_api():
-    try:
-        
-        transport = TTransport.TMemoryBuffer()
-        # 发送请求
-        protocol = TCompactProtocol.TCompactProtocol(transport)
-        client = check_infos_service.Client(protocol)
-        client.send_check_infos()
-        content = transport.getvalue()
-        # print(f'content: {content}')
-        transport.close()
+    '''sync'''
+    transport = TTransport.TMemoryBuffer()
+    # 发送请求
+    protocol = TCompactProtocol.TCompactProtocol(transport)
+    client = check_infos_service.Client(protocol)
+    client.send_check_infos()
+    content = transport.getvalue()
+    # print(f'content: {content}')
+    transport.close()
 
-        # 持续性socket用http2模拟即可，其余统一requests解决
-        headers, url = getHeaders(check_infos_task, user_cookie, f'$time_stamp_long')
-        response = send_request(check_infos_task['method'], url, headers, content)
-        
-        # response.content已经解压，但是跟request一样，前四个字节是长度，要去掉
-        result = response.content[4:]
-        # print(f'result: {result}')
-        transport = TTransport.TMemoryBuffer(result)
-        protocol = TCompactProtocol.TCompactProtocol(transport)
-        client = check_infos_service.Client(protocol)
-        result = client.recv_check_infos()
-        transport.close()
-        return result
-    except Exception as e:
-        raise e
-        return False
+    # 持续性socket用http2模拟即可，其余统一requests解决
+    headers, url = getHeaders(check_infos_task, user_cookie, f'$time_stamp_long')
+    response = send_request(check_infos_task['method'], url, headers, content)
+    
+    # response.content已经解压，但是跟request一样，前四个字节是长度，要去掉
+    result = response.content[4:]
+    # print(f'result: {result}')
+    transport = TTransport.TMemoryBuffer(result)
+    protocol = TCompactProtocol.TCompactProtocol(transport)
+    client = check_infos_service.Client(protocol)
+    result = client.recv_check_infos()
+    transport.close()
+    return result
 
-def get_switches_api():
-    try:
-        transport = TTransport.TMemoryBuffer()
-        # 发送请求
-        protocol = TCompactProtocol.TCompactProtocol(transport)
-        client = get_switches_service.Client(protocol)
-        client.send_get_switches()
-        content = transport.getvalue()
-        # print(f'content: {content}')
-        transport.close()
+def get_switches_and_startup_ad_api(device_id):
+    '''async'''
+    '''get_switches'''
+    transport = TTransport.TMemoryBuffer()
+    protocol = TCompactProtocol.TCompactProtocol(transport)
+    client = get_switches_service.Client(protocol)
+    client.send_get_switches()
+    content = transport.getvalue()
+    transport.close()
 
-        # 持续性socket用http2模拟即可，其余统一requests解决
-        headers, url = getHeaders(get_switches_task, user_cookie, f'$time_stamp_long')
-        response = send_request(get_switches_task['method'], url, headers, content)
-        
-        # response.content已经解压，但是跟request一样，前四个字节是长度，要去掉
-        result = response.content[4:]
-        # print(f'result: {result}')
-        transport = TTransport.TMemoryBuffer(result)
-        protocol = TCompactProtocol.TCompactProtocol(transport)
-        client = get_switches_service.Client(protocol)
-        result = client.recv_get_switches()
-        transport.close()
-        return result
-    except Exception as e:
-        raise e
-        return False
+    headers, url = getHeaders(get_switches_task, user_cookie, f'$time_stamp_long')
+    send_async_request(get_switches_task['method'], url, headers, content)
+
+    '''get_startup_ad'''
+    transport = TTransport.TMemoryBuffer()
+    protocol = TCompactProtocol.TCompactProtocol(transport)
+    client = get_startup_ad_service.Client(protocol)
+    args = StartupAdRequest(720, 1280, device_id, 'unknown')
+    request = get_startup_ad_args(args)
+    client.send_get_startup_ad(request)
+    content = transport.getvalue()
+    transport.close()
+
+    headers, url = getHeaders(get_startup_ad_task, user_cookie, f'$time_stamp_long')
+    send_async_request(get_switches_task['method'], url, headers, content)
+
+    '''response'''
+    responses = send_async_request('#', '#', {})
+    result = responses[0].content[4:]
+    transport = TTransport.TMemoryBuffer(result)
+    protocol = TCompactProtocol.TCompactProtocol(transport)
+    client = get_switches_service.Client(protocol)
+    result_switches = client.recv_get_switches()
+    transport.close()
+    
+    result = responses[1].content[4:]
+    transport = TTransport.TMemoryBuffer(result)
+    protocol = TCompactProtocol.TCompactProtocol(transport)
+    client = get_startup_ad_service.Client(protocol)
+    result_startup_ad = client.recv_get_startup_ad()
+    transport.close()
+
+    return result_switches, result_startup_ad
+
+
 
 
 
 if __name__ == '__main__':
-    print('\033[1;36m[check_infos]\033[0m')
-    bcz_check_infos_dns = check_infos_api()
-    print('\033[1;32mdata_dns:\033[0m', bcz_check_infos_dns.data_dns)
-    print('\033[1;32mresource_dns:\033[0m', bcz_check_infos_dns.res_dns)
-    print('\033[1;32mtls_dns:\033[0m', '\n'.join(f'\033[1;33m{key}\033[0m: {list_value}' for key, list_value in bcz_check_infos_dns.tls_dns.items()))
-    print('\033[1;32mother_dns:\033[0m', '\n'.join(f'\033[1;33m{key}\033[0m: {list_value}' for key, list_value in bcz_check_infos_dns.other_dns.items()))
-    host_dict = bcz_check_infos_dns.other_dns
-    host_dict['RES'] = bcz_check_infos_dns.res_dns
-    host_dict['DATA'] = bcz_check_infos_dns.data_dns
+    # print('\033[1;36m[check_infos]\033[0m')
+    # bcz_check_infos_dns = check_infos_api()
+    # print('\033[1;32mdata_dns:\033[0m', bcz_check_infos_dns.data_dns)
+    # print('\033[1;32mresource_dns:\033[0m', bcz_check_infos_dns.res_dns)
+    # print('\033[1;32mtls_dns:\033[0m', '\n'.join(f'\033[1;33m{key}\033[0m: {list_value}' for key, list_value in bcz_check_infos_dns.tls_dns.items()))
+    # print('\033[1;32mother_dns:\033[0m', '\n'.join(f'\033[1;33m{key}\033[0m: {list_value}' for key, list_value in bcz_check_infos_dns.other_dns.items()))
+    # host_dict = bcz_check_infos_dns.other_dns
+    # host_dict['RES'] = bcz_check_infos_dns.res_dns
+    # host_dict['DATA'] = bcz_check_infos_dns.data_dns
 
     print('\033[1;36m[get_switches]\033[0m')
-    bcz_switches = get_switches_api()
+    bcz_switches, bcz_startup_ad = get_switches_and_startup_ad_api(user_cookie['device_id'])
     print(f'allow_fast_login: {bcz_switches.allow_fast_login}\nallow_try_user: {bcz_switches.allow_try_user}')
+    
+# struct AdLink{
+#     1: i32 jump_type,
+#     2: string link,
+#     3: string mini_program_id,
+#     4: string mini_program_path
+# }
+# struct StartupAd{
+#     1: i32 ad_id,
+#     2: i32 ad_type,
+#     3: AdLink backup_link,
+#     4: i64 end_time,
+#     5: string ext_ad_id,
+#     6: i32 full,
+#     7: string img,
+#     8: AdLink link,
+#     9: i32 show_seconds,
+#     10: i32 show_times,
+#     11: i64 start_time
+# }
+    
+    print('\033[1;36m[get_startup_ad]\033[0m')
+    def print_ad_link(link):    
+        if link is None:
+            return 'None'
+        return f'jump_type: {link.jump_type}\nlink: {link.link}\nmini_program_id: {link.mini_program_id}\nmini_program_path: {link.mini_program_path}'
+    for ad in bcz_startup_ad:
+        print(f'''get_startup_ad: 
+    ad_id: {ad.ad_id}
+    ad_type: {ad.ad_type}
+    backup_link: {print_ad_link(ad.backup_link)}
+    end_time: {ad.end_time}
+    ext_ad_id: {ad.ext_ad_id}
+    full: {ad.full}
+    img: {ad.img}
+    link: {print_ad_link(ad.link)}
+    show_seconds: {ad.show_seconds}
+    show_times: {ad.show_times}
+    start_time: {ad.start_time}''')
+
+
 
 
 

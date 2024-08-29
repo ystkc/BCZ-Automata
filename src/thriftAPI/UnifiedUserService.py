@@ -19,18 +19,18 @@ all_structs = []
 
 
 class Iface(object):
-    def send_sms_verify_code(self, args):
+    def send_sms_verify_code(self, args_):
         """
         Parameters:
-         - args
+         - args_
 
         """
         pass
 
-    def login_with_phone(self, args):
+    def login_with_phone(self, args_):
         """
         Parameters:
-         - args
+         - args_
 
         """
         pass
@@ -43,19 +43,19 @@ class Client(Iface):
             self._oprot = oprot
         self._seqid = 0
 
-    def send_sms_verify_code(self, args):
+    def send_sms_verify_code(self, args_):
         """
         Parameters:
-         - args
+         - args_
 
         """
-        self.send_send_sms_verify_code(args)
+        self.send_send_sms_verify_code(args_)
         self.recv_send_sms_verify_code()
 
-    def send_send_sms_verify_code(self, args):
+    def send_send_sms_verify_code(self, args_):
         self._oprot.writeMessageBegin('send_sms_verify_code', TMessageType.CALL, self._seqid)
         args = send_sms_verify_code_args()
-        args.args = args
+        args.args_ = args_
         args.write(self._oprot)
         self._oprot.writeMessageEnd()
         self._oprot.trans.flush()
@@ -73,19 +73,19 @@ class Client(Iface):
         iprot.readMessageEnd()
         return
 
-    def login_with_phone(self, args):
+    def login_with_phone(self, args_):
         """
         Parameters:
-         - args
+         - args_
 
         """
-        self.send_login_with_phone(args)
+        self.send_login_with_phone(args_)
         return self.recv_login_with_phone()
 
-    def send_login_with_phone(self, args):
+    def send_login_with_phone(self, args_):
         self._oprot.writeMessageBegin('login_with_phone', TMessageType.CALL, self._seqid)
         args = login_with_phone_args()
-        args.args = args
+        args.args_ = args_
         args.write(self._oprot)
         self._oprot.writeMessageEnd()
         self._oprot.trans.flush()
@@ -144,7 +144,7 @@ class Processor(Iface, TProcessor):
         iprot.readMessageEnd()
         result = send_sms_verify_code_result()
         try:
-            self._handler.send_sms_verify_code(args.args)
+            self._handler.send_sms_verify_code(args.args_)
             msg_type = TMessageType.REPLY
         except TTransport.TTransportException:
             raise
@@ -167,7 +167,7 @@ class Processor(Iface, TProcessor):
         iprot.readMessageEnd()
         result = login_with_phone_result()
         try:
-            result.success = self._handler.login_with_phone(args.args)
+            result.success = self._handler.login_with_phone(args.args_)
             msg_type = TMessageType.REPLY
         except TTransport.TTransportException:
             raise
@@ -196,13 +196,13 @@ class Processor(Iface, TProcessor):
 class send_sms_verify_code_args(object):
     """
     Attributes:
-     - args
+     - args_
 
     """
 
 
-    def __init__(self, args=None,):
-        self.args = args
+    def __init__(self, args_=None,):
+        self.args_ = args_
 
     def read(self, iprot):
         if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
@@ -215,8 +215,8 @@ class send_sms_verify_code_args(object):
                 break
             if fid == 1:
                 if ftype == TType.STRUCT:
-                    self.args = send_sms_verify_code_args()
-                    self.args.read(iprot)
+                    self.args_ = send_sms_verify_code_args()
+                    self.args_.read(iprot)
                 else:
                     iprot.skip(ftype)
             else:
@@ -229,9 +229,9 @@ class send_sms_verify_code_args(object):
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
         oprot.writeStructBegin('send_sms_verify_code_args')
-        if self.args is not None:
-            oprot.writeFieldBegin('args', TType.STRUCT, 1)
-            self.args.write(oprot)
+        if self.args_ is not None:
+            oprot.writeFieldBegin('args_', TType.STRUCT, 1)
+            self.args_.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
         oprot.writeStructEnd()
@@ -252,7 +252,7 @@ class send_sms_verify_code_args(object):
 all_structs.append(send_sms_verify_code_args)
 send_sms_verify_code_args.thrift_spec = (
     None,  # 0
-    (1, TType.STRUCT, 'args', [send_sms_verify_code_args, None], None, ),  # 1
+    (1, TType.STRUCT, 'args_', [send_sms_verify_code_args, None], None, ),  # 1
 )
 
 
@@ -302,13 +302,13 @@ send_sms_verify_code_result.thrift_spec = (
 class login_with_phone_args(object):
     """
     Attributes:
-     - args
+     - args_
 
     """
 
 
-    def __init__(self, args=None,):
-        self.args = args
+    def __init__(self, args_=None,):
+        self.args_ = args_
 
     def read(self, iprot):
         if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
@@ -321,8 +321,8 @@ class login_with_phone_args(object):
                 break
             if fid == 1:
                 if ftype == TType.STRUCT:
-                    self.args = login_with_phone_args()
-                    self.args.read(iprot)
+                    self.args_ = login_with_phone_args()
+                    self.args_.read(iprot)
                 else:
                     iprot.skip(ftype)
             else:
@@ -335,9 +335,9 @@ class login_with_phone_args(object):
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
         oprot.writeStructBegin('login_with_phone_args')
-        if self.args is not None:
-            oprot.writeFieldBegin('args', TType.STRUCT, 1)
-            self.args.write(oprot)
+        if self.args_ is not None:
+            oprot.writeFieldBegin('args_', TType.STRUCT, 1)
+            self.args_.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
         oprot.writeStructEnd()
@@ -358,7 +358,7 @@ class login_with_phone_args(object):
 all_structs.append(login_with_phone_args)
 login_with_phone_args.thrift_spec = (
     None,  # 0
-    (1, TType.STRUCT, 'args', [login_with_phone_args, None], None, ),  # 1
+    (1, TType.STRUCT, 'args_', [login_with_phone_args, None], None, ),  # 1
 )
 
 

@@ -1,1 +1,1 @@
-__all__ = ['ttypes', 'constants', 'UnifiedUserService', 'UserStudyApiService', 'check_infos_service', 'get_switches_service']
+__all__ = ['ttypes', 'constants', 'UnifiedUserService', 'UserStudyApiService', 'check_infos_service', 'get_switches_service', 'get_startup_ad_service']

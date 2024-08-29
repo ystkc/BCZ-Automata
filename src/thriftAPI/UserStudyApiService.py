@@ -19,18 +19,18 @@ all_structs = []
 
 
 class Iface(object):
-    def select_book(self, args):
+    def select_book(self, args_):
         """
         Parameters:
-         - args
+         - args_
 
         """
         pass
 
-    def update_done_data(self, args):
+    def update_done_data(self, args_):
         """
         Parameters:
-         - args
+         - args_
 
         """
         pass
@@ -49,19 +49,19 @@ class Client(Iface):
             self._oprot = oprot
         self._seqid = 0
 
-    def select_book(self, args):
+    def select_book(self, args_):
         """
         Parameters:
-         - args
+         - args_
 
         """
-        self.send_select_book(args)
+        self.send_select_book(args_)
         return self.recv_select_book()
 
-    def send_select_book(self, args):
+    def send_select_book(self, args_):
         self._oprot.writeMessageBegin('select_book', TMessageType.CALL, self._seqid)
         args = select_book_args()
-        args.args = args
+        args.args_ = args_
         args.write(self._oprot)
         self._oprot.writeMessageEnd()
         self._oprot.trans.flush()
@@ -81,19 +81,19 @@ class Client(Iface):
             return result.success
         raise TApplicationException(TApplicationException.MISSING_RESULT, "select_book failed: unknown result")
 
-    def update_done_data(self, args):
+    def update_done_data(self, args_):
         """
         Parameters:
-         - args
+         - args_
 
         """
-        self.send_update_done_data(args)
+        self.send_update_done_data(args_)
         return self.recv_update_done_data()
 
-    def send_update_done_data(self, args):
+    def send_update_done_data(self, args_):
         self._oprot.writeMessageBegin('update_done_data', TMessageType.CALL, self._seqid)
         args = update_done_data_args()
-        args.args = args
+        args.args_ = args_
         args.write(self._oprot)
         self._oprot.writeMessageEnd()
         self._oprot.trans.flush()
@@ -206,7 +206,7 @@ class Processor(Iface, TProcessor):
         iprot.readMessageEnd()
         result = select_book_result()
         try:
-            result.success = self._handler.select_book(args.args)
+            result.success = self._handler.select_book(args.args_)
             msg_type = TMessageType.REPLY
         except TTransport.TTransportException:
             raise
@@ -229,7 +229,7 @@ class Processor(Iface, TProcessor):
         iprot.readMessageEnd()
         result = update_done_data_result()
         try:
-            result.success = self._handler.update_done_data(args.args)
+            result.success = self._handler.update_done_data(args.args_)
             msg_type = TMessageType.REPLY
         except TTransport.TTransportException:
             raise
@@ -304,13 +304,13 @@ class Processor(Iface, TProcessor):
 class select_book_args(object):
     """
     Attributes:
-     - args
+     - args_
 
     """
 
 
-    def __init__(self, args=None,):
-        self.args = args
+    def __init__(self, args_=None,):
+        self.args_ = args_
 
     def read(self, iprot):
         if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
@@ -323,8 +323,8 @@ class select_book_args(object):
                 break
             if fid == 1:
                 if ftype == TType.STRUCT:
-                    self.args = select_book_args()
-                    self.args.read(iprot)
+                    self.args_ = select_book_args()
+                    self.args_.read(iprot)
                 else:
                     iprot.skip(ftype)
             else:
@@ -337,9 +337,9 @@ class select_book_args(object):
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
         oprot.writeStructBegin('select_book_args')
-        if self.args is not None:
-            oprot.writeFieldBegin('args', TType.STRUCT, 1)
-            self.args.write(oprot)
+        if self.args_ is not None:
+            oprot.writeFieldBegin('args_', TType.STRUCT, 1)
+            self.args_.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
         oprot.writeStructEnd()
@@ -360,7 +360,7 @@ class select_book_args(object):
 all_structs.append(select_book_args)
 select_book_args.thrift_spec = (
     None,  # 0
-    (1, TType.STRUCT, 'args', [select_book_args, None], None, ),  # 1
+    (1, TType.STRUCT, 'args_', [select_book_args, None], None, ),  # 1
 )
 
 
@@ -429,13 +429,13 @@ select_book_result.thrift_spec = (
 class update_done_data_args(object):
     """
     Attributes:
-     - args
+     - args_
 
     """
 
 
-    def __init__(self, args=None,):
-        self.args = args
+    def __init__(self, args_=None,):
+        self.args_ = args_
 
     def read(self, iprot):
         if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
@@ -448,8 +448,8 @@ class update_done_data_args(object):
                 break
             if fid == 1:
                 if ftype == TType.STRUCT:
-                    self.args = update_done_data_args()
-                    self.args.read(iprot)
+                    self.args_ = update_done_data_args()
+                    self.args_.read(iprot)
                 else:
                     iprot.skip(ftype)
             else:
@@ -462,9 +462,9 @@ class update_done_data_args(object):
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
         oprot.writeStructBegin('update_done_data_args')
-        if self.args is not None:
-            oprot.writeFieldBegin('args', TType.STRUCT, 1)
-            self.args.write(oprot)
+        if self.args_ is not None:
+            oprot.writeFieldBegin('args_', TType.STRUCT, 1)
+            self.args_.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
         oprot.writeStructEnd()
@@ -485,7 +485,7 @@ class update_done_data_args(object):
 all_structs.append(update_done_data_args)
 update_done_data_args.thrift_spec = (
     None,  # 0
-    (1, TType.STRUCT, 'args', [update_done_data_args, None], None, ),  # 1
+    (1, TType.STRUCT, 'args_', [update_done_data_args, None], None, ),  # 1
 )
 
 

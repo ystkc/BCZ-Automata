@@ -225,13 +225,13 @@ struct send_sms_verify_code_args {
 }
 
 service UnifiedUserService {
-    void send_sms_verify_code(1: send_sms_verify_code_args args)
-    UserLoginResult login_with_phone(1: login_with_phone_args args) throws (1: LogicException bomb, 2: SystemException boom) 
+    void send_sms_verify_code(1: send_sms_verify_code_args args_)
+    UserLoginResult login_with_phone(1: login_with_phone_args args_) throws (1: LogicException bomb, 2: SystemException boom) 
 }
 
 service UserStudyApiService {
-    UserSelectedBookInfo select_book(1: select_book_args args)
-    i32 update_done_data(1: update_done_data_args args)
+    UserSelectedBookInfo select_book(1: select_book_args args_)
+    i32 update_done_data(1: update_done_data_args args_)
     UserBookListInfo get_all_books_basic_info_v3() throws (1: LogicException bomb, 2: SystemException boom)
     UserBasicInfoPlusV2 user_basic_info_v2()
 }
@@ -256,8 +256,8 @@ service check_infos_service {
 
 # get_switches
 struct BczAppSwitch {
-    1: bool allow_fast_login,
-    2: bool allow_try_user
+    1: bool allow_try_user,
+    2: bool allow_fast_login
 }
 struct get_switches {
     1: BczAppSwitch success,
@@ -266,4 +266,44 @@ struct get_switches {
 }
 service get_switches_service {
     BczAppSwitch get_switches()
+}
+
+# get_startup_ad
+struct StartupAdRequest{
+    1: i32 screen_length,
+    2: i32 screen_width,
+    3: string android_id,
+    4: string oaid
+}
+struct get_startup_ad_args{
+    1: StartupAdRequest request
+}
+
+
+struct AdLink{
+    1: i32 jump_type,
+    2: string link,
+    3: string mini_program_id,
+    4: string mini_program_path
+}
+struct StartupAd{
+    1: i32 ad_id,
+    2: string img,
+    3: i64 start_time,
+    4: i64 end_time,
+    5: i32 show_times,
+    6: i32 show_seconds,
+    7: AdLink link,
+    8: AdLink backup_link,
+    9: string ext_ad_id,
+    10: i32 ad_type,
+    11: i32 full
+}
+struct get_startup_ad_result{
+    1: LogicException bomb,
+    2: SystemException boom,
+    3: list<StartupAd> success
+}
+service get_startup_ad_service{
+    list<StartupAd> get_startup_ad(1: get_startup_ad_args args_) throws (1: LogicException bomb, 2: SystemException boom)
 }
