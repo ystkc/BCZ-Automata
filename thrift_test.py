@@ -9,7 +9,7 @@ from thrift.transport import TSSLSocket
 from thrift.transport import TTransport
 from thrift.protocol import TCompactProtocol
 from src.thriftAPI.ttypes import get_startup_ad_args, get_startup_ad_result, StartupAdRequest
-from src.thriftAPI import check_infos_service, get_switches_service, get_startup_ad_service
+from src.thriftAPI import check_infos_service, get_switches_service, get_startup_ad_service, get_live_streaming_info_service, get_practice_popup_adv_service
 import requests
 import ssl
 import socket
@@ -118,6 +118,56 @@ get_startup_ad_task = {
     },
     "Compress-Type": "gzip",
     "Content-Type": "application/x-thrift",
+    "Host": "advertise.baicizhan.com",
+    "Connection": "Keep-Alive",
+    "Accept-Encoding": "gzip"
+  }
+}
+get_live_streaming_info_task = {
+    "path": "rpc/advertise/get_live_streaming_info",
+    "host": "$advertise",
+    "method": "POST",
+    "Headers": {
+        "Accept": "application/x-thrift",
+        "User-Agent": "bcz_app/android/7.6.1",
+        "Cookie": {
+        "access_token": "",
+        "app_name": "7060100",
+        "device_name": "android%2FDCO-AL00-HUAWEI",
+        "client_time": "1723850478",
+        "device_id": "",
+        "serial": "",
+        "channel": "qq",
+        "version": "12"
+        },
+        "Compress-Type": "gzip",
+        "Content-Type": "application/x-thrift",
+        "Host": "advertise.baicizhan.com",
+        "Connection": "Keep-Alive",
+        "Accept-Encoding": "gzip",
+    }
+}
+get_practice_popup_adv_task = {
+  "path": "rpc/advertise/get_practice_popup_adv",
+  "host": "$advertise",
+  "method": "POST",
+  "Headers": {
+    "Accept": "application/x-thrift",
+    "User-Agent": "bcz_app/android/7.6.1",
+    "Cookie": {
+      "access_token": "",
+      "app_name": "7060100",
+      "device_name": "android%2FDCO-AL00-HUAWEI",
+      "client_time": "",
+      "device_id": "",
+      "serial": "",
+      "channel": "qq",
+      "version": "12"
+    },
+    "Compress-Type": "gzip",
+    "content-encoding": "gzip",
+    "Content-Type": "application/x-thrift",
+    "Transfer-Encoding": "chunked",
     "Host": "advertise.baicizhan.com",
     "Connection": "Keep-Alive",
     "Accept-Encoding": "gzip"
@@ -233,128 +283,180 @@ def send_request(method, url, headers, content = None):
         raise Exception(f'http status code: {response.status_code}')
     return response
 
-async_content = []
-def send_async_request(method, url, headers, content = None) -> list | None:
-    '''当url是#时，发送历史的请求
-    当url是其他时，加入队列，等待发送
-    content可以是generator，使用http2尽可能复用tunnel，但需要在5s内'''
-    async def _task(content):  
-        """模拟异步任务"""
-        method = content[0]
-        url = content[1]
-        headers = content[2]
-        content_ = content[3]
+import asyncio
+import httpx
+import certifi
+
+def send_async_request(request_generator):
+    '''使用方法:双重嵌套
+    send_async_request本身是一个response的generator
+                        还需要传入request的generator）
+    使用了http2尽可能复用tunnel，但5s闲置会断开连接'''
+    responses = []
+
+    async def request_sender(request_generator):
         async with httpx.AsyncClient(http2=True, verify=certifi.where()) as client:
-            client.headers.update(headers)
-            # await asyncio.sleep(random.randint(1500, 2000) / 1000)
-            if method == 'POST':
-                # 考虑content_可能是个generator的情况
-                try:
-                    while True:
-                        response = await client.post(url, data=next(content_))
-                        if response.status_code != 200:
-                            print(f'\033[1;31mhttp status code: {response.status_code}\033[0m')
-                except StopIteration:   
-                    pass
-                except TypeError:
-                    response = await client.post(url, data=content_)
+            try:
+                while True:
+                    request = next(request_generator)
+                    method = request[0]
+                    url = request[1]
+                    headers = request[2]
+                    content = request[3]
+                    client.headers.clear()  
+                    client.headers.update(headers)
+                    if method == 'POST':
+                        responses.append(await client.post(url, data=content))
+                    elif method == 'GET':
+                        responses.append(await client.get(url))
+                    elif method == 'OPTIONS':
+                        responses.append(await client.options(url))
+                    else:
+                        raise Exception('method not support')
+            except StopIteration:
+                pass
 
+    asyncio.run(request_sender(request_generator))
+    # 注意：异步中的等待使用await，同步中使用asyncio.run(coroutine)
+    for response in responses:
+        yield response
 
-            elif method == 'GET':
-                response = await client.get(url)
-            elif method == 'OPTIONS':
-                response = await client.options(url)
-            else:
-                raise Exception('method not support')
-        if response.status_code != 200:
-            print(f'\033[1;31mhttp status code: {response.status_code}\033[0m')
-        return response
-    async def run_tasks_and_collect_results(*tasks):  
-        # 使用asyncio.gather来并发运行所有任务并等待它们完成  
-        results = await asyncio.gather(*tasks)  
-        return results  
-    if url == '#':
-        tasks = []
-        for i in async_content:
-            # 任务开始前给予0-period_s秒的延迟，模拟网络延迟等因素
-            task = _task(i)
-            tasks.append(task)  
-        return asyncio.run(run_tasks_and_collect_results(*tasks))
-    else:
-        content = generator(content)
-        async_content.append([method, url, headers, content])
-    
+# # 使用示例
+# async def main():
+#     async def request_gen():
+#         yield ('POST', 'http://example.com', {'Content-Type': 'application/json'}, '{"key": "value"}')
+#         yield ('GET', 'http://example.com', {}, None)
+
+#     async for response in send_async_request(request_gen()):
+#         print(response)
+
+# asyncio.run(main())
+
 
 # 下面是正式task接口
 
-def check_infos_api():
+def check_infos_api(response_generator=None):
     '''sync'''
-    transport = TTransport.TMemoryBuffer()
-    # 发送请求
-    protocol = TCompactProtocol.TCompactProtocol(transport)
-    client = check_infos_service.Client(protocol)
-    client.send_check_infos()
-    content = transport.getvalue()
-    # print(f'content: {content}')
-    transport.close()
+    if response_generator is None:
+        transport = TTransport.TMemoryBuffer()
+        # 发送请求
+        protocol = TCompactProtocol.TCompactProtocol(transport)
+        client = check_infos_service.Client(protocol)
+        client.send_check_infos()
+        content = transport.getvalue()
+        # print(f'content: {content}')
+        transport.close()
 
-    # 持续性socket用http2模拟即可，其余统一requests解决
-    headers, url = getHeaders(check_infos_task, user_cookie, f'$time_stamp_long')
-    response = send_request(check_infos_task['method'], url, headers, content)
-    
-    # response.content已经解压，但是跟request一样，前四个字节是长度，要去掉
-    result = response.content[4:]
-    # print(f'result: {result}')
-    transport = TTransport.TMemoryBuffer(result)
-    protocol = TCompactProtocol.TCompactProtocol(transport)
-    client = check_infos_service.Client(protocol)
-    result = client.recv_check_infos()
-    transport.close()
-    return result
+        # 持续性socket用http2模拟即可，其余统一requests解决
+        headers, url = getHeaders(check_infos_task, user_cookie, f'$time_stamp_long')
+        content = gzip.compress(struct.pack("!i", len(content)) + content)
+        yield [check_infos_task['method'], url, headers, content]
 
-def get_switches_and_startup_ad_api(device_id):
+    else:
+        response = next(response_generator)
+        # response.content已经解压，但是跟request一样，前四个字节是长度，要去掉
+        result = response.content[4:]
+        # print(f'result: {result}')
+        transport = TTransport.TMemoryBuffer(result)
+        protocol = TCompactProtocol.TCompactProtocol(transport)
+        client = check_infos_service.Client(protocol)
+        result = client.recv_check_infos()
+        transport.close()
+        return result
+
+def get_switches_and_startup_ad_api(response_generator=None, device_id='unknown'):
     '''async'''
-    '''get_switches'''
-    transport = TTransport.TMemoryBuffer()
-    protocol = TCompactProtocol.TCompactProtocol(transport)
-    client = get_switches_service.Client(protocol)
-    client.send_get_switches()
-    content = transport.getvalue()
-    transport.close()
+    print(f'{response_generator}, {device_id}')
+    if response_generator is None:
+        print('get_switches_and_startup_ad_api')
+        '''get_switches'''
+        transport = TTransport.TMemoryBuffer()
+        protocol = TCompactProtocol.TCompactProtocol(transport)
+        client = get_switches_service.Client(protocol)
+        client.send_get_switches()
+        content = transport.getvalue()
+        transport.close()
 
-    headers, url = getHeaders(get_switches_task, user_cookie, f'$time_stamp_long')
-    send_async_request(get_switches_task['method'], url, headers, content)
+        headers, url = getHeaders(get_switches_task, user_cookie, f'$time_stamp_long')
+        content = gzip.compress(struct.pack("!i", len(content)) + content)
+        yield [get_switches_task['method'], url, headers, content]
 
-    '''get_startup_ad'''
-    transport = TTransport.TMemoryBuffer()
-    protocol = TCompactProtocol.TCompactProtocol(transport)
-    client = get_startup_ad_service.Client(protocol)
-    args = StartupAdRequest(720, 1280, device_id, 'unknown')
-    request = get_startup_ad_args(args)
-    client.send_get_startup_ad(request)
-    content = transport.getvalue()
-    transport.close()
+        '''get_startup_ad'''
+        transport = TTransport.TMemoryBuffer()
+        protocol = TCompactProtocol.TCompactProtocol(transport)
+        client = get_startup_ad_service.Client(protocol)
+        args = StartupAdRequest(720, 1280, device_id, 'unknown')
+        request = get_startup_ad_args(args)
+        client.send_get_startup_ad(request)
+        content = transport.getvalue()
+        transport.close()
 
-    headers, url = getHeaders(get_startup_ad_task, user_cookie, f'$time_stamp_long')
-    send_async_request(get_switches_task['method'], url, headers, content)
+        headers, url = getHeaders(get_startup_ad_task, user_cookie, f'$time_stamp_long')
+        content = gzip.compress(struct.pack("!i", len(content)) + content)
+        yield [get_startup_ad_task['method'], url, headers, content]
 
-    '''response'''
-    responses = send_async_request('#', '#', {})
-    result = responses[0].content[4:]
-    transport = TTransport.TMemoryBuffer(result)
-    protocol = TCompactProtocol.TCompactProtocol(transport)
-    client = get_switches_service.Client(protocol)
-    result_switches = client.recv_get_switches()
-    transport.close()
-    
-    result = responses[1].content[4:]
-    transport = TTransport.TMemoryBuffer(result)
-    protocol = TCompactProtocol.TCompactProtocol(transport)
-    client = get_startup_ad_service.Client(protocol)
-    result_startup_ad = client.recv_get_startup_ad()
-    transport.close()
+        '''get_live_streaming_info'''
+        transport = TTransport.TMemoryBuffer()
+        protocol = TCompactProtocol.TCompactProtocol(transport)
+        client = get_live_streaming_info_service.Client(protocol)
+        client.send_get_live_streaming_info()
+        content = transport.getvalue()
+        transport.close()
 
-    return result_switches, result_startup_ad
+        headers, url = getHeaders(get_live_streaming_info_task, user_cookie, f'$time_stamp_long')
+        content = gzip.compress(struct.pack("!i", len(content)) + content)
+        yield [get_live_streaming_info_task['method'], url, headers, content]
+
+        '''get_practice_popup_adv'''
+        transport = TTransport.TMemoryBuffer()
+        protocol = TCompactProtocol.TCompactProtocol(transport)
+        client = get_practice_popup_adv_service.Client(protocol)
+        client.send_get_practice_popup_adv()
+        content = transport.getvalue()
+        transport.close()
+
+        headers, url = getHeaders(get_practice_popup_adv_task, user_cookie, f'$time_stamp_long')
+        content = gzip.compress(struct.pack("!i", len(content)) + content)
+        yield [get_practice_popup_adv_task['method'], url, headers, content]
+        
+    else:
+        '''response'''
+        print('get_switches_and_startup_ad_api response_generator')
+        response = next(response_generator)
+        result = response.content[4:]
+        transport = TTransport.TMemoryBuffer(result)
+        protocol = TCompactProtocol.TCompactProtocol(transport)
+        client = get_switches_service.Client(protocol)
+        result = client.recv_get_switches()
+        transport.close()
+        yield result
+        
+        response = next(response_generator)
+        result = response.content[4:]
+        transport = TTransport.TMemoryBuffer(result)
+        protocol = TCompactProtocol.TCompactProtocol(transport)
+        client = get_startup_ad_service.Client(protocol)
+        result = client.recv_get_startup_ad()
+        transport.close()
+        yield result
+
+        response = next(response_generator)
+        result = response.content[4:]
+        transport = TTransport.TMemoryBuffer(result)
+        protocol = TCompactProtocol.TCompactProtocol(transport)
+        client = get_live_streaming_info_service.Client(protocol)
+        result = client.recv_get_live_streaming_info()
+        transport.close()
+        yield result
+
+        response = next(response_generator)
+        result = response.content[4:]
+        transport = TTransport.TMemoryBuffer(result)
+        protocol = TCompactProtocol.TCompactProtocol(transport)
+        client = get_practice_popup_adv_service.Client(protocol)
+        result = client.recv_get_practice_popup_adv()
+        transport.close()
+        yield result
 
 
 
@@ -362,45 +464,31 @@ def get_switches_and_startup_ad_api(device_id):
 
 if __name__ == '__main__':
     # print('\033[1;36m[check_infos]\033[0m')
-    # bcz_check_infos_dns = check_infos_api()
-    # print('\033[1;32mdata_dns:\033[0m', bcz_check_infos_dns.data_dns)
-    # print('\033[1;32mresource_dns:\033[0m', bcz_check_infos_dns.res_dns)
-    # print('\033[1;32mtls_dns:\033[0m', '\n'.join(f'\033[1;33m{key}\033[0m: {list_value}' for key, list_value in bcz_check_infos_dns.tls_dns.items()))
-    # print('\033[1;32mother_dns:\033[0m', '\n'.join(f'\033[1;33m{key}\033[0m: {list_value}' for key, list_value in bcz_check_infos_dns.other_dns.items()))
-    # host_dict = bcz_check_infos_dns.other_dns
-    # host_dict['RES'] = bcz_check_infos_dns.res_dns
-    # host_dict['DATA'] = bcz_check_infos_dns.data_dns
+    # z_check_infos_dns = check_infos_api()
+    # print('\033[1;32mdata_dns:\033[0m', z_check_infos_dns.data_dns)
+    # print('\033[1;32mresource_dns:\033[0m', z_check_infos_dns.res_dns)
+    # print('\033[1;32mtls_dns:\033[0m', '\n'.join(f'\033[1;33m{key}\033[0m: {list_value}' for key, list_value in z_check_infos_dns.tls_dns.items()))
+    # print('\033[1;32mother_dns:\033[0m', '\n'.join(f'\033[1;33m{key}\033[0m: {list_value}' for key, list_value in z_check_infos_dns.other_dns.items()))
+    # host_dict = z_check_infos_dns.other_dns
+    # host_dict['RES'] = z_check_infos_dns.res_dns
+    # host_dict['DATA'] = z_check_infos_dns.data_dns
 
-    print('\033[1;36m[get_switches]\033[0m')
-    bcz_switches, bcz_startup_ad = get_switches_and_startup_ad_api(user_cookie['device_id'])
-    print(f'allow_fast_login: {bcz_switches.allow_fast_login}\nallow_try_user: {bcz_switches.allow_try_user}')
+
+    response_generator = get_switches_and_startup_ad_api(response_generator=send_async_request(get_switches_and_startup_ad_api(device_id=user_cookie['device_id'])))
     
-# struct AdLink{
-#     1: i32 jump_type,
-#     2: string link,
-#     3: string mini_program_id,
-#     4: string mini_program_path
-# }
-# struct StartupAd{
-#     1: i32 ad_id,
-#     2: i32 ad_type,
-#     3: AdLink backup_link,
-#     4: i64 end_time,
-#     5: string ext_ad_id,
-#     6: i32 full,
-#     7: string img,
-#     8: AdLink link,
-#     9: i32 show_seconds,
-#     10: i32 show_times,
-#     11: i64 start_time
-# }
+    print('\033[1;36m[get_switches]\033[0m')
+    z_switches = next(response_generator)
+    print(f'allow_fast_login: {z_switches.allow_fast_login}\nallow_try_user: {z_switches.allow_try_user}')
+    
     
     print('\033[1;36m[get_startup_ad]\033[0m')
+    z_startup_ad = next(response_generator)
+
     def print_ad_link(link):    
         if link is None:
             return 'None'
         return f'jump_type: {link.jump_type}\nlink: {link.link}\nmini_program_id: {link.mini_program_id}\nmini_program_path: {link.mini_program_path}'
-    for ad in bcz_startup_ad:
+    for ad in z_startup_ad:
         print(f'''get_startup_ad: 
     ad_id: {ad.ad_id}
     ad_type: {ad.ad_type}
@@ -414,6 +502,15 @@ if __name__ == '__main__':
     show_times: {ad.show_times}
     start_time: {ad.start_time}''')
 
+
+    print('\033[1;36m[get_live_streaming_info]\033[0m')
+    z_live_streaming_info = next(response_generator)
+    print(f'get_live_streaming_info: current_timestamp: {z_live_streaming_info.current_timestamp}\nstart_timestamp: {z_live_streaming_info.start_timestamp}\nend_timestamp: {z_live_streaming_info.end_timestamp}')
+
+    print('\033[1;36m[get_practice_popup_adv]\033[0m')
+    z_practice_popup_adv = next(response_generator)
+    print(f'get_practice_popup_adv: id: {z_practice_popup_adv.id}\nimg: {z_practice_popup_adv.img}\nlink: {z_practice_popup_adv.link}')
+    
 
 
 

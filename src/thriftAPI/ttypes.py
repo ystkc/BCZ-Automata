@@ -3688,6 +3688,457 @@ class get_startup_ad_result(object):
 
     def __ne__(self, other):
         return not (self == other)
+
+
+class LiveStreamingInfo(object):
+    """
+    Attributes:
+     - current_timestamp
+     - start_timestamp
+     - end_timestamp
+
+    """
+
+
+    def __init__(self, current_timestamp=None, start_timestamp=None, end_timestamp=None,):
+        self.current_timestamp = current_timestamp
+        self.start_timestamp = start_timestamp
+        self.end_timestamp = end_timestamp
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.I64:
+                    self.current_timestamp = iprot.readI64()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.I64:
+                    self.start_timestamp = iprot.readI64()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 3:
+                if ftype == TType.I64:
+                    self.end_timestamp = iprot.readI64()
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('LiveStreamingInfo')
+        if self.current_timestamp is not None:
+            oprot.writeFieldBegin('current_timestamp', TType.I64, 1)
+            oprot.writeI64(self.current_timestamp)
+            oprot.writeFieldEnd()
+        if self.start_timestamp is not None:
+            oprot.writeFieldBegin('start_timestamp', TType.I64, 2)
+            oprot.writeI64(self.start_timestamp)
+            oprot.writeFieldEnd()
+        if self.end_timestamp is not None:
+            oprot.writeFieldBegin('end_timestamp', TType.I64, 3)
+            oprot.writeI64(self.end_timestamp)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+
+
+class get_live_streaming_info_result(object):
+    """
+    Attributes:
+     - success
+     - boom
+     - bomb
+
+    """
+
+
+    def __init__(self, success=None, boom=None, bomb=None,):
+        self.success = success
+        self.boom = boom
+        self.bomb = bomb
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.STRUCT:
+                    self.success = LiveStreamingInfo()
+                    self.success.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.STRUCT:
+                    self.boom = SystemException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 3:
+                if ftype == TType.STRUCT:
+                    self.bomb = LogicException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('get_live_streaming_info_result')
+        if self.success is not None:
+            oprot.writeFieldBegin('success', TType.STRUCT, 1)
+            self.success.write(oprot)
+            oprot.writeFieldEnd()
+        if self.boom is not None:
+            oprot.writeFieldBegin('boom', TType.STRUCT, 2)
+            self.boom.write(oprot)
+            oprot.writeFieldEnd()
+        if self.bomb is not None:
+            oprot.writeFieldBegin('bomb', TType.STRUCT, 3)
+            self.bomb.write(oprot)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+
+
+class PracticePopupAdv(object):
+    """
+    Attributes:
+     - id
+     - img
+     - link
+
+    """
+
+
+    def __init__(self, id=None, img=None, link=None,):
+        self.id = id
+        self.img = img
+        self.link = link
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.STRING:
+                    self.id = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.STRING:
+                    self.img = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 3:
+                if ftype == TType.STRING:
+                    self.link = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('PracticePopupAdv')
+        if self.id is not None:
+            oprot.writeFieldBegin('id', TType.STRING, 1)
+            oprot.writeString(self.id.encode('utf-8') if sys.version_info[0] == 2 else self.id)
+            oprot.writeFieldEnd()
+        if self.img is not None:
+            oprot.writeFieldBegin('img', TType.STRING, 2)
+            oprot.writeString(self.img.encode('utf-8') if sys.version_info[0] == 2 else self.img)
+            oprot.writeFieldEnd()
+        if self.link is not None:
+            oprot.writeFieldBegin('link', TType.STRING, 3)
+            oprot.writeString(self.link.encode('utf-8') if sys.version_info[0] == 2 else self.link)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+
+
+class get_practice_popup_adv_result(object):
+    """
+    Attributes:
+     - success
+     - boom
+     - bomb
+
+    """
+
+
+    def __init__(self, success=None, boom=None, bomb=None,):
+        self.success = success
+        self.boom = boom
+        self.bomb = bomb
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.STRUCT:
+                    self.success = PracticePopupAdv()
+                    self.success.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.STRUCT:
+                    self.boom = SystemException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 3:
+                if ftype == TType.STRUCT:
+                    self.bomb = LogicException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('get_practice_popup_adv_result')
+        if self.success is not None:
+            oprot.writeFieldBegin('success', TType.STRUCT, 1)
+            self.success.write(oprot)
+            oprot.writeFieldEnd()
+        if self.boom is not None:
+            oprot.writeFieldBegin('boom', TType.STRUCT, 2)
+            self.boom.write(oprot)
+            oprot.writeFieldEnd()
+        if self.bomb is not None:
+            oprot.writeFieldBegin('bomb', TType.STRUCT, 3)
+            self.bomb.write(oprot)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+
+
+class report_event_args(object):
+    """
+    Attributes:
+     - jsons
+
+    """
+
+
+    def __init__(self, jsons=None,):
+        self.jsons = jsons
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.LIST:
+                    self.jsons = []
+                    (_etype126, _size123) = iprot.readListBegin()
+                    for _i127 in range(_size123):
+                        _elem128 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        self.jsons.append(_elem128)
+                    iprot.readListEnd()
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('report_event_args')
+        if self.jsons is not None:
+            oprot.writeFieldBegin('jsons', TType.LIST, 1)
+            oprot.writeListBegin(TType.STRING, len(self.jsons))
+            for iter129 in self.jsons:
+                oprot.writeString(iter129.encode('utf-8') if sys.version_info[0] == 2 else iter129)
+            oprot.writeListEnd()
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+
+
+class report_event_result(object):
+    """
+    Attributes:
+     - boom
+     - bomb
+
+    """
+
+
+    def __init__(self, boom=None, bomb=None,):
+        self.boom = boom
+        self.bomb = bomb
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.STRUCT:
+                    self.boom = SystemException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.STRUCT:
+                    self.bomb = LogicException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('report_event_result')
+        if self.boom is not None:
+            oprot.writeFieldBegin('boom', TType.STRUCT, 1)
+            self.boom.write(oprot)
+            oprot.writeFieldEnd()
+        if self.bomb is not None:
+            oprot.writeFieldBegin('bomb', TType.STRUCT, 2)
+            self.bomb.write(oprot)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
 all_structs.append(LogicException)
 LogicException.thrift_spec = (
     None,  # 0
@@ -3996,6 +4447,45 @@ get_startup_ad_result.thrift_spec = (
     (1, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 1
     (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
     (3, TType.LIST, 'success', (TType.STRUCT, [StartupAd, None], False), None, ),  # 3
+)
+all_structs.append(LiveStreamingInfo)
+LiveStreamingInfo.thrift_spec = (
+    None,  # 0
+    (1, TType.I64, 'current_timestamp', None, None, ),  # 1
+    (2, TType.I64, 'start_timestamp', None, None, ),  # 2
+    (3, TType.I64, 'end_timestamp', None, None, ),  # 3
+)
+all_structs.append(get_live_streaming_info_result)
+get_live_streaming_info_result.thrift_spec = (
+    None,  # 0
+    (1, TType.STRUCT, 'success', [LiveStreamingInfo, None], None, ),  # 1
+    (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
+    (3, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 3
+)
+all_structs.append(PracticePopupAdv)
+PracticePopupAdv.thrift_spec = (
+    None,  # 0
+    (1, TType.STRING, 'id', 'UTF8', None, ),  # 1
+    (2, TType.STRING, 'img', 'UTF8', None, ),  # 2
+    (3, TType.STRING, 'link', 'UTF8', None, ),  # 3
+)
+all_structs.append(get_practice_popup_adv_result)
+get_practice_popup_adv_result.thrift_spec = (
+    None,  # 0
+    (1, TType.STRUCT, 'success', [PracticePopupAdv, None], None, ),  # 1
+    (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
+    (3, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 3
+)
+all_structs.append(report_event_args)
+report_event_args.thrift_spec = (
+    None,  # 0
+    (1, TType.LIST, 'jsons', (TType.STRING, 'UTF8', False), None, ),  # 1
+)
+all_structs.append(report_event_result)
+report_event_result.thrift_spec = (
+    None,  # 0
+    (1, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 1
+    (2, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 2
 )
 fix_spec(all_structs)
 del all_structs

@@ -221,11 +221,11 @@ class get_startup_ad_result(object):
             if fid == 0:
                 if ftype == TType.LIST:
                     self.success = []
-                    (_etype126, _size123) = iprot.readListBegin()
-                    for _i127 in range(_size123):
-                        _elem128 = StartupAd()
-                        _elem128.read(iprot)
-                        self.success.append(_elem128)
+                    (_etype133, _size130) = iprot.readListBegin()
+                    for _i134 in range(_size130):
+                        _elem135 = StartupAd()
+                        _elem135.read(iprot)
+                        self.success.append(_elem135)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -252,8 +252,8 @@ class get_startup_ad_result(object):
         if self.success is not None:
             oprot.writeFieldBegin('success', TType.LIST, 0)
             oprot.writeListBegin(TType.STRUCT, len(self.success))
-            for iter129 in self.success:
-                iter129.write(oprot)
+            for iter136 in self.success:
+                iter136.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.bomb is not None:

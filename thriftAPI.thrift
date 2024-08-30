@@ -307,3 +307,47 @@ struct get_startup_ad_result{
 service get_startup_ad_service{
     list<StartupAd> get_startup_ad(1: get_startup_ad_args args_) throws (1: LogicException bomb, 2: SystemException boom)
 }
+
+
+# get_live_streaming_info
+struct LiveStreamingInfo{
+    1: i64 current_timestamp,
+    2: i64 start_timestamp,
+    3: i64 end_timestamp
+}
+struct get_live_streaming_info_result{
+    1: LiveStreamingInfo success,
+    2: SystemException boom,
+    3: LogicException bomb
+}
+service get_live_streaming_info_service{
+    LiveStreamingInfo get_live_streaming_info() throws (1: LogicException bomb, 2: SystemException boom)
+}
+
+# get_practice_popup_adv
+struct PracticePopupAdv{
+    1: string id,
+    2: string img,
+    3: string link
+}
+struct get_practice_popup_adv_result{
+    1: PracticePopupAdv success,
+    2: SystemException boom,
+    3: LogicException bomb
+}
+service get_practice_popup_adv_service{
+    PracticePopupAdv get_practice_popup_adv() throws (1: LogicException bomb, 2: SystemException boom)
+}
+
+# report_event
+
+struct report_event_args{
+    1: list<string> jsons
+}
+struct report_event_result{
+    1: SystemException boom,
+    2: LogicException bomb
+}
+service report_event_service{
+    report_event_result report_event(1: report_event_args args_) throws (1: LogicException bomb, 2: SystemException boom)
+}
