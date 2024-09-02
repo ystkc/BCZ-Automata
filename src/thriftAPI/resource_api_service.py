@@ -19,7 +19,12 @@ all_structs = []
 
 
 class Iface(object):
-    def get_practice_popup_adv(self):
+    def get_book_resource_update_info(self, word_level_id):
+        """
+        Parameters:
+         - word_level_id
+
+        """
         pass
 
 
@@ -30,18 +35,24 @@ class Client(Iface):
             self._oprot = oprot
         self._seqid = 0
 
-    def get_practice_popup_adv(self):
-        self.send_get_practice_popup_adv()
-        return self.recv_get_practice_popup_adv()
+    def get_book_resource_update_info(self, word_level_id):
+        """
+        Parameters:
+         - word_level_id
 
-    def send_get_practice_popup_adv(self):
-        self._oprot.writeMessageBegin('get_practice_popup_adv', TMessageType.CALL, self._seqid)
-        args = get_practice_popup_adv_args()
+        """
+        self.send_get_book_resource_update_info(word_level_id)
+        return self.recv_get_book_resource_update_info()
+
+    def send_get_book_resource_update_info(self, word_level_id):
+        self._oprot.writeMessageBegin('get_book_resource_update_info', TMessageType.CALL, self._seqid)
+        args = get_book_resource_update_info_args()
+        args.word_level_id = word_level_id
         args.write(self._oprot)
         self._oprot.writeMessageEnd()
         self._oprot.trans.flush()
 
-    def recv_get_practice_popup_adv(self):
+    def recv_get_book_resource_update_info(self):
         iprot = self._iprot
         (fname, mtype, rseqid) = iprot.readMessageBegin()
         if mtype == TMessageType.EXCEPTION:
@@ -49,7 +60,7 @@ class Client(Iface):
             x.read(iprot)
             iprot.readMessageEnd()
             raise x
-        result = get_practice_popup_adv_result()
+        result = get_book_resource_update_info_result()
         result.read(iprot)
         iprot.readMessageEnd()
         if result.success is not None:
@@ -58,14 +69,14 @@ class Client(Iface):
             raise result.bomb
         if result.boom is not None:
             raise result.boom
-        raise TApplicationException(TApplicationException.MISSING_RESULT, "get_practice_popup_adv failed: unknown result")
+        raise TApplicationException(TApplicationException.MISSING_RESULT, "get_book_resource_update_info failed: unknown result")
 
 
 class Processor(Iface, TProcessor):
     def __init__(self, handler):
         self._handler = handler
         self._processMap = {}
-        self._processMap["get_practice_popup_adv"] = Processor.process_get_practice_popup_adv
+        self._processMap["get_book_resource_update_info"] = Processor.process_get_book_resource_update_info
         self._on_message_begin = None
 
     def on_message_begin(self, func):
@@ -88,13 +99,13 @@ class Processor(Iface, TProcessor):
             self._processMap[name](self, seqid, iprot, oprot)
         return True
 
-    def process_get_practice_popup_adv(self, seqid, iprot, oprot):
-        args = get_practice_popup_adv_args()
+    def process_get_book_resource_update_info(self, seqid, iprot, oprot):
+        args = get_book_resource_update_info_args()
         args.read(iprot)
         iprot.readMessageEnd()
-        result = get_practice_popup_adv_result()
+        result = get_book_resource_update_info_result()
         try:
-            result.success = self._handler.get_practice_popup_adv()
+            result.success = self._handler.get_book_resource_update_info(args.word_level_id)
             msg_type = TMessageType.REPLY
         except TTransport.TTransportException:
             raise
@@ -112,7 +123,7 @@ class Processor(Iface, TProcessor):
             logging.exception('Unexpected exception in handler')
             msg_type = TMessageType.EXCEPTION
             result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
-        oprot.writeMessageBegin("get_practice_popup_adv", msg_type, seqid)
+        oprot.writeMessageBegin("get_book_resource_update_info", msg_type, seqid)
         result.write(oprot)
         oprot.writeMessageEnd()
         oprot.trans.flush()
@@ -120,8 +131,16 @@ class Processor(Iface, TProcessor):
 # HELPER FUNCTIONS AND STRUCTURES
 
 
-class get_practice_popup_adv_args(object):
+class get_book_resource_update_info_args(object):
+    """
+    Attributes:
+     - word_level_id
 
+    """
+
+
+    def __init__(self, word_level_id=None,):
+        self.word_level_id = word_level_id
 
     def read(self, iprot):
         if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
@@ -132,6 +151,11 @@ class get_practice_popup_adv_args(object):
             (fname, ftype, fid) = iprot.readFieldBegin()
             if ftype == TType.STOP:
                 break
+            if fid == 1:
+                if ftype == TType.I32:
+                    self.word_level_id = iprot.readI32()
+                else:
+                    iprot.skip(ftype)
             else:
                 iprot.skip(ftype)
             iprot.readFieldEnd()
@@ -141,7 +165,11 @@ class get_practice_popup_adv_args(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('get_practice_popup_adv_args')
+        oprot.writeStructBegin('get_book_resource_update_info_args')
+        if self.word_level_id is not None:
+            oprot.writeFieldBegin('word_level_id', TType.I32, 1)
+            oprot.writeI32(self.word_level_id)
+            oprot.writeFieldEnd()
         oprot.writeFieldStop()
         oprot.writeStructEnd()
 
@@ -158,12 +186,14 @@ class get_practice_popup_adv_args(object):
 
     def __ne__(self, other):
         return not (self == other)
-all_structs.append(get_practice_popup_adv_args)
-get_practice_popup_adv_args.thrift_spec = (
+all_structs.append(get_book_resource_update_info_args)
+get_book_resource_update_info_args.thrift_spec = (
+    None,  # 0
+    (1, TType.I32, 'word_level_id', None, None, ),  # 1
 )
 
 
-class get_practice_popup_adv_result(object):
+class get_book_resource_update_info_result(object):
     """
     Attributes:
      - success
@@ -189,7 +219,7 @@ class get_practice_popup_adv_result(object):
                 break
             if fid == 0:
                 if ftype == TType.STRUCT:
-                    self.success = PracticePopupAdv()
+                    self.success = BookResourceUpdateInfo()
                     self.success.read(iprot)
                 else:
                     iprot.skip(ftype)
@@ -212,7 +242,7 @@ class get_practice_popup_adv_result(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('get_practice_popup_adv_result')
+        oprot.writeStructBegin('get_book_resource_update_info_result')
         if self.success is not None:
             oprot.writeFieldBegin('success', TType.STRUCT, 0)
             self.success.write(oprot)
@@ -241,9 +271,9 @@ class get_practice_popup_adv_result(object):
 
     def __ne__(self, other):
         return not (self == other)
-all_structs.append(get_practice_popup_adv_result)
-get_practice_popup_adv_result.thrift_spec = (
-    (0, TType.STRUCT, 'success', [PracticePopupAdv, None], None, ),  # 0
+all_structs.append(get_book_resource_update_info_result)
+get_book_resource_update_info_result.thrift_spec = (
+    (0, TType.STRUCT, 'success', [BookResourceUpdateInfo, None], None, ),  # 0
     (1, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 1
     (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
 )

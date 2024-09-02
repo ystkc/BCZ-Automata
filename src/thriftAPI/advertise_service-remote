@@ -16,7 +16,7 @@ else:
 from thrift.transport import TTransport, TSocket, TSSLSocket, THttpClient
 from thrift.protocol.TBinaryProtocol import TBinaryProtocol
 
-from thriftAPI import get_startup_ad_service
+from thriftAPI import advertise_service
 from thriftAPI.ttypes import *
 
 if len(sys.argv) <= 1 or sys.argv[1] == '--help':
@@ -25,6 +25,15 @@ if len(sys.argv) <= 1 or sys.argv[1] == '--help':
     print('')
     print('Functions:')
     print('   get_startup_ad(get_startup_ad_args args_)')
+    print('  MallTabInfo get_mall_tab_icon_info()')
+    print('  PracticePopupAdv get_practice_popup_adv()')
+    print('  ExplorePopupAdv get_explore_popup_adv()')
+    print('   get_loading_ad_items()')
+    print('   get_loading_ad_info()')
+    print('  LiveStreamingInfo get_live_streaming_info()')
+    print('  BottomAdvInfos get_main_view_bottom_advs_v2()')
+    print('   get_main_view_top_banner_advs()')
+    print('  PracticeBannerAdv get_practice_banner_adv()')
     print('')
     sys.exit(0)
 
@@ -101,7 +110,7 @@ else:
     else:
         transport = TTransport.TBufferedTransport(socket)
 protocol = TBinaryProtocol(transport)
-client = get_startup_ad_service.Client(protocol)
+client = advertise_service.Client(protocol)
 transport.open()
 
 if cmd == 'get_startup_ad':
@@ -109,6 +118,60 @@ if cmd == 'get_startup_ad':
         print('get_startup_ad requires 1 args')
         sys.exit(1)
     pp.pprint(client.get_startup_ad(eval(args[0]),))
+
+elif cmd == 'get_mall_tab_icon_info':
+    if len(args) != 0:
+        print('get_mall_tab_icon_info requires 0 args')
+        sys.exit(1)
+    pp.pprint(client.get_mall_tab_icon_info())
+
+elif cmd == 'get_practice_popup_adv':
+    if len(args) != 0:
+        print('get_practice_popup_adv requires 0 args')
+        sys.exit(1)
+    pp.pprint(client.get_practice_popup_adv())
+
+elif cmd == 'get_explore_popup_adv':
+    if len(args) != 0:
+        print('get_explore_popup_adv requires 0 args')
+        sys.exit(1)
+    pp.pprint(client.get_explore_popup_adv())
+
+elif cmd == 'get_loading_ad_items':
+    if len(args) != 0:
+        print('get_loading_ad_items requires 0 args')
+        sys.exit(1)
+    pp.pprint(client.get_loading_ad_items())
+
+elif cmd == 'get_loading_ad_info':
+    if len(args) != 0:
+        print('get_loading_ad_info requires 0 args')
+        sys.exit(1)
+    pp.pprint(client.get_loading_ad_info())
+
+elif cmd == 'get_live_streaming_info':
+    if len(args) != 0:
+        print('get_live_streaming_info requires 0 args')
+        sys.exit(1)
+    pp.pprint(client.get_live_streaming_info())
+
+elif cmd == 'get_main_view_bottom_advs_v2':
+    if len(args) != 0:
+        print('get_main_view_bottom_advs_v2 requires 0 args')
+        sys.exit(1)
+    pp.pprint(client.get_main_view_bottom_advs_v2())
+
+elif cmd == 'get_main_view_top_banner_advs':
+    if len(args) != 0:
+        print('get_main_view_top_banner_advs requires 0 args')
+        sys.exit(1)
+    pp.pprint(client.get_main_view_top_banner_advs())
+
+elif cmd == 'get_practice_banner_adv':
+    if len(args) != 0:
+        print('get_practice_banner_adv requires 0 args')
+        sys.exit(1)
+    pp.pprint(client.get_practice_banner_adv())
 
 else:
     print('Unrecognized method %s' % cmd)

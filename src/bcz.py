@@ -166,8 +166,8 @@ def getAllBooks(token: str, show_hidden: bool = False) -> UserBookListInfo:
     result.read(protocol)
     book_dict = {}
     for book in result.books_info:
-        if book.book_flag == 0 and not show_hidden:
-            continue
+        # if book.book_flag == 0 and not show_hidden:
+        #     continue
         book_dict[book.id] = {
             'name': book.name,
             'desc': book.desc,
@@ -436,16 +436,13 @@ def getRandomWordIDInBook(db_path: str, book_id: int, count: int) -> list[int]:
 
 if __name__ == "__main__":
     ...
-    token = ""
-    date = time.strftime(r"%Y%m%d", time.localtime())
-    print(date)
-    count = 10
+    token = "irYnVIR41ocNA6cq2OOrWTDunlbQzdAXIVwYYZWek8I%3D"
 
     # book_id = getCurrentBook(token)
     # print(updateDoneData(token, book_id, getRandomWordIDInBook('lookup.db', book_id, count)))
 
     # print(daka(token, date, count))
 
-    # print(getAllBooks(token))
+    print(getAllBooks(token))
     # print(sendSmsVerifyCode(""))
     # print(loginWithPhone("", ""))

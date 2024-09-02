@@ -35,6 +35,17 @@ class Iface(object):
         """
         pass
 
+    def get_bind_info(self):
+        pass
+
+    def check_access_token(self, device):
+        """
+        Parameters:
+         - device
+
+        """
+        pass
+
 
 class Client(Iface):
     def __init__(self, iprot, oprot=None):
@@ -109,6 +120,72 @@ class Client(Iface):
             raise result.boom
         raise TApplicationException(TApplicationException.MISSING_RESULT, "login_with_phone failed: unknown result")
 
+    def get_bind_info(self):
+        self.send_get_bind_info()
+        return self.recv_get_bind_info()
+
+    def send_get_bind_info(self):
+        self._oprot.writeMessageBegin('get_bind_info', TMessageType.CALL, self._seqid)
+        args = get_bind_info_args()
+        args.write(self._oprot)
+        self._oprot.writeMessageEnd()
+        self._oprot.trans.flush()
+
+    def recv_get_bind_info(self):
+        iprot = self._iprot
+        (fname, mtype, rseqid) = iprot.readMessageBegin()
+        if mtype == TMessageType.EXCEPTION:
+            x = TApplicationException()
+            x.read(iprot)
+            iprot.readMessageEnd()
+            raise x
+        result = get_bind_info_result()
+        result.read(iprot)
+        iprot.readMessageEnd()
+        if result.success is not None:
+            return result.success
+        if result.bomb is not None:
+            raise result.bomb
+        if result.boom is not None:
+            raise result.boom
+        raise TApplicationException(TApplicationException.MISSING_RESULT, "get_bind_info failed: unknown result")
+
+    def check_access_token(self, device):
+        """
+        Parameters:
+         - device
+
+        """
+        self.send_check_access_token(device)
+        return self.recv_check_access_token()
+
+    def send_check_access_token(self, device):
+        self._oprot.writeMessageBegin('check_access_token', TMessageType.CALL, self._seqid)
+        args = check_access_token_args()
+        args.device = device
+        args.write(self._oprot)
+        self._oprot.writeMessageEnd()
+        self._oprot.trans.flush()
+
+    def recv_check_access_token(self):
+        iprot = self._iprot
+        (fname, mtype, rseqid) = iprot.readMessageBegin()
+        if mtype == TMessageType.EXCEPTION:
+            x = TApplicationException()
+            x.read(iprot)
+            iprot.readMessageEnd()
+            raise x
+        result = check_access_token_result()
+        result.read(iprot)
+        iprot.readMessageEnd()
+        if result.success is not None:
+            return result.success
+        if result.bomb is not None:
+            raise result.bomb
+        if result.boom is not None:
+            raise result.boom
+        raise TApplicationException(TApplicationException.MISSING_RESULT, "check_access_token failed: unknown result")
+
 
 class Processor(Iface, TProcessor):
     def __init__(self, handler):
@@ -116,6 +193,8 @@ class Processor(Iface, TProcessor):
         self._processMap = {}
         self._processMap["send_sms_verify_code"] = Processor.process_send_sms_verify_code
         self._processMap["login_with_phone"] = Processor.process_login_with_phone
+        self._processMap["get_bind_info"] = Processor.process_get_bind_info
+        self._processMap["check_access_token"] = Processor.process_check_access_token
         self._on_message_begin = None
 
     def on_message_begin(self, func):
@@ -186,6 +265,64 @@ class Processor(Iface, TProcessor):
             msg_type = TMessageType.EXCEPTION
             result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
         oprot.writeMessageBegin("login_with_phone", msg_type, seqid)
+        result.write(oprot)
+        oprot.writeMessageEnd()
+        oprot.trans.flush()
+
+    def process_get_bind_info(self, seqid, iprot, oprot):
+        args = get_bind_info_args()
+        args.read(iprot)
+        iprot.readMessageEnd()
+        result = get_bind_info_result()
+        try:
+            result.success = self._handler.get_bind_info()
+            msg_type = TMessageType.REPLY
+        except TTransport.TTransportException:
+            raise
+        except LogicException as bomb:
+            msg_type = TMessageType.REPLY
+            result.bomb = bomb
+        except SystemException as boom:
+            msg_type = TMessageType.REPLY
+            result.boom = boom
+        except TApplicationException as ex:
+            logging.exception('TApplication exception in handler')
+            msg_type = TMessageType.EXCEPTION
+            result = ex
+        except Exception:
+            logging.exception('Unexpected exception in handler')
+            msg_type = TMessageType.EXCEPTION
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+        oprot.writeMessageBegin("get_bind_info", msg_type, seqid)
+        result.write(oprot)
+        oprot.writeMessageEnd()
+        oprot.trans.flush()
+
+    def process_check_access_token(self, seqid, iprot, oprot):
+        args = check_access_token_args()
+        args.read(iprot)
+        iprot.readMessageEnd()
+        result = check_access_token_result()
+        try:
+            result.success = self._handler.check_access_token(args.device)
+            msg_type = TMessageType.REPLY
+        except TTransport.TTransportException:
+            raise
+        except LogicException as bomb:
+            msg_type = TMessageType.REPLY
+            result.bomb = bomb
+        except SystemException as boom:
+            msg_type = TMessageType.REPLY
+            result.boom = boom
+        except TApplicationException as ex:
+            logging.exception('TApplication exception in handler')
+            msg_type = TMessageType.EXCEPTION
+            result = ex
+        except Exception:
+            logging.exception('Unexpected exception in handler')
+            msg_type = TMessageType.EXCEPTION
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+        oprot.writeMessageBegin("check_access_token", msg_type, seqid)
         result.write(oprot)
         oprot.writeMessageEnd()
         oprot.trans.flush()
@@ -443,6 +580,291 @@ class login_with_phone_result(object):
 all_structs.append(login_with_phone_result)
 login_with_phone_result.thrift_spec = (
     (0, TType.STRUCT, 'success', [UserLoginResult, None], None, ),  # 0
+    (1, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 1
+    (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
+)
+
+
+class get_bind_info_args(object):
+
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('get_bind_info_args')
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+all_structs.append(get_bind_info_args)
+get_bind_info_args.thrift_spec = (
+)
+
+
+class get_bind_info_result(object):
+    """
+    Attributes:
+     - success
+     - bomb
+     - boom
+
+    """
+
+
+    def __init__(self, success=None, bomb=None, boom=None,):
+        self.success = success
+        self.bomb = bomb
+        self.boom = boom
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 0:
+                if ftype == TType.LIST:
+                    self.success = []
+                    (_etype317, _size314) = iprot.readListBegin()
+                    for _i318 in range(_size314):
+                        _elem319 = UserBindInfo()
+                        _elem319.read(iprot)
+                        self.success.append(_elem319)
+                    iprot.readListEnd()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 1:
+                if ftype == TType.STRUCT:
+                    self.bomb = LogicException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.STRUCT:
+                    self.boom = SystemException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('get_bind_info_result')
+        if self.success is not None:
+            oprot.writeFieldBegin('success', TType.LIST, 0)
+            oprot.writeListBegin(TType.STRUCT, len(self.success))
+            for iter320 in self.success:
+                iter320.write(oprot)
+            oprot.writeListEnd()
+            oprot.writeFieldEnd()
+        if self.bomb is not None:
+            oprot.writeFieldBegin('bomb', TType.STRUCT, 1)
+            self.bomb.write(oprot)
+            oprot.writeFieldEnd()
+        if self.boom is not None:
+            oprot.writeFieldBegin('boom', TType.STRUCT, 2)
+            self.boom.write(oprot)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+all_structs.append(get_bind_info_result)
+get_bind_info_result.thrift_spec = (
+    (0, TType.LIST, 'success', (TType.STRUCT, [UserBindInfo, None], False), None, ),  # 0
+    (1, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 1
+    (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
+)
+
+
+class check_access_token_args(object):
+    """
+    Attributes:
+     - device
+
+    """
+
+
+    def __init__(self, device=None,):
+        self.device = device
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.STRING:
+                    self.device = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('check_access_token_args')
+        if self.device is not None:
+            oprot.writeFieldBegin('device', TType.STRING, 1)
+            oprot.writeString(self.device.encode('utf-8') if sys.version_info[0] == 2 else self.device)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+all_structs.append(check_access_token_args)
+check_access_token_args.thrift_spec = (
+    None,  # 0
+    (1, TType.STRING, 'device', 'UTF8', None, ),  # 1
+)
+
+
+class check_access_token_result(object):
+    """
+    Attributes:
+     - success
+     - bomb
+     - boom
+
+    """
+
+
+    def __init__(self, success=None, bomb=None, boom=None,):
+        self.success = success
+        self.bomb = bomb
+        self.boom = boom
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 0:
+                if ftype == TType.STRUCT:
+                    self.success = AccessTokenCheckResult()
+                    self.success.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 1:
+                if ftype == TType.STRUCT:
+                    self.bomb = LogicException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.STRUCT:
+                    self.boom = SystemException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('check_access_token_result')
+        if self.success is not None:
+            oprot.writeFieldBegin('success', TType.STRUCT, 0)
+            self.success.write(oprot)
+            oprot.writeFieldEnd()
+        if self.bomb is not None:
+            oprot.writeFieldBegin('bomb', TType.STRUCT, 1)
+            self.bomb.write(oprot)
+            oprot.writeFieldEnd()
+        if self.boom is not None:
+            oprot.writeFieldBegin('boom', TType.STRUCT, 2)
+            self.boom.write(oprot)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+all_structs.append(check_access_token_result)
+check_access_token_result.thrift_spec = (
+    (0, TType.STRUCT, 'success', [AccessTokenCheckResult, None], None, ),  # 0
     (1, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 1
     (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
 )

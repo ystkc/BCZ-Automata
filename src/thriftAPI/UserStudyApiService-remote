@@ -28,6 +28,14 @@ if len(sys.argv) <= 1 or sys.argv[1] == '--help':
     print('  i32 update_done_data(update_done_data_args args_)')
     print('  UserBookListInfo get_all_books_basic_info_v3()')
     print('  UserBasicInfoPlusV2 user_basic_info_v2()')
+    print('  UserStudyConfig get_user_study_config()')
+    print('  UserStudyMode get_user_study_mode()')
+    print('  UserLimitInfoV2 user_limit_info_v2()')
+    print('  WinStreakStatus win_streak_status(i32 client_date)')
+    print('   get_books_replace_info()')
+    print('  MainPageJS get_main_page_js()')
+    print('  UserDakaShareInfo user_daka_v2(user_daka_v2_args args_)')
+    print('  TrainPageResources get_train_page_resource()')
     print('')
     sys.exit(0)
 
@@ -130,6 +138,54 @@ elif cmd == 'user_basic_info_v2':
         print('user_basic_info_v2 requires 0 args')
         sys.exit(1)
     pp.pprint(client.user_basic_info_v2())
+
+elif cmd == 'get_user_study_config':
+    if len(args) != 0:
+        print('get_user_study_config requires 0 args')
+        sys.exit(1)
+    pp.pprint(client.get_user_study_config())
+
+elif cmd == 'get_user_study_mode':
+    if len(args) != 0:
+        print('get_user_study_mode requires 0 args')
+        sys.exit(1)
+    pp.pprint(client.get_user_study_mode())
+
+elif cmd == 'user_limit_info_v2':
+    if len(args) != 0:
+        print('user_limit_info_v2 requires 0 args')
+        sys.exit(1)
+    pp.pprint(client.user_limit_info_v2())
+
+elif cmd == 'win_streak_status':
+    if len(args) != 1:
+        print('win_streak_status requires 1 args')
+        sys.exit(1)
+    pp.pprint(client.win_streak_status(eval(args[0]),))
+
+elif cmd == 'get_books_replace_info':
+    if len(args) != 0:
+        print('get_books_replace_info requires 0 args')
+        sys.exit(1)
+    pp.pprint(client.get_books_replace_info())
+
+elif cmd == 'get_main_page_js':
+    if len(args) != 0:
+        print('get_main_page_js requires 0 args')
+        sys.exit(1)
+    pp.pprint(client.get_main_page_js())
+
+elif cmd == 'user_daka_v2':
+    if len(args) != 1:
+        print('user_daka_v2 requires 1 args')
+        sys.exit(1)
+    pp.pprint(client.user_daka_v2(eval(args[0]),))
+
+elif cmd == 'get_train_page_resource':
+    if len(args) != 0:
+        print('get_train_page_resource requires 0 args')
+        sys.exit(1)
+    pp.pprint(client.get_train_page_resource())
 
 else:
     print('Unrecognized method %s' % cmd)

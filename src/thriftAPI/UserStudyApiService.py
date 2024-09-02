@@ -41,6 +41,40 @@ class Iface(object):
     def user_basic_info_v2(self):
         pass
 
+    def get_user_study_config(self):
+        pass
+
+    def get_user_study_mode(self):
+        pass
+
+    def user_limit_info_v2(self):
+        pass
+
+    def win_streak_status(self, client_date):
+        """
+        Parameters:
+         - client_date
+
+        """
+        pass
+
+    def get_books_replace_info(self):
+        pass
+
+    def get_main_page_js(self):
+        pass
+
+    def user_daka_v2(self, args_):
+        """
+        Parameters:
+         - args_
+
+        """
+        pass
+
+    def get_train_page_resource(self):
+        pass
+
 
 class Client(Iface):
     def __init__(self, iprot, oprot=None):
@@ -167,7 +201,263 @@ class Client(Iface):
         iprot.readMessageEnd()
         if result.success is not None:
             return result.success
+        if result.bomb is not None:
+            raise result.bomb
+        if result.boom is not None:
+            raise result.boom
         raise TApplicationException(TApplicationException.MISSING_RESULT, "user_basic_info_v2 failed: unknown result")
+
+    def get_user_study_config(self):
+        self.send_get_user_study_config()
+        return self.recv_get_user_study_config()
+
+    def send_get_user_study_config(self):
+        self._oprot.writeMessageBegin('get_user_study_config', TMessageType.CALL, self._seqid)
+        args = get_user_study_config_args()
+        args.write(self._oprot)
+        self._oprot.writeMessageEnd()
+        self._oprot.trans.flush()
+
+    def recv_get_user_study_config(self):
+        iprot = self._iprot
+        (fname, mtype, rseqid) = iprot.readMessageBegin()
+        if mtype == TMessageType.EXCEPTION:
+            x = TApplicationException()
+            x.read(iprot)
+            iprot.readMessageEnd()
+            raise x
+        result = get_user_study_config_result()
+        result.read(iprot)
+        iprot.readMessageEnd()
+        if result.success is not None:
+            return result.success
+        if result.bomb is not None:
+            raise result.bomb
+        if result.boom is not None:
+            raise result.boom
+        raise TApplicationException(TApplicationException.MISSING_RESULT, "get_user_study_config failed: unknown result")
+
+    def get_user_study_mode(self):
+        self.send_get_user_study_mode()
+        return self.recv_get_user_study_mode()
+
+    def send_get_user_study_mode(self):
+        self._oprot.writeMessageBegin('get_user_study_mode', TMessageType.CALL, self._seqid)
+        args = get_user_study_mode_args()
+        args.write(self._oprot)
+        self._oprot.writeMessageEnd()
+        self._oprot.trans.flush()
+
+    def recv_get_user_study_mode(self):
+        iprot = self._iprot
+        (fname, mtype, rseqid) = iprot.readMessageBegin()
+        if mtype == TMessageType.EXCEPTION:
+            x = TApplicationException()
+            x.read(iprot)
+            iprot.readMessageEnd()
+            raise x
+        result = get_user_study_mode_result()
+        result.read(iprot)
+        iprot.readMessageEnd()
+        if result.success is not None:
+            return result.success
+        if result.bomb is not None:
+            raise result.bomb
+        if result.boom is not None:
+            raise result.boom
+        raise TApplicationException(TApplicationException.MISSING_RESULT, "get_user_study_mode failed: unknown result")
+
+    def user_limit_info_v2(self):
+        self.send_user_limit_info_v2()
+        return self.recv_user_limit_info_v2()
+
+    def send_user_limit_info_v2(self):
+        self._oprot.writeMessageBegin('user_limit_info_v2', TMessageType.CALL, self._seqid)
+        args = user_limit_info_v2_args()
+        args.write(self._oprot)
+        self._oprot.writeMessageEnd()
+        self._oprot.trans.flush()
+
+    def recv_user_limit_info_v2(self):
+        iprot = self._iprot
+        (fname, mtype, rseqid) = iprot.readMessageBegin()
+        if mtype == TMessageType.EXCEPTION:
+            x = TApplicationException()
+            x.read(iprot)
+            iprot.readMessageEnd()
+            raise x
+        result = user_limit_info_v2_result()
+        result.read(iprot)
+        iprot.readMessageEnd()
+        if result.success is not None:
+            return result.success
+        if result.bomb is not None:
+            raise result.bomb
+        if result.boom is not None:
+            raise result.boom
+        raise TApplicationException(TApplicationException.MISSING_RESULT, "user_limit_info_v2 failed: unknown result")
+
+    def win_streak_status(self, client_date):
+        """
+        Parameters:
+         - client_date
+
+        """
+        self.send_win_streak_status(client_date)
+        return self.recv_win_streak_status()
+
+    def send_win_streak_status(self, client_date):
+        self._oprot.writeMessageBegin('win_streak_status', TMessageType.CALL, self._seqid)
+        args = win_streak_status_args()
+        args.client_date = client_date
+        args.write(self._oprot)
+        self._oprot.writeMessageEnd()
+        self._oprot.trans.flush()
+
+    def recv_win_streak_status(self):
+        iprot = self._iprot
+        (fname, mtype, rseqid) = iprot.readMessageBegin()
+        if mtype == TMessageType.EXCEPTION:
+            x = TApplicationException()
+            x.read(iprot)
+            iprot.readMessageEnd()
+            raise x
+        result = win_streak_status_result()
+        result.read(iprot)
+        iprot.readMessageEnd()
+        if result.success is not None:
+            return result.success
+        if result.bomb is not None:
+            raise result.bomb
+        if result.boom is not None:
+            raise result.boom
+        raise TApplicationException(TApplicationException.MISSING_RESULT, "win_streak_status failed: unknown result")
+
+    def get_books_replace_info(self):
+        self.send_get_books_replace_info()
+        return self.recv_get_books_replace_info()
+
+    def send_get_books_replace_info(self):
+        self._oprot.writeMessageBegin('get_books_replace_info', TMessageType.CALL, self._seqid)
+        args = get_books_replace_info_args()
+        args.write(self._oprot)
+        self._oprot.writeMessageEnd()
+        self._oprot.trans.flush()
+
+    def recv_get_books_replace_info(self):
+        iprot = self._iprot
+        (fname, mtype, rseqid) = iprot.readMessageBegin()
+        if mtype == TMessageType.EXCEPTION:
+            x = TApplicationException()
+            x.read(iprot)
+            iprot.readMessageEnd()
+            raise x
+        result = get_books_replace_info_result()
+        result.read(iprot)
+        iprot.readMessageEnd()
+        if result.success is not None:
+            return result.success
+        if result.bomb is not None:
+            raise result.bomb
+        if result.boom is not None:
+            raise result.boom
+        raise TApplicationException(TApplicationException.MISSING_RESULT, "get_books_replace_info failed: unknown result")
+
+    def get_main_page_js(self):
+        self.send_get_main_page_js()
+        return self.recv_get_main_page_js()
+
+    def send_get_main_page_js(self):
+        self._oprot.writeMessageBegin('get_main_page_js', TMessageType.CALL, self._seqid)
+        args = get_main_page_js_args()
+        args.write(self._oprot)
+        self._oprot.writeMessageEnd()
+        self._oprot.trans.flush()
+
+    def recv_get_main_page_js(self):
+        iprot = self._iprot
+        (fname, mtype, rseqid) = iprot.readMessageBegin()
+        if mtype == TMessageType.EXCEPTION:
+            x = TApplicationException()
+            x.read(iprot)
+            iprot.readMessageEnd()
+            raise x
+        result = get_main_page_js_result()
+        result.read(iprot)
+        iprot.readMessageEnd()
+        if result.success is not None:
+            return result.success
+        if result.bomb is not None:
+            raise result.bomb
+        if result.boom is not None:
+            raise result.boom
+        raise TApplicationException(TApplicationException.MISSING_RESULT, "get_main_page_js failed: unknown result")
+
+    def user_daka_v2(self, args_):
+        """
+        Parameters:
+         - args_
+
+        """
+        self.send_user_daka_v2(args_)
+        return self.recv_user_daka_v2()
+
+    def send_user_daka_v2(self, args_):
+        self._oprot.writeMessageBegin('user_daka_v2', TMessageType.CALL, self._seqid)
+        args = user_daka_v2_args()
+        args.args_ = args_
+        args.write(self._oprot)
+        self._oprot.writeMessageEnd()
+        self._oprot.trans.flush()
+
+    def recv_user_daka_v2(self):
+        iprot = self._iprot
+        (fname, mtype, rseqid) = iprot.readMessageBegin()
+        if mtype == TMessageType.EXCEPTION:
+            x = TApplicationException()
+            x.read(iprot)
+            iprot.readMessageEnd()
+            raise x
+        result = user_daka_v2_result()
+        result.read(iprot)
+        iprot.readMessageEnd()
+        if result.success is not None:
+            return result.success
+        if result.bomb is not None:
+            raise result.bomb
+        if result.boom is not None:
+            raise result.boom
+        raise TApplicationException(TApplicationException.MISSING_RESULT, "user_daka_v2 failed: unknown result")
+
+    def get_train_page_resource(self):
+        self.send_get_train_page_resource()
+        return self.recv_get_train_page_resource()
+
+    def send_get_train_page_resource(self):
+        self._oprot.writeMessageBegin('get_train_page_resource', TMessageType.CALL, self._seqid)
+        args = get_train_page_resource_args()
+        args.write(self._oprot)
+        self._oprot.writeMessageEnd()
+        self._oprot.trans.flush()
+
+    def recv_get_train_page_resource(self):
+        iprot = self._iprot
+        (fname, mtype, rseqid) = iprot.readMessageBegin()
+        if mtype == TMessageType.EXCEPTION:
+            x = TApplicationException()
+            x.read(iprot)
+            iprot.readMessageEnd()
+            raise x
+        result = get_train_page_resource_result()
+        result.read(iprot)
+        iprot.readMessageEnd()
+        if result.success is not None:
+            return result.success
+        if result.bomb is not None:
+            raise result.bomb
+        if result.boom is not None:
+            raise result.boom
+        raise TApplicationException(TApplicationException.MISSING_RESULT, "get_train_page_resource failed: unknown result")
 
 
 class Processor(Iface, TProcessor):
@@ -178,6 +468,14 @@ class Processor(Iface, TProcessor):
         self._processMap["update_done_data"] = Processor.process_update_done_data
         self._processMap["get_all_books_basic_info_v3"] = Processor.process_get_all_books_basic_info_v3
         self._processMap["user_basic_info_v2"] = Processor.process_user_basic_info_v2
+        self._processMap["get_user_study_config"] = Processor.process_get_user_study_config
+        self._processMap["get_user_study_mode"] = Processor.process_get_user_study_mode
+        self._processMap["user_limit_info_v2"] = Processor.process_user_limit_info_v2
+        self._processMap["win_streak_status"] = Processor.process_win_streak_status
+        self._processMap["get_books_replace_info"] = Processor.process_get_books_replace_info
+        self._processMap["get_main_page_js"] = Processor.process_get_main_page_js
+        self._processMap["user_daka_v2"] = Processor.process_user_daka_v2
+        self._processMap["get_train_page_resource"] = Processor.process_get_train_page_resource
         self._on_message_begin = None
 
     def on_message_begin(self, func):
@@ -285,6 +583,12 @@ class Processor(Iface, TProcessor):
             msg_type = TMessageType.REPLY
         except TTransport.TTransportException:
             raise
+        except LogicException as bomb:
+            msg_type = TMessageType.REPLY
+            result.bomb = bomb
+        except SystemException as boom:
+            msg_type = TMessageType.REPLY
+            result.boom = boom
         except TApplicationException as ex:
             logging.exception('TApplication exception in handler')
             msg_type = TMessageType.EXCEPTION
@@ -294,6 +598,238 @@ class Processor(Iface, TProcessor):
             msg_type = TMessageType.EXCEPTION
             result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
         oprot.writeMessageBegin("user_basic_info_v2", msg_type, seqid)
+        result.write(oprot)
+        oprot.writeMessageEnd()
+        oprot.trans.flush()
+
+    def process_get_user_study_config(self, seqid, iprot, oprot):
+        args = get_user_study_config_args()
+        args.read(iprot)
+        iprot.readMessageEnd()
+        result = get_user_study_config_result()
+        try:
+            result.success = self._handler.get_user_study_config()
+            msg_type = TMessageType.REPLY
+        except TTransport.TTransportException:
+            raise
+        except LogicException as bomb:
+            msg_type = TMessageType.REPLY
+            result.bomb = bomb
+        except SystemException as boom:
+            msg_type = TMessageType.REPLY
+            result.boom = boom
+        except TApplicationException as ex:
+            logging.exception('TApplication exception in handler')
+            msg_type = TMessageType.EXCEPTION
+            result = ex
+        except Exception:
+            logging.exception('Unexpected exception in handler')
+            msg_type = TMessageType.EXCEPTION
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+        oprot.writeMessageBegin("get_user_study_config", msg_type, seqid)
+        result.write(oprot)
+        oprot.writeMessageEnd()
+        oprot.trans.flush()
+
+    def process_get_user_study_mode(self, seqid, iprot, oprot):
+        args = get_user_study_mode_args()
+        args.read(iprot)
+        iprot.readMessageEnd()
+        result = get_user_study_mode_result()
+        try:
+            result.success = self._handler.get_user_study_mode()
+            msg_type = TMessageType.REPLY
+        except TTransport.TTransportException:
+            raise
+        except LogicException as bomb:
+            msg_type = TMessageType.REPLY
+            result.bomb = bomb
+        except SystemException as boom:
+            msg_type = TMessageType.REPLY
+            result.boom = boom
+        except TApplicationException as ex:
+            logging.exception('TApplication exception in handler')
+            msg_type = TMessageType.EXCEPTION
+            result = ex
+        except Exception:
+            logging.exception('Unexpected exception in handler')
+            msg_type = TMessageType.EXCEPTION
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+        oprot.writeMessageBegin("get_user_study_mode", msg_type, seqid)
+        result.write(oprot)
+        oprot.writeMessageEnd()
+        oprot.trans.flush()
+
+    def process_user_limit_info_v2(self, seqid, iprot, oprot):
+        args = user_limit_info_v2_args()
+        args.read(iprot)
+        iprot.readMessageEnd()
+        result = user_limit_info_v2_result()
+        try:
+            result.success = self._handler.user_limit_info_v2()
+            msg_type = TMessageType.REPLY
+        except TTransport.TTransportException:
+            raise
+        except LogicException as bomb:
+            msg_type = TMessageType.REPLY
+            result.bomb = bomb
+        except SystemException as boom:
+            msg_type = TMessageType.REPLY
+            result.boom = boom
+        except TApplicationException as ex:
+            logging.exception('TApplication exception in handler')
+            msg_type = TMessageType.EXCEPTION
+            result = ex
+        except Exception:
+            logging.exception('Unexpected exception in handler')
+            msg_type = TMessageType.EXCEPTION
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+        oprot.writeMessageBegin("user_limit_info_v2", msg_type, seqid)
+        result.write(oprot)
+        oprot.writeMessageEnd()
+        oprot.trans.flush()
+
+    def process_win_streak_status(self, seqid, iprot, oprot):
+        args = win_streak_status_args()
+        args.read(iprot)
+        iprot.readMessageEnd()
+        result = win_streak_status_result()
+        try:
+            result.success = self._handler.win_streak_status(args.client_date)
+            msg_type = TMessageType.REPLY
+        except TTransport.TTransportException:
+            raise
+        except LogicException as bomb:
+            msg_type = TMessageType.REPLY
+            result.bomb = bomb
+        except SystemException as boom:
+            msg_type = TMessageType.REPLY
+            result.boom = boom
+        except TApplicationException as ex:
+            logging.exception('TApplication exception in handler')
+            msg_type = TMessageType.EXCEPTION
+            result = ex
+        except Exception:
+            logging.exception('Unexpected exception in handler')
+            msg_type = TMessageType.EXCEPTION
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+        oprot.writeMessageBegin("win_streak_status", msg_type, seqid)
+        result.write(oprot)
+        oprot.writeMessageEnd()
+        oprot.trans.flush()
+
+    def process_get_books_replace_info(self, seqid, iprot, oprot):
+        args = get_books_replace_info_args()
+        args.read(iprot)
+        iprot.readMessageEnd()
+        result = get_books_replace_info_result()
+        try:
+            result.success = self._handler.get_books_replace_info()
+            msg_type = TMessageType.REPLY
+        except TTransport.TTransportException:
+            raise
+        except LogicException as bomb:
+            msg_type = TMessageType.REPLY
+            result.bomb = bomb
+        except SystemException as boom:
+            msg_type = TMessageType.REPLY
+            result.boom = boom
+        except TApplicationException as ex:
+            logging.exception('TApplication exception in handler')
+            msg_type = TMessageType.EXCEPTION
+            result = ex
+        except Exception:
+            logging.exception('Unexpected exception in handler')
+            msg_type = TMessageType.EXCEPTION
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+        oprot.writeMessageBegin("get_books_replace_info", msg_type, seqid)
+        result.write(oprot)
+        oprot.writeMessageEnd()
+        oprot.trans.flush()
+
+    def process_get_main_page_js(self, seqid, iprot, oprot):
+        args = get_main_page_js_args()
+        args.read(iprot)
+        iprot.readMessageEnd()
+        result = get_main_page_js_result()
+        try:
+            result.success = self._handler.get_main_page_js()
+            msg_type = TMessageType.REPLY
+        except TTransport.TTransportException:
+            raise
+        except LogicException as bomb:
+            msg_type = TMessageType.REPLY
+            result.bomb = bomb
+        except SystemException as boom:
+            msg_type = TMessageType.REPLY
+            result.boom = boom
+        except TApplicationException as ex:
+            logging.exception('TApplication exception in handler')
+            msg_type = TMessageType.EXCEPTION
+            result = ex
+        except Exception:
+            logging.exception('Unexpected exception in handler')
+            msg_type = TMessageType.EXCEPTION
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+        oprot.writeMessageBegin("get_main_page_js", msg_type, seqid)
+        result.write(oprot)
+        oprot.writeMessageEnd()
+        oprot.trans.flush()
+
+    def process_user_daka_v2(self, seqid, iprot, oprot):
+        args = user_daka_v2_args()
+        args.read(iprot)
+        iprot.readMessageEnd()
+        result = user_daka_v2_result()
+        try:
+            result.success = self._handler.user_daka_v2(args.args_)
+            msg_type = TMessageType.REPLY
+        except TTransport.TTransportException:
+            raise
+        except LogicException as bomb:
+            msg_type = TMessageType.REPLY
+            result.bomb = bomb
+        except SystemException as boom:
+            msg_type = TMessageType.REPLY
+            result.boom = boom
+        except TApplicationException as ex:
+            logging.exception('TApplication exception in handler')
+            msg_type = TMessageType.EXCEPTION
+            result = ex
+        except Exception:
+            logging.exception('Unexpected exception in handler')
+            msg_type = TMessageType.EXCEPTION
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+        oprot.writeMessageBegin("user_daka_v2", msg_type, seqid)
+        result.write(oprot)
+        oprot.writeMessageEnd()
+        oprot.trans.flush()
+
+    def process_get_train_page_resource(self, seqid, iprot, oprot):
+        args = get_train_page_resource_args()
+        args.read(iprot)
+        iprot.readMessageEnd()
+        result = get_train_page_resource_result()
+        try:
+            result.success = self._handler.get_train_page_resource()
+            msg_type = TMessageType.REPLY
+        except TTransport.TTransportException:
+            raise
+        except LogicException as bomb:
+            msg_type = TMessageType.REPLY
+            result.bomb = bomb
+        except SystemException as boom:
+            msg_type = TMessageType.REPLY
+            result.boom = boom
+        except TApplicationException as ex:
+            logging.exception('TApplication exception in handler')
+            msg_type = TMessageType.EXCEPTION
+            result = ex
+        except Exception:
+            logging.exception('Unexpected exception in handler')
+            msg_type = TMessageType.EXCEPTION
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+        oprot.writeMessageBegin("get_train_page_resource", msg_type, seqid)
         result.write(oprot)
         oprot.writeMessageEnd()
         oprot.trans.flush()
@@ -726,12 +1262,16 @@ class user_basic_info_v2_result(object):
     """
     Attributes:
      - success
+     - bomb
+     - boom
 
     """
 
 
-    def __init__(self, success=None,):
+    def __init__(self, success=None, bomb=None, boom=None,):
         self.success = success
+        self.bomb = bomb
+        self.boom = boom
 
     def read(self, iprot):
         if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
@@ -748,6 +1288,16 @@ class user_basic_info_v2_result(object):
                     self.success.read(iprot)
                 else:
                     iprot.skip(ftype)
+            elif fid == 1:
+                if ftype == TType.STRUCT:
+                    self.bomb = LogicException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.STRUCT:
+                    self.boom = SystemException.read(iprot)
+                else:
+                    iprot.skip(ftype)
             else:
                 iprot.skip(ftype)
             iprot.readFieldEnd()
@@ -761,6 +1311,14 @@ class user_basic_info_v2_result(object):
         if self.success is not None:
             oprot.writeFieldBegin('success', TType.STRUCT, 0)
             self.success.write(oprot)
+            oprot.writeFieldEnd()
+        if self.bomb is not None:
+            oprot.writeFieldBegin('bomb', TType.STRUCT, 1)
+            self.bomb.write(oprot)
+            oprot.writeFieldEnd()
+        if self.boom is not None:
+            oprot.writeFieldBegin('boom', TType.STRUCT, 2)
+            self.boom.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
         oprot.writeStructEnd()
@@ -781,6 +1339,1087 @@ class user_basic_info_v2_result(object):
 all_structs.append(user_basic_info_v2_result)
 user_basic_info_v2_result.thrift_spec = (
     (0, TType.STRUCT, 'success', [UserBasicInfoPlusV2, None], None, ),  # 0
+    (1, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 1
+    (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
+)
+
+
+class get_user_study_config_args(object):
+
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('get_user_study_config_args')
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+all_structs.append(get_user_study_config_args)
+get_user_study_config_args.thrift_spec = (
+)
+
+
+class get_user_study_config_result(object):
+    """
+    Attributes:
+     - success
+     - bomb
+     - boom
+
+    """
+
+
+    def __init__(self, success=None, bomb=None, boom=None,):
+        self.success = success
+        self.bomb = bomb
+        self.boom = boom
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 0:
+                if ftype == TType.STRUCT:
+                    self.success = UserStudyConfig()
+                    self.success.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 1:
+                if ftype == TType.STRUCT:
+                    self.bomb = LogicException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.STRUCT:
+                    self.boom = SystemException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('get_user_study_config_result')
+        if self.success is not None:
+            oprot.writeFieldBegin('success', TType.STRUCT, 0)
+            self.success.write(oprot)
+            oprot.writeFieldEnd()
+        if self.bomb is not None:
+            oprot.writeFieldBegin('bomb', TType.STRUCT, 1)
+            self.bomb.write(oprot)
+            oprot.writeFieldEnd()
+        if self.boom is not None:
+            oprot.writeFieldBegin('boom', TType.STRUCT, 2)
+            self.boom.write(oprot)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+all_structs.append(get_user_study_config_result)
+get_user_study_config_result.thrift_spec = (
+    (0, TType.STRUCT, 'success', [UserStudyConfig, None], None, ),  # 0
+    (1, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 1
+    (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
+)
+
+
+class get_user_study_mode_args(object):
+
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('get_user_study_mode_args')
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+all_structs.append(get_user_study_mode_args)
+get_user_study_mode_args.thrift_spec = (
+)
+
+
+class get_user_study_mode_result(object):
+    """
+    Attributes:
+     - success
+     - bomb
+     - boom
+
+    """
+
+
+    def __init__(self, success=None, bomb=None, boom=None,):
+        self.success = success
+        self.bomb = bomb
+        self.boom = boom
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 0:
+                if ftype == TType.STRUCT:
+                    self.success = UserStudyMode()
+                    self.success.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 1:
+                if ftype == TType.STRUCT:
+                    self.bomb = LogicException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.STRUCT:
+                    self.boom = SystemException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('get_user_study_mode_result')
+        if self.success is not None:
+            oprot.writeFieldBegin('success', TType.STRUCT, 0)
+            self.success.write(oprot)
+            oprot.writeFieldEnd()
+        if self.bomb is not None:
+            oprot.writeFieldBegin('bomb', TType.STRUCT, 1)
+            self.bomb.write(oprot)
+            oprot.writeFieldEnd()
+        if self.boom is not None:
+            oprot.writeFieldBegin('boom', TType.STRUCT, 2)
+            self.boom.write(oprot)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+all_structs.append(get_user_study_mode_result)
+get_user_study_mode_result.thrift_spec = (
+    (0, TType.STRUCT, 'success', [UserStudyMode, None], None, ),  # 0
+    (1, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 1
+    (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
+)
+
+
+class user_limit_info_v2_args(object):
+
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('user_limit_info_v2_args')
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+all_structs.append(user_limit_info_v2_args)
+user_limit_info_v2_args.thrift_spec = (
+)
+
+
+class user_limit_info_v2_result(object):
+    """
+    Attributes:
+     - success
+     - bomb
+     - boom
+
+    """
+
+
+    def __init__(self, success=None, bomb=None, boom=None,):
+        self.success = success
+        self.bomb = bomb
+        self.boom = boom
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 0:
+                if ftype == TType.STRUCT:
+                    self.success = UserLimitInfoV2()
+                    self.success.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 1:
+                if ftype == TType.STRUCT:
+                    self.bomb = LogicException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.STRUCT:
+                    self.boom = SystemException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('user_limit_info_v2_result')
+        if self.success is not None:
+            oprot.writeFieldBegin('success', TType.STRUCT, 0)
+            self.success.write(oprot)
+            oprot.writeFieldEnd()
+        if self.bomb is not None:
+            oprot.writeFieldBegin('bomb', TType.STRUCT, 1)
+            self.bomb.write(oprot)
+            oprot.writeFieldEnd()
+        if self.boom is not None:
+            oprot.writeFieldBegin('boom', TType.STRUCT, 2)
+            self.boom.write(oprot)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+all_structs.append(user_limit_info_v2_result)
+user_limit_info_v2_result.thrift_spec = (
+    (0, TType.STRUCT, 'success', [UserLimitInfoV2, None], None, ),  # 0
+    (1, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 1
+    (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
+)
+
+
+class win_streak_status_args(object):
+    """
+    Attributes:
+     - client_date
+
+    """
+
+
+    def __init__(self, client_date=None,):
+        self.client_date = client_date
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.I32:
+                    self.client_date = iprot.readI32()
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('win_streak_status_args')
+        if self.client_date is not None:
+            oprot.writeFieldBegin('client_date', TType.I32, 1)
+            oprot.writeI32(self.client_date)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+all_structs.append(win_streak_status_args)
+win_streak_status_args.thrift_spec = (
+    None,  # 0
+    (1, TType.I32, 'client_date', None, None, ),  # 1
+)
+
+
+class win_streak_status_result(object):
+    """
+    Attributes:
+     - success
+     - bomb
+     - boom
+
+    """
+
+
+    def __init__(self, success=None, bomb=None, boom=None,):
+        self.success = success
+        self.bomb = bomb
+        self.boom = boom
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 0:
+                if ftype == TType.STRUCT:
+                    self.success = WinStreakStatus()
+                    self.success.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 1:
+                if ftype == TType.STRUCT:
+                    self.bomb = LogicException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.STRUCT:
+                    self.boom = SystemException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('win_streak_status_result')
+        if self.success is not None:
+            oprot.writeFieldBegin('success', TType.STRUCT, 0)
+            self.success.write(oprot)
+            oprot.writeFieldEnd()
+        if self.bomb is not None:
+            oprot.writeFieldBegin('bomb', TType.STRUCT, 1)
+            self.bomb.write(oprot)
+            oprot.writeFieldEnd()
+        if self.boom is not None:
+            oprot.writeFieldBegin('boom', TType.STRUCT, 2)
+            self.boom.write(oprot)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+all_structs.append(win_streak_status_result)
+win_streak_status_result.thrift_spec = (
+    (0, TType.STRUCT, 'success', [WinStreakStatus, None], None, ),  # 0
+    (1, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 1
+    (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
+)
+
+
+class get_books_replace_info_args(object):
+
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('get_books_replace_info_args')
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+all_structs.append(get_books_replace_info_args)
+get_books_replace_info_args.thrift_spec = (
+)
+
+
+class get_books_replace_info_result(object):
+    """
+    Attributes:
+     - success
+     - bomb
+     - boom
+
+    """
+
+
+    def __init__(self, success=None, bomb=None, boom=None,):
+        self.success = success
+        self.bomb = bomb
+        self.boom = boom
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 0:
+                if ftype == TType.LIST:
+                    self.success = []
+                    (_etype324, _size321) = iprot.readListBegin()
+                    for _i325 in range(_size321):
+                        _elem326 = BookReplaceInfo()
+                        _elem326.read(iprot)
+                        self.success.append(_elem326)
+                    iprot.readListEnd()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 1:
+                if ftype == TType.STRUCT:
+                    self.bomb = LogicException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.STRUCT:
+                    self.boom = SystemException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('get_books_replace_info_result')
+        if self.success is not None:
+            oprot.writeFieldBegin('success', TType.LIST, 0)
+            oprot.writeListBegin(TType.STRUCT, len(self.success))
+            for iter327 in self.success:
+                iter327.write(oprot)
+            oprot.writeListEnd()
+            oprot.writeFieldEnd()
+        if self.bomb is not None:
+            oprot.writeFieldBegin('bomb', TType.STRUCT, 1)
+            self.bomb.write(oprot)
+            oprot.writeFieldEnd()
+        if self.boom is not None:
+            oprot.writeFieldBegin('boom', TType.STRUCT, 2)
+            self.boom.write(oprot)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+all_structs.append(get_books_replace_info_result)
+get_books_replace_info_result.thrift_spec = (
+    (0, TType.LIST, 'success', (TType.STRUCT, [BookReplaceInfo, None], False), None, ),  # 0
+    (1, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 1
+    (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
+)
+
+
+class get_main_page_js_args(object):
+
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('get_main_page_js_args')
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+all_structs.append(get_main_page_js_args)
+get_main_page_js_args.thrift_spec = (
+)
+
+
+class get_main_page_js_result(object):
+    """
+    Attributes:
+     - success
+     - bomb
+     - boom
+
+    """
+
+
+    def __init__(self, success=None, bomb=None, boom=None,):
+        self.success = success
+        self.bomb = bomb
+        self.boom = boom
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 0:
+                if ftype == TType.STRUCT:
+                    self.success = MainPageJS()
+                    self.success.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 1:
+                if ftype == TType.STRUCT:
+                    self.bomb = LogicException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.STRUCT:
+                    self.boom = SystemException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('get_main_page_js_result')
+        if self.success is not None:
+            oprot.writeFieldBegin('success', TType.STRUCT, 0)
+            self.success.write(oprot)
+            oprot.writeFieldEnd()
+        if self.bomb is not None:
+            oprot.writeFieldBegin('bomb', TType.STRUCT, 1)
+            self.bomb.write(oprot)
+            oprot.writeFieldEnd()
+        if self.boom is not None:
+            oprot.writeFieldBegin('boom', TType.STRUCT, 2)
+            self.boom.write(oprot)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+all_structs.append(get_main_page_js_result)
+get_main_page_js_result.thrift_spec = (
+    (0, TType.STRUCT, 'success', [MainPageJS, None], None, ),  # 0
+    (1, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 1
+    (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
+)
+
+
+class user_daka_v2_args(object):
+    """
+    Attributes:
+     - args_
+
+    """
+
+
+    def __init__(self, args_=None,):
+        self.args_ = args_
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.STRUCT:
+                    self.args_ = user_daka_v2_args()
+                    self.args_.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('user_daka_v2_args')
+        if self.args_ is not None:
+            oprot.writeFieldBegin('args_', TType.STRUCT, 1)
+            self.args_.write(oprot)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+all_structs.append(user_daka_v2_args)
+user_daka_v2_args.thrift_spec = (
+    None,  # 0
+    (1, TType.STRUCT, 'args_', [user_daka_v2_args, None], None, ),  # 1
+)
+
+
+class user_daka_v2_result(object):
+    """
+    Attributes:
+     - success
+     - bomb
+     - boom
+
+    """
+
+
+    def __init__(self, success=None, bomb=None, boom=None,):
+        self.success = success
+        self.bomb = bomb
+        self.boom = boom
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 0:
+                if ftype == TType.STRUCT:
+                    self.success = UserDakaShareInfo()
+                    self.success.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 1:
+                if ftype == TType.STRUCT:
+                    self.bomb = LogicException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.STRUCT:
+                    self.boom = SystemException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('user_daka_v2_result')
+        if self.success is not None:
+            oprot.writeFieldBegin('success', TType.STRUCT, 0)
+            self.success.write(oprot)
+            oprot.writeFieldEnd()
+        if self.bomb is not None:
+            oprot.writeFieldBegin('bomb', TType.STRUCT, 1)
+            self.bomb.write(oprot)
+            oprot.writeFieldEnd()
+        if self.boom is not None:
+            oprot.writeFieldBegin('boom', TType.STRUCT, 2)
+            self.boom.write(oprot)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+all_structs.append(user_daka_v2_result)
+user_daka_v2_result.thrift_spec = (
+    (0, TType.STRUCT, 'success', [UserDakaShareInfo, None], None, ),  # 0
+    (1, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 1
+    (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
+)
+
+
+class get_train_page_resource_args(object):
+
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('get_train_page_resource_args')
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+all_structs.append(get_train_page_resource_args)
+get_train_page_resource_args.thrift_spec = (
+)
+
+
+class get_train_page_resource_result(object):
+    """
+    Attributes:
+     - success
+     - bomb
+     - boom
+
+    """
+
+
+    def __init__(self, success=None, bomb=None, boom=None,):
+        self.success = success
+        self.bomb = bomb
+        self.boom = boom
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 0:
+                if ftype == TType.STRUCT:
+                    self.success = TrainPageResources()
+                    self.success.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 1:
+                if ftype == TType.STRUCT:
+                    self.bomb = LogicException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.STRUCT:
+                    self.boom = SystemException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('get_train_page_resource_result')
+        if self.success is not None:
+            oprot.writeFieldBegin('success', TType.STRUCT, 0)
+            self.success.write(oprot)
+            oprot.writeFieldEnd()
+        if self.bomb is not None:
+            oprot.writeFieldBegin('bomb', TType.STRUCT, 1)
+            self.bomb.write(oprot)
+            oprot.writeFieldEnd()
+        if self.boom is not None:
+            oprot.writeFieldBegin('boom', TType.STRUCT, 2)
+            self.boom.write(oprot)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+all_structs.append(get_train_page_resource_result)
+get_train_page_resource_result.thrift_spec = (
+    (0, TType.STRUCT, 'success', [TrainPageResources, None], None, ),  # 0
+    (1, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 1
+    (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
 )
 fix_spec(all_structs)
 del all_structs

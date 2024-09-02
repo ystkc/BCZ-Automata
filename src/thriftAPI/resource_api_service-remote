@@ -16,7 +16,7 @@ else:
 from thrift.transport import TTransport, TSocket, TSSLSocket, THttpClient
 from thrift.protocol.TBinaryProtocol import TBinaryProtocol
 
-from thriftAPI import get_live_streaming_info_service
+from thriftAPI import resource_api_service
 from thriftAPI.ttypes import *
 
 if len(sys.argv) <= 1 or sys.argv[1] == '--help':
@@ -24,7 +24,7 @@ if len(sys.argv) <= 1 or sys.argv[1] == '--help':
     print('Usage: ' + sys.argv[0] + ' [-h host[:port]] [-u url] [-f[ramed]] [-s[sl]] [-novalidate] [-ca_certs certs] [-keyfile keyfile] [-certfile certfile] function [arg1 [arg2...]]')
     print('')
     print('Functions:')
-    print('  LiveStreamingInfo get_live_streaming_info()')
+    print('  BookResourceUpdateInfo get_book_resource_update_info(i32 word_level_id)')
     print('')
     sys.exit(0)
 
@@ -101,14 +101,14 @@ else:
     else:
         transport = TTransport.TBufferedTransport(socket)
 protocol = TBinaryProtocol(transport)
-client = get_live_streaming_info_service.Client(protocol)
+client = resource_api_service.Client(protocol)
 transport.open()
 
-if cmd == 'get_live_streaming_info':
-    if len(args) != 0:
-        print('get_live_streaming_info requires 0 args')
+if cmd == 'get_book_resource_update_info':
+    if len(args) != 1:
+        print('get_book_resource_update_info requires 1 args')
         sys.exit(1)
-    pp.pprint(client.get_live_streaming_info())
+    pp.pprint(client.get_book_resource_update_info(eval(args[0]),))
 
 else:
     print('Unrecognized method %s' % cmd)

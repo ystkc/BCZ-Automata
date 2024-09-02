@@ -19,7 +19,12 @@ all_structs = []
 
 
 class Iface(object):
-    def get_live_streaming_info(self):
+    def report_event(self, jsons):
+        """
+        Parameters:
+         - jsons
+
+        """
         pass
 
 
@@ -30,18 +35,24 @@ class Client(Iface):
             self._oprot = oprot
         self._seqid = 0
 
-    def get_live_streaming_info(self):
-        self.send_get_live_streaming_info()
-        return self.recv_get_live_streaming_info()
+    def report_event(self, jsons):
+        """
+        Parameters:
+         - jsons
 
-    def send_get_live_streaming_info(self):
-        self._oprot.writeMessageBegin('get_live_streaming_info', TMessageType.CALL, self._seqid)
-        args = get_live_streaming_info_args()
+        """
+        self.send_report_event(jsons)
+        self.recv_report_event()
+
+    def send_report_event(self, jsons):
+        self._oprot.writeMessageBegin('report_event', TMessageType.CALL, self._seqid)
+        args = report_event_args()
+        args.jsons = jsons
         args.write(self._oprot)
         self._oprot.writeMessageEnd()
         self._oprot.trans.flush()
 
-    def recv_get_live_streaming_info(self):
+    def recv_report_event(self):
         iprot = self._iprot
         (fname, mtype, rseqid) = iprot.readMessageBegin()
         if mtype == TMessageType.EXCEPTION:
@@ -49,23 +60,21 @@ class Client(Iface):
             x.read(iprot)
             iprot.readMessageEnd()
             raise x
-        result = get_live_streaming_info_result()
+        result = report_event_result()
         result.read(iprot)
         iprot.readMessageEnd()
-        if result.success is not None:
-            return result.success
         if result.bomb is not None:
             raise result.bomb
         if result.boom is not None:
             raise result.boom
-        raise TApplicationException(TApplicationException.MISSING_RESULT, "get_live_streaming_info failed: unknown result")
+        return
 
 
 class Processor(Iface, TProcessor):
     def __init__(self, handler):
         self._handler = handler
         self._processMap = {}
-        self._processMap["get_live_streaming_info"] = Processor.process_get_live_streaming_info
+        self._processMap["report_event"] = Processor.process_report_event
         self._on_message_begin = None
 
     def on_message_begin(self, func):
@@ -88,13 +97,13 @@ class Processor(Iface, TProcessor):
             self._processMap[name](self, seqid, iprot, oprot)
         return True
 
-    def process_get_live_streaming_info(self, seqid, iprot, oprot):
-        args = get_live_streaming_info_args()
+    def process_report_event(self, seqid, iprot, oprot):
+        args = report_event_args()
         args.read(iprot)
         iprot.readMessageEnd()
-        result = get_live_streaming_info_result()
+        result = report_event_result()
         try:
-            result.success = self._handler.get_live_streaming_info()
+            self._handler.report_event(args.jsons)
             msg_type = TMessageType.REPLY
         except TTransport.TTransportException:
             raise
@@ -112,7 +121,7 @@ class Processor(Iface, TProcessor):
             logging.exception('Unexpected exception in handler')
             msg_type = TMessageType.EXCEPTION
             result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
-        oprot.writeMessageBegin("get_live_streaming_info", msg_type, seqid)
+        oprot.writeMessageBegin("report_event", msg_type, seqid)
         result.write(oprot)
         oprot.writeMessageEnd()
         oprot.trans.flush()
@@ -120,8 +129,16 @@ class Processor(Iface, TProcessor):
 # HELPER FUNCTIONS AND STRUCTURES
 
 
-class get_live_streaming_info_args(object):
+class report_event_args(object):
+    """
+    Attributes:
+     - jsons
 
+    """
+
+
+    def __init__(self, jsons=None,):
+        self.jsons = jsons
 
     def read(self, iprot):
         if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
@@ -132,6 +149,16 @@ class get_live_streaming_info_args(object):
             (fname, ftype, fid) = iprot.readFieldBegin()
             if ftype == TType.STOP:
                 break
+            if fid == 1:
+                if ftype == TType.LIST:
+                    self.jsons = []
+                    (_etype373, _size370) = iprot.readListBegin()
+                    for _i374 in range(_size370):
+                        _elem375 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        self.jsons.append(_elem375)
+                    iprot.readListEnd()
+                else:
+                    iprot.skip(ftype)
             else:
                 iprot.skip(ftype)
             iprot.readFieldEnd()
@@ -141,7 +168,14 @@ class get_live_streaming_info_args(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('get_live_streaming_info_args')
+        oprot.writeStructBegin('report_event_args')
+        if self.jsons is not None:
+            oprot.writeFieldBegin('jsons', TType.LIST, 1)
+            oprot.writeListBegin(TType.STRING, len(self.jsons))
+            for iter376 in self.jsons:
+                oprot.writeString(iter376.encode('utf-8') if sys.version_info[0] == 2 else iter376)
+            oprot.writeListEnd()
+            oprot.writeFieldEnd()
         oprot.writeFieldStop()
         oprot.writeStructEnd()
 
@@ -158,23 +192,23 @@ class get_live_streaming_info_args(object):
 
     def __ne__(self, other):
         return not (self == other)
-all_structs.append(get_live_streaming_info_args)
-get_live_streaming_info_args.thrift_spec = (
+all_structs.append(report_event_args)
+report_event_args.thrift_spec = (
+    None,  # 0
+    (1, TType.LIST, 'jsons', (TType.STRING, 'UTF8', False), None, ),  # 1
 )
 
 
-class get_live_streaming_info_result(object):
+class report_event_result(object):
     """
     Attributes:
-     - success
      - bomb
      - boom
 
     """
 
 
-    def __init__(self, success=None, bomb=None, boom=None,):
-        self.success = success
+    def __init__(self, bomb=None, boom=None,):
         self.bomb = bomb
         self.boom = boom
 
@@ -187,13 +221,7 @@ class get_live_streaming_info_result(object):
             (fname, ftype, fid) = iprot.readFieldBegin()
             if ftype == TType.STOP:
                 break
-            if fid == 0:
-                if ftype == TType.STRUCT:
-                    self.success = LiveStreamingInfo()
-                    self.success.read(iprot)
-                else:
-                    iprot.skip(ftype)
-            elif fid == 1:
+            if fid == 1:
                 if ftype == TType.STRUCT:
                     self.bomb = LogicException.read(iprot)
                 else:
@@ -212,11 +240,7 @@ class get_live_streaming_info_result(object):
         if oprot._fast_encode is not None and self.thrift_spec is not None:
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
-        oprot.writeStructBegin('get_live_streaming_info_result')
-        if self.success is not None:
-            oprot.writeFieldBegin('success', TType.STRUCT, 0)
-            self.success.write(oprot)
-            oprot.writeFieldEnd()
+        oprot.writeStructBegin('report_event_result')
         if self.bomb is not None:
             oprot.writeFieldBegin('bomb', TType.STRUCT, 1)
             self.bomb.write(oprot)
@@ -241,9 +265,9 @@ class get_live_streaming_info_result(object):
 
     def __ne__(self, other):
         return not (self == other)
-all_structs.append(get_live_streaming_info_result)
-get_live_streaming_info_result.thrift_spec = (
-    (0, TType.STRUCT, 'success', [LiveStreamingInfo, None], None, ),  # 0
+all_structs.append(report_event_result)
+report_event_result.thrift_spec = (
+    None,  # 0
     (1, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 1
     (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
 )

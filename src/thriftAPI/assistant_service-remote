@@ -16,7 +16,7 @@ else:
 from thrift.transport import TTransport, TSocket, TSSLSocket, THttpClient
 from thrift.protocol.TBinaryProtocol import TBinaryProtocol
 
-from thriftAPI import check_infos_service
+from thriftAPI import assistant_service
 from thriftAPI.ttypes import *
 
 if len(sys.argv) <= 1 or sys.argv[1] == '--help':
@@ -24,7 +24,9 @@ if len(sys.argv) <= 1 or sys.argv[1] == '--help':
     print('Usage: ' + sys.argv[0] + ' [-h host[:port]] [-u url] [-f[ramed]] [-s[sl]] [-novalidate] [-ca_certs certs] [-keyfile keyfile] [-certfile certfile] function [arg1 [arg2...]]')
     print('')
     print('Functions:')
-    print('  BczSystemInfos check_infos()')
+    print('  i32 check_feedback_msg(string device_id)')
+    print('  i32 get_activity_updated_time()')
+    print('  UserBetaInfo get_beta_user_types_v2()')
     print('')
     sys.exit(0)
 
@@ -101,14 +103,26 @@ else:
     else:
         transport = TTransport.TBufferedTransport(socket)
 protocol = TBinaryProtocol(transport)
-client = check_infos_service.Client(protocol)
+client = assistant_service.Client(protocol)
 transport.open()
 
-if cmd == 'check_infos':
-    if len(args) != 0:
-        print('check_infos requires 0 args')
+if cmd == 'check_feedback_msg':
+    if len(args) != 1:
+        print('check_feedback_msg requires 1 args')
         sys.exit(1)
-    pp.pprint(client.check_infos())
+    pp.pprint(client.check_feedback_msg(args[0],))
+
+elif cmd == 'get_activity_updated_time':
+    if len(args) != 0:
+        print('get_activity_updated_time requires 0 args')
+        sys.exit(1)
+    pp.pprint(client.get_activity_updated_time())
+
+elif cmd == 'get_beta_user_types_v2':
+    if len(args) != 0:
+        print('get_beta_user_types_v2 requires 0 args')
+        sys.exit(1)
+    pp.pprint(client.get_beta_user_types_v2())
 
 else:
     print('Unrecognized method %s' % cmd)

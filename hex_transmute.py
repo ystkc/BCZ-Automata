@@ -7,12 +7,12 @@ while line != '':
 
 
 
-result = {"url":"","method":"","Headers":{}}
+result = {"path":"","method":"","Headers":{}}
 
 # parse url
 url_start = res_string.find(' ')
 url_end = res_string.find(' ',url_start+1)
-result["url"] = res_string[url_start+1:url_end]
+result["path"] = res_string[url_start+1:url_end]
 
 # parse method
 method_start = 0

@@ -26,6 +26,8 @@ if len(sys.argv) <= 1 or sys.argv[1] == '--help':
     print('Functions:')
     print('  void send_sms_verify_code(send_sms_verify_code_args args_)')
     print('  UserLoginResult login_with_phone(login_with_phone_args args_)')
+    print('   get_bind_info()')
+    print('  AccessTokenCheckResult check_access_token(string device)')
     print('')
     sys.exit(0)
 
@@ -116,6 +118,18 @@ elif cmd == 'login_with_phone':
         print('login_with_phone requires 1 args')
         sys.exit(1)
     pp.pprint(client.login_with_phone(eval(args[0]),))
+
+elif cmd == 'get_bind_info':
+    if len(args) != 0:
+        print('get_bind_info requires 0 args')
+        sys.exit(1)
+    pp.pprint(client.get_bind_info())
+
+elif cmd == 'check_access_token':
+    if len(args) != 1:
+        print('check_access_token requires 1 args')
+        sys.exit(1)
+    pp.pprint(client.check_access_token(args[0],))
 
 else:
     print('Unrecognized method %s' % cmd)

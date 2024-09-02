@@ -16,7 +16,7 @@ else:
 from thrift.transport import TTransport, TSocket, TSSLSocket, THttpClient
 from thrift.protocol.TBinaryProtocol import TBinaryProtocol
 
-from thriftAPI import get_practice_popup_adv_service
+from thriftAPI import notify_service
 from thriftAPI.ttypes import *
 
 if len(sys.argv) <= 1 or sys.argv[1] == '--help':
@@ -24,7 +24,8 @@ if len(sys.argv) <= 1 or sys.argv[1] == '--help':
     print('Usage: ' + sys.argv[0] + ' [-h host[:port]] [-u url] [-f[ramed]] [-s[sl]] [-novalidate] [-ca_certs certs] [-keyfile keyfile] [-certfile certfile] function [arg1 [arg2...]]')
     print('')
     print('Functions:')
-    print('  PracticePopupAdv get_practice_popup_adv()')
+    print('  UserRemindInfo get_remind_info()')
+    print('  NotifyResult get_latest_notify()')
     print('')
     sys.exit(0)
 
@@ -101,14 +102,20 @@ else:
     else:
         transport = TTransport.TBufferedTransport(socket)
 protocol = TBinaryProtocol(transport)
-client = get_practice_popup_adv_service.Client(protocol)
+client = notify_service.Client(protocol)
 transport.open()
 
-if cmd == 'get_practice_popup_adv':
+if cmd == 'get_remind_info':
     if len(args) != 0:
-        print('get_practice_popup_adv requires 0 args')
+        print('get_remind_info requires 0 args')
         sys.exit(1)
-    pp.pprint(client.get_practice_popup_adv())
+    pp.pprint(client.get_remind_info())
+
+elif cmd == 'get_latest_notify':
+    if len(args) != 0:
+        print('get_latest_notify requires 0 args')
+        sys.exit(1)
+    pp.pprint(client.get_latest_notify())
 
 else:
     print('Unrecognized method %s' % cmd)
