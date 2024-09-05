@@ -788,11 +788,11 @@ class get_startup_ad_result(object):
             if fid == 0:
                 if ftype == TType.LIST:
                     self.success = []
-                    (_etype345, _size342) = iprot.readListBegin()
-                    for _i346 in range(_size342):
-                        _elem347 = StartupAd()
-                        _elem347.read(iprot)
-                        self.success.append(_elem347)
+                    (_etype436, _size433) = iprot.readListBegin()
+                    for _i437 in range(_size433):
+                        _elem438 = StartupAd()
+                        _elem438.read(iprot)
+                        self.success.append(_elem438)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -819,8 +819,8 @@ class get_startup_ad_result(object):
         if self.success is not None:
             oprot.writeFieldBegin('success', TType.LIST, 0)
             oprot.writeListBegin(TType.STRUCT, len(self.success))
-            for iter348 in self.success:
-                iter348.write(oprot)
+            for iter439 in self.success:
+                iter439.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.bomb is not None:
@@ -1312,11 +1312,11 @@ class get_loading_ad_items_result(object):
             if fid == 0:
                 if ftype == TType.LIST:
                     self.success = []
-                    (_etype352, _size349) = iprot.readListBegin()
-                    for _i353 in range(_size349):
-                        _elem354 = AdvertiseLoadingItem()
-                        _elem354.read(iprot)
-                        self.success.append(_elem354)
+                    (_etype443, _size440) = iprot.readListBegin()
+                    for _i444 in range(_size440):
+                        _elem445 = AdvertiseLoadingItem()
+                        _elem445.read(iprot)
+                        self.success.append(_elem445)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -1343,8 +1343,8 @@ class get_loading_ad_items_result(object):
         if self.success is not None:
             oprot.writeFieldBegin('success', TType.LIST, 0)
             oprot.writeListBegin(TType.STRUCT, len(self.success))
-            for iter355 in self.success:
-                iter355.write(oprot)
+            for iter446 in self.success:
+                iter446.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.bomb is not None:
@@ -1449,11 +1449,11 @@ class get_loading_ad_info_result(object):
             if fid == 0:
                 if ftype == TType.LIST:
                     self.success = []
-                    (_etype359, _size356) = iprot.readListBegin()
-                    for _i360 in range(_size356):
-                        _elem361 = AdvertiseLoadingInfo()
-                        _elem361.read(iprot)
-                        self.success.append(_elem361)
+                    (_etype450, _size447) = iprot.readListBegin()
+                    for _i451 in range(_size447):
+                        _elem452 = AdvertiseLoadingInfo()
+                        _elem452.read(iprot)
+                        self.success.append(_elem452)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -1480,8 +1480,8 @@ class get_loading_ad_info_result(object):
         if self.success is not None:
             oprot.writeFieldBegin('success', TType.LIST, 0)
             oprot.writeListBegin(TType.STRUCT, len(self.success))
-            for iter362 in self.success:
-                iter362.write(oprot)
+            for iter453 in self.success:
+                iter453.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.bomb is not None:
@@ -1844,11 +1844,11 @@ class get_main_view_top_banner_advs_result(object):
             if fid == 0:
                 if ftype == TType.LIST:
                     self.success = []
-                    (_etype366, _size363) = iprot.readListBegin()
-                    for _i367 in range(_size363):
-                        _elem368 = MainViewTopBannerAdv()
-                        _elem368.read(iprot)
-                        self.success.append(_elem368)
+                    (_etype457, _size454) = iprot.readListBegin()
+                    for _i458 in range(_size454):
+                        _elem459 = MainViewTopBannerAdv()
+                        _elem459.read(iprot)
+                        self.success.append(_elem459)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -1875,8 +1875,8 @@ class get_main_view_top_banner_advs_result(object):
         if self.success is not None:
             oprot.writeFieldBegin('success', TType.LIST, 0)
             oprot.writeListBegin(TType.STRUCT, len(self.success))
-            for iter369 in self.success:
-                iter369.write(oprot)
+            for iter460 in self.success:
+                iter460.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.bomb is not None:

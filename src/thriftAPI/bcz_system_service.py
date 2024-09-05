@@ -774,11 +774,11 @@ class get_static_config_result(object):
             if fid == 0:
                 if ftype == TType.LIST:
                     self.success = []
-                    (_etype331, _size328) = iprot.readListBegin()
-                    for _i332 in range(_size328):
-                        _elem333 = StaticConfig()
-                        _elem333.read(iprot)
-                        self.success.append(_elem333)
+                    (_etype422, _size419) = iprot.readListBegin()
+                    for _i423 in range(_size419):
+                        _elem424 = StaticConfig()
+                        _elem424.read(iprot)
+                        self.success.append(_elem424)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -805,8 +805,8 @@ class get_static_config_result(object):
         if self.success is not None:
             oprot.writeFieldBegin('success', TType.LIST, 0)
             oprot.writeListBegin(TType.STRUCT, len(self.success))
-            for iter334 in self.success:
-                iter334.write(oprot)
+            for iter425 in self.success:
+                iter425.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.bomb is not None:
@@ -911,10 +911,10 @@ class get_domain_whitelist_result(object):
             if fid == 0:
                 if ftype == TType.LIST:
                     self.success = []
-                    (_etype338, _size335) = iprot.readListBegin()
-                    for _i339 in range(_size335):
-                        _elem340 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
-                        self.success.append(_elem340)
+                    (_etype429, _size426) = iprot.readListBegin()
+                    for _i430 in range(_size426):
+                        _elem431 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        self.success.append(_elem431)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -941,8 +941,8 @@ class get_domain_whitelist_result(object):
         if self.success is not None:
             oprot.writeFieldBegin('success', TType.LIST, 0)
             oprot.writeListBegin(TType.STRING, len(self.success))
-            for iter341 in self.success:
-                oprot.writeString(iter341.encode('utf-8') if sys.version_info[0] == 2 else iter341)
+            for iter432 in self.success:
+                oprot.writeString(iter432.encode('utf-8') if sys.version_info[0] == 2 else iter432)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.bomb is not None:

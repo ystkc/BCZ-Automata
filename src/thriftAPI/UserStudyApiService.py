@@ -27,15 +27,45 @@ class Iface(object):
         """
         pass
 
-    def update_done_data(self, args_):
+    def update_done_data(self, last_sync_at, arr_done_records, current_word_level_id, is_today_completed):
         """
         Parameters:
-         - args_
+         - last_sync_at
+         - arr_done_records
+         - current_word_level_id
+         - is_today_completed
 
         """
         pass
 
     def get_all_books_basic_info_v3(self):
+        pass
+
+    def submit_experience_record(self, records):
+        """
+        Parameters:
+         - records
+
+        """
+        pass
+
+    def get_daka_background_datas(self, topic_ids):
+        """
+        Parameters:
+         - topic_ids
+
+        """
+        pass
+
+    def share_bonus(self, client_timestamp_ms):
+        """
+        Parameters:
+         - client_timestamp_ms
+
+        """
+        pass
+
+    def credit_task_center(self):
         pass
 
     def user_basic_info_v2(self):
@@ -54,6 +84,15 @@ class Iface(object):
         """
         Parameters:
          - client_date
+
+        """
+        pass
+
+    def submit_win_streak_records(self, client_date, win_streak_dates):
+        """
+        Parameters:
+         - client_date
+         - win_streak_dates
 
         """
         pass
@@ -115,19 +154,25 @@ class Client(Iface):
             return result.success
         raise TApplicationException(TApplicationException.MISSING_RESULT, "select_book failed: unknown result")
 
-    def update_done_data(self, args_):
+    def update_done_data(self, last_sync_at, arr_done_records, current_word_level_id, is_today_completed):
         """
         Parameters:
-         - args_
+         - last_sync_at
+         - arr_done_records
+         - current_word_level_id
+         - is_today_completed
 
         """
-        self.send_update_done_data(args_)
+        self.send_update_done_data(last_sync_at, arr_done_records, current_word_level_id, is_today_completed)
         return self.recv_update_done_data()
 
-    def send_update_done_data(self, args_):
+    def send_update_done_data(self, last_sync_at, arr_done_records, current_word_level_id, is_today_completed):
         self._oprot.writeMessageBegin('update_done_data', TMessageType.CALL, self._seqid)
         args = update_done_data_args()
-        args.args_ = args_
+        args.last_sync_at = last_sync_at
+        args.arr_done_records = arr_done_records
+        args.current_word_level_id = current_word_level_id
+        args.is_today_completed = is_today_completed
         args.write(self._oprot)
         self._oprot.writeMessageEnd()
         self._oprot.trans.flush()
@@ -145,6 +190,10 @@ class Client(Iface):
         iprot.readMessageEnd()
         if result.success is not None:
             return result.success
+        if result.bomb is not None:
+            raise result.bomb
+        if result.boom is not None:
+            raise result.boom
         raise TApplicationException(TApplicationException.MISSING_RESULT, "update_done_data failed: unknown result")
 
     def get_all_books_basic_info_v3(self):
@@ -176,6 +225,142 @@ class Client(Iface):
         if result.boom is not None:
             raise result.boom
         raise TApplicationException(TApplicationException.MISSING_RESULT, "get_all_books_basic_info_v3 failed: unknown result")
+
+    def submit_experience_record(self, records):
+        """
+        Parameters:
+         - records
+
+        """
+        self.send_submit_experience_record(records)
+        self.recv_submit_experience_record()
+
+    def send_submit_experience_record(self, records):
+        self._oprot.writeMessageBegin('submit_experience_record', TMessageType.CALL, self._seqid)
+        args = submit_experience_record_args()
+        args.records = records
+        args.write(self._oprot)
+        self._oprot.writeMessageEnd()
+        self._oprot.trans.flush()
+
+    def recv_submit_experience_record(self):
+        iprot = self._iprot
+        (fname, mtype, rseqid) = iprot.readMessageBegin()
+        if mtype == TMessageType.EXCEPTION:
+            x = TApplicationException()
+            x.read(iprot)
+            iprot.readMessageEnd()
+            raise x
+        result = submit_experience_record_result()
+        result.read(iprot)
+        iprot.readMessageEnd()
+        if result.bomb is not None:
+            raise result.bomb
+        if result.boom is not None:
+            raise result.boom
+        return
+
+    def get_daka_background_datas(self, topic_ids):
+        """
+        Parameters:
+         - topic_ids
+
+        """
+        self.send_get_daka_background_datas(topic_ids)
+        return self.recv_get_daka_background_datas()
+
+    def send_get_daka_background_datas(self, topic_ids):
+        self._oprot.writeMessageBegin('get_daka_background_datas', TMessageType.CALL, self._seqid)
+        args = get_daka_background_datas_args()
+        args.topic_ids = topic_ids
+        args.write(self._oprot)
+        self._oprot.writeMessageEnd()
+        self._oprot.trans.flush()
+
+    def recv_get_daka_background_datas(self):
+        iprot = self._iprot
+        (fname, mtype, rseqid) = iprot.readMessageBegin()
+        if mtype == TMessageType.EXCEPTION:
+            x = TApplicationException()
+            x.read(iprot)
+            iprot.readMessageEnd()
+            raise x
+        result = get_daka_background_datas_result()
+        result.read(iprot)
+        iprot.readMessageEnd()
+        if result.success is not None:
+            return result.success
+        if result.bomb is not None:
+            raise result.bomb
+        if result.boom is not None:
+            raise result.boom
+        raise TApplicationException(TApplicationException.MISSING_RESULT, "get_daka_background_datas failed: unknown result")
+
+    def share_bonus(self, client_timestamp_ms):
+        """
+        Parameters:
+         - client_timestamp_ms
+
+        """
+        self.send_share_bonus(client_timestamp_ms)
+        return self.recv_share_bonus()
+
+    def send_share_bonus(self, client_timestamp_ms):
+        self._oprot.writeMessageBegin('share_bonus', TMessageType.CALL, self._seqid)
+        args = share_bonus_args()
+        args.client_timestamp_ms = client_timestamp_ms
+        args.write(self._oprot)
+        self._oprot.writeMessageEnd()
+        self._oprot.trans.flush()
+
+    def recv_share_bonus(self):
+        iprot = self._iprot
+        (fname, mtype, rseqid) = iprot.readMessageBegin()
+        if mtype == TMessageType.EXCEPTION:
+            x = TApplicationException()
+            x.read(iprot)
+            iprot.readMessageEnd()
+            raise x
+        result = share_bonus_result()
+        result.read(iprot)
+        iprot.readMessageEnd()
+        if result.success is not None:
+            return result.success
+        if result.bomb is not None:
+            raise result.bomb
+        if result.boom is not None:
+            raise result.boom
+        raise TApplicationException(TApplicationException.MISSING_RESULT, "share_bonus failed: unknown result")
+
+    def credit_task_center(self):
+        self.send_credit_task_center()
+        return self.recv_credit_task_center()
+
+    def send_credit_task_center(self):
+        self._oprot.writeMessageBegin('credit_task_center', TMessageType.CALL, self._seqid)
+        args = credit_task_center_args()
+        args.write(self._oprot)
+        self._oprot.writeMessageEnd()
+        self._oprot.trans.flush()
+
+    def recv_credit_task_center(self):
+        iprot = self._iprot
+        (fname, mtype, rseqid) = iprot.readMessageBegin()
+        if mtype == TMessageType.EXCEPTION:
+            x = TApplicationException()
+            x.read(iprot)
+            iprot.readMessageEnd()
+            raise x
+        result = credit_task_center_result()
+        result.read(iprot)
+        iprot.readMessageEnd()
+        if result.success is not None:
+            return result.success
+        if result.bomb is not None:
+            raise result.bomb
+        if result.boom is not None:
+            raise result.boom
+        raise TApplicationException(TApplicationException.MISSING_RESULT, "credit_task_center failed: unknown result")
 
     def user_basic_info_v2(self):
         self.send_user_basic_info_v2()
@@ -333,6 +518,42 @@ class Client(Iface):
             raise result.boom
         raise TApplicationException(TApplicationException.MISSING_RESULT, "win_streak_status failed: unknown result")
 
+    def submit_win_streak_records(self, client_date, win_streak_dates):
+        """
+        Parameters:
+         - client_date
+         - win_streak_dates
+
+        """
+        self.send_submit_win_streak_records(client_date, win_streak_dates)
+        self.recv_submit_win_streak_records()
+
+    def send_submit_win_streak_records(self, client_date, win_streak_dates):
+        self._oprot.writeMessageBegin('submit_win_streak_records', TMessageType.CALL, self._seqid)
+        args = submit_win_streak_records_args()
+        args.client_date = client_date
+        args.win_streak_dates = win_streak_dates
+        args.write(self._oprot)
+        self._oprot.writeMessageEnd()
+        self._oprot.trans.flush()
+
+    def recv_submit_win_streak_records(self):
+        iprot = self._iprot
+        (fname, mtype, rseqid) = iprot.readMessageBegin()
+        if mtype == TMessageType.EXCEPTION:
+            x = TApplicationException()
+            x.read(iprot)
+            iprot.readMessageEnd()
+            raise x
+        result = submit_win_streak_records_result()
+        result.read(iprot)
+        iprot.readMessageEnd()
+        if result.bomb is not None:
+            raise result.bomb
+        if result.boom is not None:
+            raise result.boom
+        return
+
     def get_books_replace_info(self):
         self.send_get_books_replace_info()
         return self.recv_get_books_replace_info()
@@ -467,11 +688,16 @@ class Processor(Iface, TProcessor):
         self._processMap["select_book"] = Processor.process_select_book
         self._processMap["update_done_data"] = Processor.process_update_done_data
         self._processMap["get_all_books_basic_info_v3"] = Processor.process_get_all_books_basic_info_v3
+        self._processMap["submit_experience_record"] = Processor.process_submit_experience_record
+        self._processMap["get_daka_background_datas"] = Processor.process_get_daka_background_datas
+        self._processMap["share_bonus"] = Processor.process_share_bonus
+        self._processMap["credit_task_center"] = Processor.process_credit_task_center
         self._processMap["user_basic_info_v2"] = Processor.process_user_basic_info_v2
         self._processMap["get_user_study_config"] = Processor.process_get_user_study_config
         self._processMap["get_user_study_mode"] = Processor.process_get_user_study_mode
         self._processMap["user_limit_info_v2"] = Processor.process_user_limit_info_v2
         self._processMap["win_streak_status"] = Processor.process_win_streak_status
+        self._processMap["submit_win_streak_records"] = Processor.process_submit_win_streak_records
         self._processMap["get_books_replace_info"] = Processor.process_get_books_replace_info
         self._processMap["get_main_page_js"] = Processor.process_get_main_page_js
         self._processMap["user_daka_v2"] = Processor.process_user_daka_v2
@@ -527,10 +753,16 @@ class Processor(Iface, TProcessor):
         iprot.readMessageEnd()
         result = update_done_data_result()
         try:
-            result.success = self._handler.update_done_data(args.args_)
+            result.success = self._handler.update_done_data(args.last_sync_at, args.arr_done_records, args.current_word_level_id, args.is_today_completed)
             msg_type = TMessageType.REPLY
         except TTransport.TTransportException:
             raise
+        except LogicException as bomb:
+            msg_type = TMessageType.REPLY
+            result.bomb = bomb
+        except SystemException as boom:
+            msg_type = TMessageType.REPLY
+            result.boom = boom
         except TApplicationException as ex:
             logging.exception('TApplication exception in handler')
             msg_type = TMessageType.EXCEPTION
@@ -569,6 +801,122 @@ class Processor(Iface, TProcessor):
             msg_type = TMessageType.EXCEPTION
             result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
         oprot.writeMessageBegin("get_all_books_basic_info_v3", msg_type, seqid)
+        result.write(oprot)
+        oprot.writeMessageEnd()
+        oprot.trans.flush()
+
+    def process_submit_experience_record(self, seqid, iprot, oprot):
+        args = submit_experience_record_args()
+        args.read(iprot)
+        iprot.readMessageEnd()
+        result = submit_experience_record_result()
+        try:
+            self._handler.submit_experience_record(args.records)
+            msg_type = TMessageType.REPLY
+        except TTransport.TTransportException:
+            raise
+        except LogicException as bomb:
+            msg_type = TMessageType.REPLY
+            result.bomb = bomb
+        except SystemException as boom:
+            msg_type = TMessageType.REPLY
+            result.boom = boom
+        except TApplicationException as ex:
+            logging.exception('TApplication exception in handler')
+            msg_type = TMessageType.EXCEPTION
+            result = ex
+        except Exception:
+            logging.exception('Unexpected exception in handler')
+            msg_type = TMessageType.EXCEPTION
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+        oprot.writeMessageBegin("submit_experience_record", msg_type, seqid)
+        result.write(oprot)
+        oprot.writeMessageEnd()
+        oprot.trans.flush()
+
+    def process_get_daka_background_datas(self, seqid, iprot, oprot):
+        args = get_daka_background_datas_args()
+        args.read(iprot)
+        iprot.readMessageEnd()
+        result = get_daka_background_datas_result()
+        try:
+            result.success = self._handler.get_daka_background_datas(args.topic_ids)
+            msg_type = TMessageType.REPLY
+        except TTransport.TTransportException:
+            raise
+        except LogicException as bomb:
+            msg_type = TMessageType.REPLY
+            result.bomb = bomb
+        except SystemException as boom:
+            msg_type = TMessageType.REPLY
+            result.boom = boom
+        except TApplicationException as ex:
+            logging.exception('TApplication exception in handler')
+            msg_type = TMessageType.EXCEPTION
+            result = ex
+        except Exception:
+            logging.exception('Unexpected exception in handler')
+            msg_type = TMessageType.EXCEPTION
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+        oprot.writeMessageBegin("get_daka_background_datas", msg_type, seqid)
+        result.write(oprot)
+        oprot.writeMessageEnd()
+        oprot.trans.flush()
+
+    def process_share_bonus(self, seqid, iprot, oprot):
+        args = share_bonus_args()
+        args.read(iprot)
+        iprot.readMessageEnd()
+        result = share_bonus_result()
+        try:
+            result.success = self._handler.share_bonus(args.client_timestamp_ms)
+            msg_type = TMessageType.REPLY
+        except TTransport.TTransportException:
+            raise
+        except LogicException as bomb:
+            msg_type = TMessageType.REPLY
+            result.bomb = bomb
+        except SystemException as boom:
+            msg_type = TMessageType.REPLY
+            result.boom = boom
+        except TApplicationException as ex:
+            logging.exception('TApplication exception in handler')
+            msg_type = TMessageType.EXCEPTION
+            result = ex
+        except Exception:
+            logging.exception('Unexpected exception in handler')
+            msg_type = TMessageType.EXCEPTION
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+        oprot.writeMessageBegin("share_bonus", msg_type, seqid)
+        result.write(oprot)
+        oprot.writeMessageEnd()
+        oprot.trans.flush()
+
+    def process_credit_task_center(self, seqid, iprot, oprot):
+        args = credit_task_center_args()
+        args.read(iprot)
+        iprot.readMessageEnd()
+        result = credit_task_center_result()
+        try:
+            result.success = self._handler.credit_task_center()
+            msg_type = TMessageType.REPLY
+        except TTransport.TTransportException:
+            raise
+        except LogicException as bomb:
+            msg_type = TMessageType.REPLY
+            result.bomb = bomb
+        except SystemException as boom:
+            msg_type = TMessageType.REPLY
+            result.boom = boom
+        except TApplicationException as ex:
+            logging.exception('TApplication exception in handler')
+            msg_type = TMessageType.EXCEPTION
+            result = ex
+        except Exception:
+            logging.exception('Unexpected exception in handler')
+            msg_type = TMessageType.EXCEPTION
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+        oprot.writeMessageBegin("credit_task_center", msg_type, seqid)
         result.write(oprot)
         oprot.writeMessageEnd()
         oprot.trans.flush()
@@ -714,6 +1062,35 @@ class Processor(Iface, TProcessor):
             msg_type = TMessageType.EXCEPTION
             result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
         oprot.writeMessageBegin("win_streak_status", msg_type, seqid)
+        result.write(oprot)
+        oprot.writeMessageEnd()
+        oprot.trans.flush()
+
+    def process_submit_win_streak_records(self, seqid, iprot, oprot):
+        args = submit_win_streak_records_args()
+        args.read(iprot)
+        iprot.readMessageEnd()
+        result = submit_win_streak_records_result()
+        try:
+            self._handler.submit_win_streak_records(args.client_date, args.win_streak_dates)
+            msg_type = TMessageType.REPLY
+        except TTransport.TTransportException:
+            raise
+        except LogicException as bomb:
+            msg_type = TMessageType.REPLY
+            result.bomb = bomb
+        except SystemException as boom:
+            msg_type = TMessageType.REPLY
+            result.boom = boom
+        except TApplicationException as ex:
+            logging.exception('TApplication exception in handler')
+            msg_type = TMessageType.EXCEPTION
+            result = ex
+        except Exception:
+            logging.exception('Unexpected exception in handler')
+            msg_type = TMessageType.EXCEPTION
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+        oprot.writeMessageBegin("submit_win_streak_records", msg_type, seqid)
         result.write(oprot)
         oprot.writeMessageEnd()
         oprot.trans.flush()
@@ -965,13 +1342,19 @@ select_book_result.thrift_spec = (
 class update_done_data_args(object):
     """
     Attributes:
-     - args_
+     - last_sync_at
+     - arr_done_records
+     - current_word_level_id
+     - is_today_completed
 
     """
 
 
-    def __init__(self, args_=None,):
-        self.args_ = args_
+    def __init__(self, last_sync_at=None, arr_done_records=None, current_word_level_id=None, is_today_completed=None,):
+        self.last_sync_at = last_sync_at
+        self.arr_done_records = arr_done_records
+        self.current_word_level_id = current_word_level_id
+        self.is_today_completed = is_today_completed
 
     def read(self, iprot):
         if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
@@ -983,9 +1366,29 @@ class update_done_data_args(object):
             if ftype == TType.STOP:
                 break
             if fid == 1:
-                if ftype == TType.STRUCT:
-                    self.args_ = update_done_data_args()
-                    self.args_.read(iprot)
+                if ftype == TType.I64:
+                    self.last_sync_at = iprot.readI64()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.LIST:
+                    self.arr_done_records = []
+                    (_etype387, _size384) = iprot.readListBegin()
+                    for _i388 in range(_size384):
+                        _elem389 = UserDoneWordRecord()
+                        _elem389.read(iprot)
+                        self.arr_done_records.append(_elem389)
+                    iprot.readListEnd()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 3:
+                if ftype == TType.I32:
+                    self.current_word_level_id = iprot.readI32()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 4:
+                if ftype == TType.BOOL:
+                    self.is_today_completed = iprot.readBool()
                 else:
                     iprot.skip(ftype)
             else:
@@ -998,9 +1401,24 @@ class update_done_data_args(object):
             oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
             return
         oprot.writeStructBegin('update_done_data_args')
-        if self.args_ is not None:
-            oprot.writeFieldBegin('args_', TType.STRUCT, 1)
-            self.args_.write(oprot)
+        if self.last_sync_at is not None:
+            oprot.writeFieldBegin('last_sync_at', TType.I64, 1)
+            oprot.writeI64(self.last_sync_at)
+            oprot.writeFieldEnd()
+        if self.arr_done_records is not None:
+            oprot.writeFieldBegin('arr_done_records', TType.LIST, 2)
+            oprot.writeListBegin(TType.STRUCT, len(self.arr_done_records))
+            for iter390 in self.arr_done_records:
+                iter390.write(oprot)
+            oprot.writeListEnd()
+            oprot.writeFieldEnd()
+        if self.current_word_level_id is not None:
+            oprot.writeFieldBegin('current_word_level_id', TType.I32, 3)
+            oprot.writeI32(self.current_word_level_id)
+            oprot.writeFieldEnd()
+        if self.is_today_completed is not None:
+            oprot.writeFieldBegin('is_today_completed', TType.BOOL, 4)
+            oprot.writeBool(self.is_today_completed)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
         oprot.writeStructEnd()
@@ -1021,7 +1439,10 @@ class update_done_data_args(object):
 all_structs.append(update_done_data_args)
 update_done_data_args.thrift_spec = (
     None,  # 0
-    (1, TType.STRUCT, 'args_', [update_done_data_args, None], None, ),  # 1
+    (1, TType.I64, 'last_sync_at', None, None, ),  # 1
+    (2, TType.LIST, 'arr_done_records', (TType.STRUCT, [UserDoneWordRecord, None], False), None, ),  # 2
+    (3, TType.I32, 'current_word_level_id', None, None, ),  # 3
+    (4, TType.BOOL, 'is_today_completed', None, None, ),  # 4
 )
 
 
@@ -1029,12 +1450,16 @@ class update_done_data_result(object):
     """
     Attributes:
      - success
+     - bomb
+     - boom
 
     """
 
 
-    def __init__(self, success=None,):
+    def __init__(self, success=None, bomb=None, boom=None,):
         self.success = success
+        self.bomb = bomb
+        self.boom = boom
 
     def read(self, iprot):
         if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
@@ -1050,6 +1475,16 @@ class update_done_data_result(object):
                     self.success = iprot.readI32()
                 else:
                     iprot.skip(ftype)
+            elif fid == 1:
+                if ftype == TType.STRUCT:
+                    self.bomb = LogicException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.STRUCT:
+                    self.boom = SystemException.read(iprot)
+                else:
+                    iprot.skip(ftype)
             else:
                 iprot.skip(ftype)
             iprot.readFieldEnd()
@@ -1063,6 +1498,14 @@ class update_done_data_result(object):
         if self.success is not None:
             oprot.writeFieldBegin('success', TType.I32, 0)
             oprot.writeI32(self.success)
+            oprot.writeFieldEnd()
+        if self.bomb is not None:
+            oprot.writeFieldBegin('bomb', TType.STRUCT, 1)
+            self.bomb.write(oprot)
+            oprot.writeFieldEnd()
+        if self.boom is not None:
+            oprot.writeFieldBegin('boom', TType.STRUCT, 2)
+            self.boom.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
         oprot.writeStructEnd()
@@ -1083,6 +1526,8 @@ class update_done_data_result(object):
 all_structs.append(update_done_data_result)
 update_done_data_result.thrift_spec = (
     (0, TType.I32, 'success', None, None, ),  # 0
+    (1, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 1
+    (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
 )
 
 
@@ -1210,6 +1655,584 @@ class get_all_books_basic_info_v3_result(object):
 all_structs.append(get_all_books_basic_info_v3_result)
 get_all_books_basic_info_v3_result.thrift_spec = (
     (0, TType.STRUCT, 'success', [UserBookListInfo, None], None, ),  # 0
+    (1, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 1
+    (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
+)
+
+
+class submit_experience_record_args(object):
+    """
+    Attributes:
+     - records
+
+    """
+
+
+    def __init__(self, records=None,):
+        self.records = records
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.LIST:
+                    self.records = []
+                    (_etype394, _size391) = iprot.readListBegin()
+                    for _i395 in range(_size391):
+                        _elem396 = StudyExperienceRecord()
+                        _elem396.read(iprot)
+                        self.records.append(_elem396)
+                    iprot.readListEnd()
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('submit_experience_record_args')
+        if self.records is not None:
+            oprot.writeFieldBegin('records', TType.LIST, 1)
+            oprot.writeListBegin(TType.STRUCT, len(self.records))
+            for iter397 in self.records:
+                iter397.write(oprot)
+            oprot.writeListEnd()
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+all_structs.append(submit_experience_record_args)
+submit_experience_record_args.thrift_spec = (
+    None,  # 0
+    (1, TType.LIST, 'records', (TType.STRUCT, [StudyExperienceRecord, None], False), None, ),  # 1
+)
+
+
+class submit_experience_record_result(object):
+    """
+    Attributes:
+     - bomb
+     - boom
+
+    """
+
+
+    def __init__(self, bomb=None, boom=None,):
+        self.bomb = bomb
+        self.boom = boom
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.STRUCT:
+                    self.bomb = LogicException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.STRUCT:
+                    self.boom = SystemException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('submit_experience_record_result')
+        if self.bomb is not None:
+            oprot.writeFieldBegin('bomb', TType.STRUCT, 1)
+            self.bomb.write(oprot)
+            oprot.writeFieldEnd()
+        if self.boom is not None:
+            oprot.writeFieldBegin('boom', TType.STRUCT, 2)
+            self.boom.write(oprot)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+all_structs.append(submit_experience_record_result)
+submit_experience_record_result.thrift_spec = (
+    None,  # 0
+    (1, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 1
+    (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
+)
+
+
+class get_daka_background_datas_args(object):
+    """
+    Attributes:
+     - topic_ids
+
+    """
+
+
+    def __init__(self, topic_ids=None,):
+        self.topic_ids = topic_ids
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.LIST:
+                    self.topic_ids = []
+                    (_etype401, _size398) = iprot.readListBegin()
+                    for _i402 in range(_size398):
+                        _elem403 = iprot.readI32()
+                        self.topic_ids.append(_elem403)
+                    iprot.readListEnd()
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('get_daka_background_datas_args')
+        if self.topic_ids is not None:
+            oprot.writeFieldBegin('topic_ids', TType.LIST, 1)
+            oprot.writeListBegin(TType.I32, len(self.topic_ids))
+            for iter404 in self.topic_ids:
+                oprot.writeI32(iter404)
+            oprot.writeListEnd()
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+all_structs.append(get_daka_background_datas_args)
+get_daka_background_datas_args.thrift_spec = (
+    None,  # 0
+    (1, TType.LIST, 'topic_ids', (TType.I32, None, False), None, ),  # 1
+)
+
+
+class get_daka_background_datas_result(object):
+    """
+    Attributes:
+     - success
+     - bomb
+     - boom
+
+    """
+
+
+    def __init__(self, success=None, bomb=None, boom=None,):
+        self.success = success
+        self.bomb = bomb
+        self.boom = boom
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 0:
+                if ftype == TType.STRUCT:
+                    self.success = DakaBackgroundData()
+                    self.success.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 1:
+                if ftype == TType.STRUCT:
+                    self.bomb = LogicException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.STRUCT:
+                    self.boom = SystemException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('get_daka_background_datas_result')
+        if self.success is not None:
+            oprot.writeFieldBegin('success', TType.STRUCT, 0)
+            self.success.write(oprot)
+            oprot.writeFieldEnd()
+        if self.bomb is not None:
+            oprot.writeFieldBegin('bomb', TType.STRUCT, 1)
+            self.bomb.write(oprot)
+            oprot.writeFieldEnd()
+        if self.boom is not None:
+            oprot.writeFieldBegin('boom', TType.STRUCT, 2)
+            self.boom.write(oprot)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+all_structs.append(get_daka_background_datas_result)
+get_daka_background_datas_result.thrift_spec = (
+    (0, TType.STRUCT, 'success', [DakaBackgroundData, None], None, ),  # 0
+    (1, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 1
+    (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
+)
+
+
+class share_bonus_args(object):
+    """
+    Attributes:
+     - client_timestamp_ms
+
+    """
+
+
+    def __init__(self, client_timestamp_ms=None,):
+        self.client_timestamp_ms = client_timestamp_ms
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.I64:
+                    self.client_timestamp_ms = iprot.readI64()
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('share_bonus_args')
+        if self.client_timestamp_ms is not None:
+            oprot.writeFieldBegin('client_timestamp_ms', TType.I64, 1)
+            oprot.writeI64(self.client_timestamp_ms)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+all_structs.append(share_bonus_args)
+share_bonus_args.thrift_spec = (
+    None,  # 0
+    (1, TType.I64, 'client_timestamp_ms', None, None, ),  # 1
+)
+
+
+class share_bonus_result(object):
+    """
+    Attributes:
+     - success
+     - bomb
+     - boom
+
+    """
+
+
+    def __init__(self, success=None, bomb=None, boom=None,):
+        self.success = success
+        self.bomb = bomb
+        self.boom = boom
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 0:
+                if ftype == TType.STRUCT:
+                    self.success = DakaShareBonusResult()
+                    self.success.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 1:
+                if ftype == TType.STRUCT:
+                    self.bomb = LogicException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.STRUCT:
+                    self.boom = SystemException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('share_bonus_result')
+        if self.success is not None:
+            oprot.writeFieldBegin('success', TType.STRUCT, 0)
+            self.success.write(oprot)
+            oprot.writeFieldEnd()
+        if self.bomb is not None:
+            oprot.writeFieldBegin('bomb', TType.STRUCT, 1)
+            self.bomb.write(oprot)
+            oprot.writeFieldEnd()
+        if self.boom is not None:
+            oprot.writeFieldBegin('boom', TType.STRUCT, 2)
+            self.boom.write(oprot)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+all_structs.append(share_bonus_result)
+share_bonus_result.thrift_spec = (
+    (0, TType.STRUCT, 'success', [DakaShareBonusResult, None], None, ),  # 0
+    (1, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 1
+    (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
+)
+
+
+class credit_task_center_args(object):
+
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('credit_task_center_args')
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+all_structs.append(credit_task_center_args)
+credit_task_center_args.thrift_spec = (
+)
+
+
+class credit_task_center_result(object):
+    """
+    Attributes:
+     - success
+     - bomb
+     - boom
+
+    """
+
+
+    def __init__(self, success=None, bomb=None, boom=None,):
+        self.success = success
+        self.bomb = bomb
+        self.boom = boom
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 0:
+                if ftype == TType.STRUCT:
+                    self.success = CreditCenter()
+                    self.success.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 1:
+                if ftype == TType.STRUCT:
+                    self.bomb = LogicException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.STRUCT:
+                    self.boom = SystemException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('credit_task_center_result')
+        if self.success is not None:
+            oprot.writeFieldBegin('success', TType.STRUCT, 0)
+            self.success.write(oprot)
+            oprot.writeFieldEnd()
+        if self.bomb is not None:
+            oprot.writeFieldBegin('bomb', TType.STRUCT, 1)
+            self.bomb.write(oprot)
+            oprot.writeFieldEnd()
+        if self.boom is not None:
+            oprot.writeFieldBegin('boom', TType.STRUCT, 2)
+            self.boom.write(oprot)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+all_structs.append(credit_task_center_result)
+credit_task_center_result.thrift_spec = (
+    (0, TType.STRUCT, 'success', [CreditCenter, None], None, ),  # 0
     (1, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 1
     (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
 )
@@ -1879,6 +2902,162 @@ win_streak_status_result.thrift_spec = (
 )
 
 
+class submit_win_streak_records_args(object):
+    """
+    Attributes:
+     - client_date
+     - win_streak_dates
+
+    """
+
+
+    def __init__(self, client_date=None, win_streak_dates=None,):
+        self.client_date = client_date
+        self.win_streak_dates = win_streak_dates
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.I32:
+                    self.client_date = iprot.readI32()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.LIST:
+                    self.win_streak_dates = []
+                    (_etype408, _size405) = iprot.readListBegin()
+                    for _i409 in range(_size405):
+                        _elem410 = iprot.readI32()
+                        self.win_streak_dates.append(_elem410)
+                    iprot.readListEnd()
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('submit_win_streak_records_args')
+        if self.client_date is not None:
+            oprot.writeFieldBegin('client_date', TType.I32, 1)
+            oprot.writeI32(self.client_date)
+            oprot.writeFieldEnd()
+        if self.win_streak_dates is not None:
+            oprot.writeFieldBegin('win_streak_dates', TType.LIST, 2)
+            oprot.writeListBegin(TType.I32, len(self.win_streak_dates))
+            for iter411 in self.win_streak_dates:
+                oprot.writeI32(iter411)
+            oprot.writeListEnd()
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+all_structs.append(submit_win_streak_records_args)
+submit_win_streak_records_args.thrift_spec = (
+    None,  # 0
+    (1, TType.I32, 'client_date', None, None, ),  # 1
+    (2, TType.LIST, 'win_streak_dates', (TType.I32, None, False), None, ),  # 2
+)
+
+
+class submit_win_streak_records_result(object):
+    """
+    Attributes:
+     - bomb
+     - boom
+
+    """
+
+
+    def __init__(self, bomb=None, boom=None,):
+        self.bomb = bomb
+        self.boom = boom
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.STRUCT:
+                    self.bomb = LogicException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.STRUCT:
+                    self.boom = SystemException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('submit_win_streak_records_result')
+        if self.bomb is not None:
+            oprot.writeFieldBegin('bomb', TType.STRUCT, 1)
+            self.bomb.write(oprot)
+            oprot.writeFieldEnd()
+        if self.boom is not None:
+            oprot.writeFieldBegin('boom', TType.STRUCT, 2)
+            self.boom.write(oprot)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+all_structs.append(submit_win_streak_records_result)
+submit_win_streak_records_result.thrift_spec = (
+    None,  # 0
+    (1, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 1
+    (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
+)
+
+
 class get_books_replace_info_args(object):
 
 
@@ -1949,11 +3128,11 @@ class get_books_replace_info_result(object):
             if fid == 0:
                 if ftype == TType.LIST:
                     self.success = []
-                    (_etype324, _size321) = iprot.readListBegin()
-                    for _i325 in range(_size321):
-                        _elem326 = BookReplaceInfo()
-                        _elem326.read(iprot)
-                        self.success.append(_elem326)
+                    (_etype415, _size412) = iprot.readListBegin()
+                    for _i416 in range(_size412):
+                        _elem417 = BookReplaceInfo()
+                        _elem417.read(iprot)
+                        self.success.append(_elem417)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -1980,8 +3159,8 @@ class get_books_replace_info_result(object):
         if self.success is not None:
             oprot.writeFieldBegin('success', TType.LIST, 0)
             oprot.writeListBegin(TType.STRUCT, len(self.success))
-            for iter327 in self.success:
-                iter327.write(oprot)
+            for iter418 in self.success:
+                iter418.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.bomb is not None:

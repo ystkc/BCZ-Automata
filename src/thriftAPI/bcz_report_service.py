@@ -152,10 +152,10 @@ class report_event_args(object):
             if fid == 1:
                 if ftype == TType.LIST:
                     self.jsons = []
-                    (_etype373, _size370) = iprot.readListBegin()
-                    for _i374 in range(_size370):
-                        _elem375 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
-                        self.jsons.append(_elem375)
+                    (_etype464, _size461) = iprot.readListBegin()
+                    for _i465 in range(_size461):
+                        _elem466 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        self.jsons.append(_elem466)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -172,8 +172,8 @@ class report_event_args(object):
         if self.jsons is not None:
             oprot.writeFieldBegin('jsons', TType.LIST, 1)
             oprot.writeListBegin(TType.STRING, len(self.jsons))
-            for iter376 in self.jsons:
-                oprot.writeString(iter376.encode('utf-8') if sys.version_info[0] == 2 else iter376)
+            for iter467 in self.jsons:
+                oprot.writeString(iter467.encode('utf-8') if sys.version_info[0] == 2 else iter467)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         oprot.writeFieldStop()

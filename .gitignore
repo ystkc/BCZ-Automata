@@ -2,7 +2,8 @@
 *.db
 *.json
 *.txt
-
+*.jpg
+*.zip
 
 *.cer
 *.key

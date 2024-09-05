@@ -266,6 +266,9 @@ struct UserBookListInfo {
     3: list<BookLevelInfo> levels_info,
     4: list<BookLevelInfo> all_tops
 }
+struct get_all_books_basic_info_v3_args{
+    1: UserBookListInfo book_list_info
+}
 ## win_streak_status
 struct win_streak_status_args{
     1: i32 client_date
@@ -281,6 +284,15 @@ struct win_streak_status_result{
     1: WinStreakStatus success,
     2: SystemException boom,
     3: LogicException bomb
+}
+## submit_win_streak_records
+struct submit_win_streak_records_args{
+    1: i32 client_date,
+    2: list<i32> win_streak_dates
+}
+struct submit_win_streak_records_result{
+    1: SystemException boom,
+    2: LogicException bomb
 }
 ## user_limit_info_v2
 struct user_limit_info_v2_result{
@@ -426,11 +438,99 @@ struct get_train_page_resource_result{
     2: SystemException boom,
     3: LogicException bomb
 }
+## submit_experience_record
+struct StudyExperienceRecord{
+    1: string questionType,
+    2: i32 behavior,
+    3: i32 cnt
+}
+struct submit_experience_record_args{
+    1: list<StudyExperienceRecord> records,
+}
+struct submit_experience_record_result{
+    1: SystemException boom,
+    2: LogicException bomb
+}
+## get_daka_background_datas
+struct get_daka_background_datas_args{
+    1: list<i32> topic_ids
+}
+struct DakaBackgroundCategoryInfo{
+    1: string name,
+    2: list<string> images,
+    3: list<string> colors,
+    4: list<i64> image_ids,
+    5: string sentence,
+    6: string sen_mean,
+    7: string sen_source,
+    8: i32 win_days,
+    9: i32 win_type
+}
+struct DakaBackgroundData{
+    1: list<DakaBackgroundCategoryInfo> category_info,
+    2: string logo,
+    3: string title,
+    4: string qr_image
+}
+struct get_daka_background_datas_result{
+    1: DakaBackgroundData success,
+    2: SystemException boom,
+    3: LogicException bomb
+}
+## share_bonus
+struct share_bonus_args{
+    1: i64 client_timestamp_ms
+}
+struct DakaShareBonusResult{
+    1: i32 coinCount,
+    2: i32 status,
+    3: string message,
+    4: string shareSuccess,
+    5: string extraTip,
+    6: string action,
+    7: string actionUrl
+}
+struct share_bonus_result{
+    1: DakaShareBonusResult success,
+    2: SystemException boom,
+    3: LogicException bomb
+}
+## credit_task_center
+struct Task{
+    1: i32 task_id,
+    2: i32 task_type,
+    3: string task_title,
+    4: string task_sub_title,
+    5: string award,
+    6: i32 status,
+    7: string button_desc,
+    8: i32 button_action_type,
+    9: string button_redirect_url
+}
+struct CreditCenter{
+    1: i32 show_credit_center,
+    2: i32 credit,
+    3: i32 daily_inc_credit,
+    4: list<string> credit_item_img,
+    5: i32 new_flag,
+    6: string credit_mall_url,
+    7: list<Task> task
+}
+struct credit_task_center_result{
+    1: CreditCenter success,
+    2: SystemException boom,
+    3: LogicException bomb
+}
+
 
 service UserStudyApiService {
     UserSelectedBookInfo select_book(1: select_book_args args_)
-    i32 update_done_data(1: update_done_data_args args_)
+    i32 update_done_data(1: i64 last_sync_at, 2: list<UserDoneWordRecord> arr_done_records, 3: i32 current_word_level_id, 4: bool is_today_completed) throws (1: LogicException bomb, 2: SystemException boom)
     UserBookListInfo get_all_books_basic_info_v3() throws (1: LogicException bomb, 2: SystemException boom)
+    void submit_experience_record(1: list<StudyExperienceRecord> records) throws (1: LogicException bomb, 2: SystemException boom)
+    DakaBackgroundData get_daka_background_datas(1: list<i32> topic_ids) throws (1: LogicException bomb, 2: SystemException boom)
+    DakaShareBonusResult share_bonus(1: i64 client_timestamp_ms) throws (1: LogicException bomb, 2: SystemException boom)
+    CreditCenter credit_task_center() throws (1: LogicException bomb, 2: SystemException boom)
     # C
     UserBasicInfoPlusV2 user_basic_info_v2() throws (1: LogicException bomb, 2: SystemException boom)
     UserStudyConfig get_user_study_config() throws (1: LogicException bomb, 2: SystemException boom)
@@ -438,6 +538,8 @@ service UserStudyApiService {
     # C, S
     UserLimitInfoV2 user_limit_info_v2() throws (1: LogicException bomb, 2: SystemException boom)
     WinStreakStatus win_streak_status(1: i32 client_date) throws (1: LogicException bomb, 2: SystemException boom)
+    # None
+    void submit_win_streak_records(1: i32 client_date, 2: list<i32> win_streak_dates) throws (1: LogicException bomb, 2: SystemException boom)
     # C
     list<BookReplaceInfo> get_books_replace_info() throws (1: LogicException bomb, 2: SystemException boom)
     MainPageJS get_main_page_js() throws (1: LogicException bomb, 2: SystemException boom)
@@ -899,4 +1001,49 @@ struct get_book_resource_update_info_result{
 service resource_api_service{    
     # C
     BookResourceUpdateInfo get_book_resource_update_info(1: i32 word_level_id) throws (1: LogicException bomb, 2: SystemException boom)
+}
+
+
+# social_service
+
+## exceptions
+
+exception BESystemException{
+    1: string from_service,
+    2: string from_method,
+    3: i32 code,
+    4: string message
+}
+exception BELogicException{
+    1: string from_service,
+    2: string from_method,
+    3: i32 code,
+    4: string message
+}
+
+
+## send_share_success
+enum BBShareModule{
+    SHARE_MODULE_DAKA = 0,
+}
+enum BBShareChannel{
+    SHARE_CHANNEL_WEIXIN_CIRCLE = 0,
+    SHARE_CHANNEL_WEIXIN_FRIEND = 1,
+    SHARE_CHANNEL_SINA = 2,
+    SHARE_CHANNEL_QQ_CIRCLE = 3,
+    SHARE_CHANNEL_QQ_FRIEND = 4
+}
+struct send_share_success_args{
+    1: BBShareModule module_name,
+    2: i64 timestamp,
+    3: BBShareChannel channel
+}
+struct send_share_success_result{
+    1: bool success,
+    2: BESystemException sysException,
+    3: BELogicException logicException
+}
+service social_service{
+    # None
+    bool send_share_success(1: BBShareModule module_name, 2: i64 timestamp, 3: BBShareChannel channel) throws (1: BELogicException logicException, 2: BESystemException sysException)
 }

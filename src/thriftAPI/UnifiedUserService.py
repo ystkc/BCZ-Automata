@@ -655,11 +655,11 @@ class get_bind_info_result(object):
             if fid == 0:
                 if ftype == TType.LIST:
                     self.success = []
-                    (_etype317, _size314) = iprot.readListBegin()
-                    for _i318 in range(_size314):
-                        _elem319 = UserBindInfo()
-                        _elem319.read(iprot)
-                        self.success.append(_elem319)
+                    (_etype380, _size377) = iprot.readListBegin()
+                    for _i381 in range(_size377):
+                        _elem382 = UserBindInfo()
+                        _elem382.read(iprot)
+                        self.success.append(_elem382)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -686,8 +686,8 @@ class get_bind_info_result(object):
         if self.success is not None:
             oprot.writeFieldBegin('success', TType.LIST, 0)
             oprot.writeListBegin(TType.STRUCT, len(self.success))
-            for iter320 in self.success:
-                iter320.write(oprot)
+            for iter383 in self.success:
+                iter383.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.bomb is not None:

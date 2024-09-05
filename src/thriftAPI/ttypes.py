@@ -109,6 +109,42 @@ class AdvertiseLoadingModule(object):
     }
 
 
+class BBShareModule(object):
+    SHARE_MODULE_DAKA = 0
+
+    _VALUES_TO_NAMES = {
+        0: "SHARE_MODULE_DAKA",
+    }
+
+    _NAMES_TO_VALUES = {
+        "SHARE_MODULE_DAKA": 0,
+    }
+
+
+class BBShareChannel(object):
+    SHARE_CHANNEL_WEIXIN_CIRCLE = 0
+    SHARE_CHANNEL_WEIXIN_FRIEND = 1
+    SHARE_CHANNEL_SINA = 2
+    SHARE_CHANNEL_QQ_CIRCLE = 3
+    SHARE_CHANNEL_QQ_FRIEND = 4
+
+    _VALUES_TO_NAMES = {
+        0: "SHARE_CHANNEL_WEIXIN_CIRCLE",
+        1: "SHARE_CHANNEL_WEIXIN_FRIEND",
+        2: "SHARE_CHANNEL_SINA",
+        3: "SHARE_CHANNEL_QQ_CIRCLE",
+        4: "SHARE_CHANNEL_QQ_FRIEND",
+    }
+
+    _NAMES_TO_VALUES = {
+        "SHARE_CHANNEL_WEIXIN_CIRCLE": 0,
+        "SHARE_CHANNEL_WEIXIN_FRIEND": 1,
+        "SHARE_CHANNEL_SINA": 2,
+        "SHARE_CHANNEL_QQ_CIRCLE": 3,
+        "SHARE_CHANNEL_QQ_FRIEND": 4,
+    }
+
+
 class LogicException(TException):
     """
     Attributes:
@@ -3312,6 +3348,64 @@ class UserBookListInfo(object):
         return not (self == other)
 
 
+class get_all_books_basic_info_v3_args(object):
+    """
+    Attributes:
+     - book_list_info
+
+    """
+
+
+    def __init__(self, book_list_info=None,):
+        self.book_list_info = book_list_info
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.STRUCT:
+                    self.book_list_info = UserBookListInfo()
+                    self.book_list_info.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('get_all_books_basic_info_v3_args')
+        if self.book_list_info is not None:
+            oprot.writeFieldBegin('book_list_info', TType.STRUCT, 1)
+            self.book_list_info.write(oprot)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+
+
 class win_streak_status_args(object):
     """
     Attributes:
@@ -3530,6 +3624,150 @@ class win_streak_status_result(object):
             oprot.writeFieldEnd()
         if self.bomb is not None:
             oprot.writeFieldBegin('bomb', TType.STRUCT, 3)
+            self.bomb.write(oprot)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+
+
+class submit_win_streak_records_args(object):
+    """
+    Attributes:
+     - client_date
+     - win_streak_dates
+
+    """
+
+
+    def __init__(self, client_date=None, win_streak_dates=None,):
+        self.client_date = client_date
+        self.win_streak_dates = win_streak_dates
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.I32:
+                    self.client_date = iprot.readI32()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.LIST:
+                    self.win_streak_dates = []
+                    (_etype80, _size77) = iprot.readListBegin()
+                    for _i81 in range(_size77):
+                        _elem82 = iprot.readI32()
+                        self.win_streak_dates.append(_elem82)
+                    iprot.readListEnd()
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('submit_win_streak_records_args')
+        if self.client_date is not None:
+            oprot.writeFieldBegin('client_date', TType.I32, 1)
+            oprot.writeI32(self.client_date)
+            oprot.writeFieldEnd()
+        if self.win_streak_dates is not None:
+            oprot.writeFieldBegin('win_streak_dates', TType.LIST, 2)
+            oprot.writeListBegin(TType.I32, len(self.win_streak_dates))
+            for iter83 in self.win_streak_dates:
+                oprot.writeI32(iter83)
+            oprot.writeListEnd()
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+
+
+class submit_win_streak_records_result(object):
+    """
+    Attributes:
+     - boom
+     - bomb
+
+    """
+
+
+    def __init__(self, boom=None, bomb=None,):
+        self.boom = boom
+        self.bomb = bomb
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.STRUCT:
+                    self.boom = SystemException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.STRUCT:
+                    self.bomb = LogicException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('submit_win_streak_records_result')
+        if self.boom is not None:
+            oprot.writeFieldBegin('boom', TType.STRUCT, 1)
+            self.boom.write(oprot)
+            oprot.writeFieldEnd()
+        if self.bomb is not None:
+            oprot.writeFieldBegin('bomb', TType.STRUCT, 2)
             self.bomb.write(oprot)
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -4109,11 +4347,11 @@ class get_books_replace_info_result(object):
             if fid == 1:
                 if ftype == TType.LIST:
                     self.success = []
-                    (_etype80, _size77) = iprot.readListBegin()
-                    for _i81 in range(_size77):
-                        _elem82 = BookReplaceInfo()
-                        _elem82.read(iprot)
-                        self.success.append(_elem82)
+                    (_etype87, _size84) = iprot.readListBegin()
+                    for _i88 in range(_size84):
+                        _elem89 = BookReplaceInfo()
+                        _elem89.read(iprot)
+                        self.success.append(_elem89)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -4140,8 +4378,8 @@ class get_books_replace_info_result(object):
         if self.success is not None:
             oprot.writeFieldBegin('success', TType.LIST, 1)
             oprot.writeListBegin(TType.STRUCT, len(self.success))
-            for iter83 in self.success:
-                iter83.write(oprot)
+            for iter90 in self.success:
+                iter90.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.boom is not None:
@@ -4530,11 +4768,11 @@ class UserDakaRequest(object):
             elif fid == 3:
                 if ftype == TType.LIST:
                     self.daka_dates = []
-                    (_etype87, _size84) = iprot.readListBegin()
-                    for _i88 in range(_size84):
-                        _elem89 = UserDakaDate()
-                        _elem89.read(iprot)
-                        self.daka_dates.append(_elem89)
+                    (_etype94, _size91) = iprot.readListBegin()
+                    for _i95 in range(_size91):
+                        _elem96 = UserDakaDate()
+                        _elem96.read(iprot)
+                        self.daka_dates.append(_elem96)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -4552,11 +4790,11 @@ class UserDakaRequest(object):
             elif fid == 6:
                 if ftype == TType.LIST:
                     self.poster_topic_ids = []
-                    (_etype93, _size90) = iprot.readListBegin()
-                    for _i94 in range(_size90):
-                        _elem95 = UserDakaTopic()
-                        _elem95.read(iprot)
-                        self.poster_topic_ids.append(_elem95)
+                    (_etype100, _size97) = iprot.readListBegin()
+                    for _i101 in range(_size97):
+                        _elem102 = UserDakaTopic()
+                        _elem102.read(iprot)
+                        self.poster_topic_ids.append(_elem102)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -4581,8 +4819,8 @@ class UserDakaRequest(object):
         if self.daka_dates is not None:
             oprot.writeFieldBegin('daka_dates', TType.LIST, 3)
             oprot.writeListBegin(TType.STRUCT, len(self.daka_dates))
-            for iter96 in self.daka_dates:
-                iter96.write(oprot)
+            for iter103 in self.daka_dates:
+                iter103.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.timezone is not None:
@@ -4596,8 +4834,8 @@ class UserDakaRequest(object):
         if self.poster_topic_ids is not None:
             oprot.writeFieldBegin('poster_topic_ids', TType.LIST, 6)
             oprot.writeListBegin(TType.STRUCT, len(self.poster_topic_ids))
-            for iter97 in self.poster_topic_ids:
-                iter97.write(oprot)
+            for iter104 in self.poster_topic_ids:
+                iter104.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -4808,10 +5046,10 @@ class UserDakaShareInfo(object):
             elif fid == 5:
                 if ftype == TType.LIST:
                     self.weixin_share_pic_urls = []
-                    (_etype101, _size98) = iprot.readListBegin()
-                    for _i102 in range(_size98):
-                        _elem103 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
-                        self.weixin_share_pic_urls.append(_elem103)
+                    (_etype108, _size105) = iprot.readListBegin()
+                    for _i109 in range(_size105):
+                        _elem110 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        self.weixin_share_pic_urls.append(_elem110)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -4828,22 +5066,22 @@ class UserDakaShareInfo(object):
             elif fid == 8:
                 if ftype == TType.LIST:
                     self.daka_dates = []
-                    (_etype107, _size104) = iprot.readListBegin()
-                    for _i108 in range(_size104):
-                        _elem109 = UserDakaDate()
-                        _elem109.read(iprot)
-                        self.daka_dates.append(_elem109)
+                    (_etype114, _size111) = iprot.readListBegin()
+                    for _i115 in range(_size111):
+                        _elem116 = UserDakaDate()
+                        _elem116.read(iprot)
+                        self.daka_dates.append(_elem116)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
             elif fid == 9:
                 if ftype == TType.LIST:
                     self.special_days = []
-                    (_etype113, _size110) = iprot.readListBegin()
-                    for _i114 in range(_size110):
-                        _elem115 = UserDakaSpecialDay()
-                        _elem115.read(iprot)
-                        self.special_days.append(_elem115)
+                    (_etype120, _size117) = iprot.readListBegin()
+                    for _i121 in range(_size117):
+                        _elem122 = UserDakaSpecialDay()
+                        _elem122.read(iprot)
+                        self.special_days.append(_elem122)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -4886,8 +5124,8 @@ class UserDakaShareInfo(object):
         if self.weixin_share_pic_urls is not None:
             oprot.writeFieldBegin('weixin_share_pic_urls', TType.LIST, 5)
             oprot.writeListBegin(TType.STRING, len(self.weixin_share_pic_urls))
-            for iter116 in self.weixin_share_pic_urls:
-                oprot.writeString(iter116.encode('utf-8') if sys.version_info[0] == 2 else iter116)
+            for iter123 in self.weixin_share_pic_urls:
+                oprot.writeString(iter123.encode('utf-8') if sys.version_info[0] == 2 else iter123)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.qzone_share_url is not None:
@@ -4901,15 +5139,15 @@ class UserDakaShareInfo(object):
         if self.daka_dates is not None:
             oprot.writeFieldBegin('daka_dates', TType.LIST, 8)
             oprot.writeListBegin(TType.STRUCT, len(self.daka_dates))
-            for iter117 in self.daka_dates:
-                iter117.write(oprot)
+            for iter124 in self.daka_dates:
+                iter124.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.special_days is not None:
             oprot.writeFieldBegin('special_days', TType.LIST, 9)
             oprot.writeListBegin(TType.STRUCT, len(self.special_days))
-            for iter118 in self.special_days:
-                iter118.write(oprot)
+            for iter125 in self.special_days:
+                iter125.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.xhs_share_title is not None:
@@ -5133,10 +5371,10 @@ class TrainPageResource(object):
             if fid == 1:
                 if ftype == TType.LIST:
                     self.items = []
-                    (_etype122, _size119) = iprot.readListBegin()
-                    for _i123 in range(_size119):
-                        _elem124 = iprot.readI32()
-                        self.items.append(_elem124)
+                    (_etype129, _size126) = iprot.readListBegin()
+                    for _i130 in range(_size126):
+                        _elem131 = iprot.readI32()
+                        self.items.append(_elem131)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -5158,8 +5396,8 @@ class TrainPageResource(object):
         if self.items is not None:
             oprot.writeFieldBegin('items', TType.LIST, 1)
             oprot.writeListBegin(TType.I32, len(self.items))
-            for iter125 in self.items:
-                oprot.writeI32(iter125)
+            for iter132 in self.items:
+                oprot.writeI32(iter132)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.module_name is not None:
@@ -5330,22 +5568,22 @@ class TrainPageResources(object):
             elif fid == 2:
                 if ftype == TType.LIST:
                     self.outerResource = []
-                    (_etype129, _size126) = iprot.readListBegin()
-                    for _i130 in range(_size126):
-                        _elem131 = ResourceItem()
-                        _elem131.read(iprot)
-                        self.outerResource.append(_elem131)
+                    (_etype136, _size133) = iprot.readListBegin()
+                    for _i137 in range(_size133):
+                        _elem138 = ResourceItem()
+                        _elem138.read(iprot)
+                        self.outerResource.append(_elem138)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
             elif fid == 3:
                 if ftype == TType.LIST:
                     self.resources = []
-                    (_etype135, _size132) = iprot.readListBegin()
-                    for _i136 in range(_size132):
-                        _elem137 = TrainPageResource()
-                        _elem137.read(iprot)
-                        self.resources.append(_elem137)
+                    (_etype142, _size139) = iprot.readListBegin()
+                    for _i143 in range(_size139):
+                        _elem144 = TrainPageResource()
+                        _elem144.read(iprot)
+                        self.resources.append(_elem144)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -5372,15 +5610,15 @@ class TrainPageResources(object):
         if self.outerResource is not None:
             oprot.writeFieldBegin('outerResource', TType.LIST, 2)
             oprot.writeListBegin(TType.STRUCT, len(self.outerResource))
-            for iter138 in self.outerResource:
-                iter138.write(oprot)
+            for iter145 in self.outerResource:
+                iter145.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.resources is not None:
             oprot.writeFieldBegin('resources', TType.LIST, 3)
             oprot.writeListBegin(TType.STRUCT, len(self.resources))
-            for iter139 in self.resources:
-                iter139.write(oprot)
+            for iter146 in self.resources:
+                iter146.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.banner is not None:
@@ -5485,6 +5723,1257 @@ class get_train_page_resource_result(object):
         return not (self == other)
 
 
+class StudyExperienceRecord(object):
+    """
+    Attributes:
+     - questionType
+     - behavior
+     - cnt
+
+    """
+
+
+    def __init__(self, questionType=None, behavior=None, cnt=None,):
+        self.questionType = questionType
+        self.behavior = behavior
+        self.cnt = cnt
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.STRING:
+                    self.questionType = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.I32:
+                    self.behavior = iprot.readI32()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 3:
+                if ftype == TType.I32:
+                    self.cnt = iprot.readI32()
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('StudyExperienceRecord')
+        if self.questionType is not None:
+            oprot.writeFieldBegin('questionType', TType.STRING, 1)
+            oprot.writeString(self.questionType.encode('utf-8') if sys.version_info[0] == 2 else self.questionType)
+            oprot.writeFieldEnd()
+        if self.behavior is not None:
+            oprot.writeFieldBegin('behavior', TType.I32, 2)
+            oprot.writeI32(self.behavior)
+            oprot.writeFieldEnd()
+        if self.cnt is not None:
+            oprot.writeFieldBegin('cnt', TType.I32, 3)
+            oprot.writeI32(self.cnt)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+
+
+class submit_experience_record_args(object):
+    """
+    Attributes:
+     - records
+
+    """
+
+
+    def __init__(self, records=None,):
+        self.records = records
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.LIST:
+                    self.records = []
+                    (_etype150, _size147) = iprot.readListBegin()
+                    for _i151 in range(_size147):
+                        _elem152 = StudyExperienceRecord()
+                        _elem152.read(iprot)
+                        self.records.append(_elem152)
+                    iprot.readListEnd()
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('submit_experience_record_args')
+        if self.records is not None:
+            oprot.writeFieldBegin('records', TType.LIST, 1)
+            oprot.writeListBegin(TType.STRUCT, len(self.records))
+            for iter153 in self.records:
+                iter153.write(oprot)
+            oprot.writeListEnd()
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+
+
+class submit_experience_record_result(object):
+    """
+    Attributes:
+     - boom
+     - bomb
+
+    """
+
+
+    def __init__(self, boom=None, bomb=None,):
+        self.boom = boom
+        self.bomb = bomb
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.STRUCT:
+                    self.boom = SystemException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.STRUCT:
+                    self.bomb = LogicException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('submit_experience_record_result')
+        if self.boom is not None:
+            oprot.writeFieldBegin('boom', TType.STRUCT, 1)
+            self.boom.write(oprot)
+            oprot.writeFieldEnd()
+        if self.bomb is not None:
+            oprot.writeFieldBegin('bomb', TType.STRUCT, 2)
+            self.bomb.write(oprot)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+
+
+class get_daka_background_datas_args(object):
+    """
+    Attributes:
+     - topic_ids
+
+    """
+
+
+    def __init__(self, topic_ids=None,):
+        self.topic_ids = topic_ids
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.LIST:
+                    self.topic_ids = []
+                    (_etype157, _size154) = iprot.readListBegin()
+                    for _i158 in range(_size154):
+                        _elem159 = iprot.readI32()
+                        self.topic_ids.append(_elem159)
+                    iprot.readListEnd()
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('get_daka_background_datas_args')
+        if self.topic_ids is not None:
+            oprot.writeFieldBegin('topic_ids', TType.LIST, 1)
+            oprot.writeListBegin(TType.I32, len(self.topic_ids))
+            for iter160 in self.topic_ids:
+                oprot.writeI32(iter160)
+            oprot.writeListEnd()
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+
+
+class DakaBackgroundCategoryInfo(object):
+    """
+    Attributes:
+     - name
+     - images
+     - colors
+     - image_ids
+     - sentence
+     - sen_mean
+     - sen_source
+     - win_days
+     - win_type
+
+    """
+
+
+    def __init__(self, name=None, images=None, colors=None, image_ids=None, sentence=None, sen_mean=None, sen_source=None, win_days=None, win_type=None,):
+        self.name = name
+        self.images = images
+        self.colors = colors
+        self.image_ids = image_ids
+        self.sentence = sentence
+        self.sen_mean = sen_mean
+        self.sen_source = sen_source
+        self.win_days = win_days
+        self.win_type = win_type
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.STRING:
+                    self.name = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.LIST:
+                    self.images = []
+                    (_etype164, _size161) = iprot.readListBegin()
+                    for _i165 in range(_size161):
+                        _elem166 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        self.images.append(_elem166)
+                    iprot.readListEnd()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 3:
+                if ftype == TType.LIST:
+                    self.colors = []
+                    (_etype170, _size167) = iprot.readListBegin()
+                    for _i171 in range(_size167):
+                        _elem172 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        self.colors.append(_elem172)
+                    iprot.readListEnd()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 4:
+                if ftype == TType.LIST:
+                    self.image_ids = []
+                    (_etype176, _size173) = iprot.readListBegin()
+                    for _i177 in range(_size173):
+                        _elem178 = iprot.readI64()
+                        self.image_ids.append(_elem178)
+                    iprot.readListEnd()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 5:
+                if ftype == TType.STRING:
+                    self.sentence = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 6:
+                if ftype == TType.STRING:
+                    self.sen_mean = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 7:
+                if ftype == TType.STRING:
+                    self.sen_source = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 8:
+                if ftype == TType.I32:
+                    self.win_days = iprot.readI32()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 9:
+                if ftype == TType.I32:
+                    self.win_type = iprot.readI32()
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('DakaBackgroundCategoryInfo')
+        if self.name is not None:
+            oprot.writeFieldBegin('name', TType.STRING, 1)
+            oprot.writeString(self.name.encode('utf-8') if sys.version_info[0] == 2 else self.name)
+            oprot.writeFieldEnd()
+        if self.images is not None:
+            oprot.writeFieldBegin('images', TType.LIST, 2)
+            oprot.writeListBegin(TType.STRING, len(self.images))
+            for iter179 in self.images:
+                oprot.writeString(iter179.encode('utf-8') if sys.version_info[0] == 2 else iter179)
+            oprot.writeListEnd()
+            oprot.writeFieldEnd()
+        if self.colors is not None:
+            oprot.writeFieldBegin('colors', TType.LIST, 3)
+            oprot.writeListBegin(TType.STRING, len(self.colors))
+            for iter180 in self.colors:
+                oprot.writeString(iter180.encode('utf-8') if sys.version_info[0] == 2 else iter180)
+            oprot.writeListEnd()
+            oprot.writeFieldEnd()
+        if self.image_ids is not None:
+            oprot.writeFieldBegin('image_ids', TType.LIST, 4)
+            oprot.writeListBegin(TType.I64, len(self.image_ids))
+            for iter181 in self.image_ids:
+                oprot.writeI64(iter181)
+            oprot.writeListEnd()
+            oprot.writeFieldEnd()
+        if self.sentence is not None:
+            oprot.writeFieldBegin('sentence', TType.STRING, 5)
+            oprot.writeString(self.sentence.encode('utf-8') if sys.version_info[0] == 2 else self.sentence)
+            oprot.writeFieldEnd()
+        if self.sen_mean is not None:
+            oprot.writeFieldBegin('sen_mean', TType.STRING, 6)
+            oprot.writeString(self.sen_mean.encode('utf-8') if sys.version_info[0] == 2 else self.sen_mean)
+            oprot.writeFieldEnd()
+        if self.sen_source is not None:
+            oprot.writeFieldBegin('sen_source', TType.STRING, 7)
+            oprot.writeString(self.sen_source.encode('utf-8') if sys.version_info[0] == 2 else self.sen_source)
+            oprot.writeFieldEnd()
+        if self.win_days is not None:
+            oprot.writeFieldBegin('win_days', TType.I32, 8)
+            oprot.writeI32(self.win_days)
+            oprot.writeFieldEnd()
+        if self.win_type is not None:
+            oprot.writeFieldBegin('win_type', TType.I32, 9)
+            oprot.writeI32(self.win_type)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+
+
+class DakaBackgroundData(object):
+    """
+    Attributes:
+     - category_info
+     - logo
+     - title
+     - qr_image
+
+    """
+
+
+    def __init__(self, category_info=None, logo=None, title=None, qr_image=None,):
+        self.category_info = category_info
+        self.logo = logo
+        self.title = title
+        self.qr_image = qr_image
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.LIST:
+                    self.category_info = []
+                    (_etype185, _size182) = iprot.readListBegin()
+                    for _i186 in range(_size182):
+                        _elem187 = DakaBackgroundCategoryInfo()
+                        _elem187.read(iprot)
+                        self.category_info.append(_elem187)
+                    iprot.readListEnd()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.STRING:
+                    self.logo = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 3:
+                if ftype == TType.STRING:
+                    self.title = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 4:
+                if ftype == TType.STRING:
+                    self.qr_image = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('DakaBackgroundData')
+        if self.category_info is not None:
+            oprot.writeFieldBegin('category_info', TType.LIST, 1)
+            oprot.writeListBegin(TType.STRUCT, len(self.category_info))
+            for iter188 in self.category_info:
+                iter188.write(oprot)
+            oprot.writeListEnd()
+            oprot.writeFieldEnd()
+        if self.logo is not None:
+            oprot.writeFieldBegin('logo', TType.STRING, 2)
+            oprot.writeString(self.logo.encode('utf-8') if sys.version_info[0] == 2 else self.logo)
+            oprot.writeFieldEnd()
+        if self.title is not None:
+            oprot.writeFieldBegin('title', TType.STRING, 3)
+            oprot.writeString(self.title.encode('utf-8') if sys.version_info[0] == 2 else self.title)
+            oprot.writeFieldEnd()
+        if self.qr_image is not None:
+            oprot.writeFieldBegin('qr_image', TType.STRING, 4)
+            oprot.writeString(self.qr_image.encode('utf-8') if sys.version_info[0] == 2 else self.qr_image)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+
+
+class get_daka_background_datas_result(object):
+    """
+    Attributes:
+     - success
+     - boom
+     - bomb
+
+    """
+
+
+    def __init__(self, success=None, boom=None, bomb=None,):
+        self.success = success
+        self.boom = boom
+        self.bomb = bomb
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.STRUCT:
+                    self.success = DakaBackgroundData()
+                    self.success.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.STRUCT:
+                    self.boom = SystemException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 3:
+                if ftype == TType.STRUCT:
+                    self.bomb = LogicException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('get_daka_background_datas_result')
+        if self.success is not None:
+            oprot.writeFieldBegin('success', TType.STRUCT, 1)
+            self.success.write(oprot)
+            oprot.writeFieldEnd()
+        if self.boom is not None:
+            oprot.writeFieldBegin('boom', TType.STRUCT, 2)
+            self.boom.write(oprot)
+            oprot.writeFieldEnd()
+        if self.bomb is not None:
+            oprot.writeFieldBegin('bomb', TType.STRUCT, 3)
+            self.bomb.write(oprot)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+
+
+class share_bonus_args(object):
+    """
+    Attributes:
+     - client_timestamp_ms
+
+    """
+
+
+    def __init__(self, client_timestamp_ms=None,):
+        self.client_timestamp_ms = client_timestamp_ms
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.I64:
+                    self.client_timestamp_ms = iprot.readI64()
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('share_bonus_args')
+        if self.client_timestamp_ms is not None:
+            oprot.writeFieldBegin('client_timestamp_ms', TType.I64, 1)
+            oprot.writeI64(self.client_timestamp_ms)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+
+
+class DakaShareBonusResult(object):
+    """
+    Attributes:
+     - coinCount
+     - status
+     - message
+     - shareSuccess
+     - extraTip
+     - action
+     - actionUrl
+
+    """
+
+
+    def __init__(self, coinCount=None, status=None, message=None, shareSuccess=None, extraTip=None, action=None, actionUrl=None,):
+        self.coinCount = coinCount
+        self.status = status
+        self.message = message
+        self.shareSuccess = shareSuccess
+        self.extraTip = extraTip
+        self.action = action
+        self.actionUrl = actionUrl
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.I32:
+                    self.coinCount = iprot.readI32()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.I32:
+                    self.status = iprot.readI32()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 3:
+                if ftype == TType.STRING:
+                    self.message = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 4:
+                if ftype == TType.STRING:
+                    self.shareSuccess = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 5:
+                if ftype == TType.STRING:
+                    self.extraTip = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 6:
+                if ftype == TType.STRING:
+                    self.action = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 7:
+                if ftype == TType.STRING:
+                    self.actionUrl = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('DakaShareBonusResult')
+        if self.coinCount is not None:
+            oprot.writeFieldBegin('coinCount', TType.I32, 1)
+            oprot.writeI32(self.coinCount)
+            oprot.writeFieldEnd()
+        if self.status is not None:
+            oprot.writeFieldBegin('status', TType.I32, 2)
+            oprot.writeI32(self.status)
+            oprot.writeFieldEnd()
+        if self.message is not None:
+            oprot.writeFieldBegin('message', TType.STRING, 3)
+            oprot.writeString(self.message.encode('utf-8') if sys.version_info[0] == 2 else self.message)
+            oprot.writeFieldEnd()
+        if self.shareSuccess is not None:
+            oprot.writeFieldBegin('shareSuccess', TType.STRING, 4)
+            oprot.writeString(self.shareSuccess.encode('utf-8') if sys.version_info[0] == 2 else self.shareSuccess)
+            oprot.writeFieldEnd()
+        if self.extraTip is not None:
+            oprot.writeFieldBegin('extraTip', TType.STRING, 5)
+            oprot.writeString(self.extraTip.encode('utf-8') if sys.version_info[0] == 2 else self.extraTip)
+            oprot.writeFieldEnd()
+        if self.action is not None:
+            oprot.writeFieldBegin('action', TType.STRING, 6)
+            oprot.writeString(self.action.encode('utf-8') if sys.version_info[0] == 2 else self.action)
+            oprot.writeFieldEnd()
+        if self.actionUrl is not None:
+            oprot.writeFieldBegin('actionUrl', TType.STRING, 7)
+            oprot.writeString(self.actionUrl.encode('utf-8') if sys.version_info[0] == 2 else self.actionUrl)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+
+
+class share_bonus_result(object):
+    """
+    Attributes:
+     - success
+     - boom
+     - bomb
+
+    """
+
+
+    def __init__(self, success=None, boom=None, bomb=None,):
+        self.success = success
+        self.boom = boom
+        self.bomb = bomb
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.STRUCT:
+                    self.success = DakaShareBonusResult()
+                    self.success.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.STRUCT:
+                    self.boom = SystemException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 3:
+                if ftype == TType.STRUCT:
+                    self.bomb = LogicException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('share_bonus_result')
+        if self.success is not None:
+            oprot.writeFieldBegin('success', TType.STRUCT, 1)
+            self.success.write(oprot)
+            oprot.writeFieldEnd()
+        if self.boom is not None:
+            oprot.writeFieldBegin('boom', TType.STRUCT, 2)
+            self.boom.write(oprot)
+            oprot.writeFieldEnd()
+        if self.bomb is not None:
+            oprot.writeFieldBegin('bomb', TType.STRUCT, 3)
+            self.bomb.write(oprot)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+
+
+class Task(object):
+    """
+    Attributes:
+     - task_id
+     - task_type
+     - task_title
+     - task_sub_title
+     - award
+     - status
+     - button_desc
+     - button_action_type
+     - button_redirect_url
+
+    """
+
+
+    def __init__(self, task_id=None, task_type=None, task_title=None, task_sub_title=None, award=None, status=None, button_desc=None, button_action_type=None, button_redirect_url=None,):
+        self.task_id = task_id
+        self.task_type = task_type
+        self.task_title = task_title
+        self.task_sub_title = task_sub_title
+        self.award = award
+        self.status = status
+        self.button_desc = button_desc
+        self.button_action_type = button_action_type
+        self.button_redirect_url = button_redirect_url
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.I32:
+                    self.task_id = iprot.readI32()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.I32:
+                    self.task_type = iprot.readI32()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 3:
+                if ftype == TType.STRING:
+                    self.task_title = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 4:
+                if ftype == TType.STRING:
+                    self.task_sub_title = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 5:
+                if ftype == TType.STRING:
+                    self.award = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 6:
+                if ftype == TType.I32:
+                    self.status = iprot.readI32()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 7:
+                if ftype == TType.STRING:
+                    self.button_desc = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 8:
+                if ftype == TType.I32:
+                    self.button_action_type = iprot.readI32()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 9:
+                if ftype == TType.STRING:
+                    self.button_redirect_url = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('Task')
+        if self.task_id is not None:
+            oprot.writeFieldBegin('task_id', TType.I32, 1)
+            oprot.writeI32(self.task_id)
+            oprot.writeFieldEnd()
+        if self.task_type is not None:
+            oprot.writeFieldBegin('task_type', TType.I32, 2)
+            oprot.writeI32(self.task_type)
+            oprot.writeFieldEnd()
+        if self.task_title is not None:
+            oprot.writeFieldBegin('task_title', TType.STRING, 3)
+            oprot.writeString(self.task_title.encode('utf-8') if sys.version_info[0] == 2 else self.task_title)
+            oprot.writeFieldEnd()
+        if self.task_sub_title is not None:
+            oprot.writeFieldBegin('task_sub_title', TType.STRING, 4)
+            oprot.writeString(self.task_sub_title.encode('utf-8') if sys.version_info[0] == 2 else self.task_sub_title)
+            oprot.writeFieldEnd()
+        if self.award is not None:
+            oprot.writeFieldBegin('award', TType.STRING, 5)
+            oprot.writeString(self.award.encode('utf-8') if sys.version_info[0] == 2 else self.award)
+            oprot.writeFieldEnd()
+        if self.status is not None:
+            oprot.writeFieldBegin('status', TType.I32, 6)
+            oprot.writeI32(self.status)
+            oprot.writeFieldEnd()
+        if self.button_desc is not None:
+            oprot.writeFieldBegin('button_desc', TType.STRING, 7)
+            oprot.writeString(self.button_desc.encode('utf-8') if sys.version_info[0] == 2 else self.button_desc)
+            oprot.writeFieldEnd()
+        if self.button_action_type is not None:
+            oprot.writeFieldBegin('button_action_type', TType.I32, 8)
+            oprot.writeI32(self.button_action_type)
+            oprot.writeFieldEnd()
+        if self.button_redirect_url is not None:
+            oprot.writeFieldBegin('button_redirect_url', TType.STRING, 9)
+            oprot.writeString(self.button_redirect_url.encode('utf-8') if sys.version_info[0] == 2 else self.button_redirect_url)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+
+
+class CreditCenter(object):
+    """
+    Attributes:
+     - show_credit_center
+     - credit
+     - daily_inc_credit
+     - credit_item_img
+     - new_flag
+     - credit_mall_url
+     - task
+
+    """
+
+
+    def __init__(self, show_credit_center=None, credit=None, daily_inc_credit=None, credit_item_img=None, new_flag=None, credit_mall_url=None, task=None,):
+        self.show_credit_center = show_credit_center
+        self.credit = credit
+        self.daily_inc_credit = daily_inc_credit
+        self.credit_item_img = credit_item_img
+        self.new_flag = new_flag
+        self.credit_mall_url = credit_mall_url
+        self.task = task
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.I32:
+                    self.show_credit_center = iprot.readI32()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.I32:
+                    self.credit = iprot.readI32()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 3:
+                if ftype == TType.I32:
+                    self.daily_inc_credit = iprot.readI32()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 4:
+                if ftype == TType.LIST:
+                    self.credit_item_img = []
+                    (_etype192, _size189) = iprot.readListBegin()
+                    for _i193 in range(_size189):
+                        _elem194 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        self.credit_item_img.append(_elem194)
+                    iprot.readListEnd()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 5:
+                if ftype == TType.I32:
+                    self.new_flag = iprot.readI32()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 6:
+                if ftype == TType.STRING:
+                    self.credit_mall_url = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 7:
+                if ftype == TType.LIST:
+                    self.task = []
+                    (_etype198, _size195) = iprot.readListBegin()
+                    for _i199 in range(_size195):
+                        _elem200 = Task()
+                        _elem200.read(iprot)
+                        self.task.append(_elem200)
+                    iprot.readListEnd()
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('CreditCenter')
+        if self.show_credit_center is not None:
+            oprot.writeFieldBegin('show_credit_center', TType.I32, 1)
+            oprot.writeI32(self.show_credit_center)
+            oprot.writeFieldEnd()
+        if self.credit is not None:
+            oprot.writeFieldBegin('credit', TType.I32, 2)
+            oprot.writeI32(self.credit)
+            oprot.writeFieldEnd()
+        if self.daily_inc_credit is not None:
+            oprot.writeFieldBegin('daily_inc_credit', TType.I32, 3)
+            oprot.writeI32(self.daily_inc_credit)
+            oprot.writeFieldEnd()
+        if self.credit_item_img is not None:
+            oprot.writeFieldBegin('credit_item_img', TType.LIST, 4)
+            oprot.writeListBegin(TType.STRING, len(self.credit_item_img))
+            for iter201 in self.credit_item_img:
+                oprot.writeString(iter201.encode('utf-8') if sys.version_info[0] == 2 else iter201)
+            oprot.writeListEnd()
+            oprot.writeFieldEnd()
+        if self.new_flag is not None:
+            oprot.writeFieldBegin('new_flag', TType.I32, 5)
+            oprot.writeI32(self.new_flag)
+            oprot.writeFieldEnd()
+        if self.credit_mall_url is not None:
+            oprot.writeFieldBegin('credit_mall_url', TType.STRING, 6)
+            oprot.writeString(self.credit_mall_url.encode('utf-8') if sys.version_info[0] == 2 else self.credit_mall_url)
+            oprot.writeFieldEnd()
+        if self.task is not None:
+            oprot.writeFieldBegin('task', TType.LIST, 7)
+            oprot.writeListBegin(TType.STRUCT, len(self.task))
+            for iter202 in self.task:
+                iter202.write(oprot)
+            oprot.writeListEnd()
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+
+
+class credit_task_center_result(object):
+    """
+    Attributes:
+     - success
+     - boom
+     - bomb
+
+    """
+
+
+    def __init__(self, success=None, boom=None, bomb=None,):
+        self.success = success
+        self.boom = boom
+        self.bomb = bomb
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.STRUCT:
+                    self.success = CreditCenter()
+                    self.success.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.STRUCT:
+                    self.boom = SystemException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 3:
+                if ftype == TType.STRUCT:
+                    self.bomb = LogicException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('credit_task_center_result')
+        if self.success is not None:
+            oprot.writeFieldBegin('success', TType.STRUCT, 1)
+            self.success.write(oprot)
+            oprot.writeFieldEnd()
+        if self.boom is not None:
+            oprot.writeFieldBegin('boom', TType.STRUCT, 2)
+            self.boom.write(oprot)
+            oprot.writeFieldEnd()
+        if self.bomb is not None:
+            oprot.writeFieldBegin('bomb', TType.STRUCT, 3)
+            self.bomb.write(oprot)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+
+
 class BczSystemInfos(object):
     """
     Attributes:
@@ -5514,52 +7003,52 @@ class BczSystemInfos(object):
             if fid == 1:
                 if ftype == TType.LIST:
                     self.res_dns = []
-                    (_etype143, _size140) = iprot.readListBegin()
-                    for _i144 in range(_size140):
-                        _elem145 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
-                        self.res_dns.append(_elem145)
+                    (_etype206, _size203) = iprot.readListBegin()
+                    for _i207 in range(_size203):
+                        _elem208 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        self.res_dns.append(_elem208)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.LIST:
                     self.data_dns = []
-                    (_etype149, _size146) = iprot.readListBegin()
-                    for _i150 in range(_size146):
-                        _elem151 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
-                        self.data_dns.append(_elem151)
+                    (_etype212, _size209) = iprot.readListBegin()
+                    for _i213 in range(_size209):
+                        _elem214 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        self.data_dns.append(_elem214)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
             elif fid == 3:
                 if ftype == TType.MAP:
                     self.other_dns = {}
-                    (_ktype153, _vtype154, _size152) = iprot.readMapBegin()
-                    for _i156 in range(_size152):
-                        _key157 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
-                        _val158 = []
-                        (_etype162, _size159) = iprot.readListBegin()
-                        for _i163 in range(_size159):
-                            _elem164 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
-                            _val158.append(_elem164)
+                    (_ktype216, _vtype217, _size215) = iprot.readMapBegin()
+                    for _i219 in range(_size215):
+                        _key220 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        _val221 = []
+                        (_etype225, _size222) = iprot.readListBegin()
+                        for _i226 in range(_size222):
+                            _elem227 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                            _val221.append(_elem227)
                         iprot.readListEnd()
-                        self.other_dns[_key157] = _val158
+                        self.other_dns[_key220] = _val221
                     iprot.readMapEnd()
                 else:
                     iprot.skip(ftype)
             elif fid == 4:
                 if ftype == TType.MAP:
                     self.tls_dns = {}
-                    (_ktype166, _vtype167, _size165) = iprot.readMapBegin()
-                    for _i169 in range(_size165):
-                        _key170 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
-                        _val171 = []
-                        (_etype175, _size172) = iprot.readListBegin()
-                        for _i176 in range(_size172):
-                            _elem177 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
-                            _val171.append(_elem177)
+                    (_ktype229, _vtype230, _size228) = iprot.readMapBegin()
+                    for _i232 in range(_size228):
+                        _key233 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        _val234 = []
+                        (_etype238, _size235) = iprot.readListBegin()
+                        for _i239 in range(_size235):
+                            _elem240 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                            _val234.append(_elem240)
                         iprot.readListEnd()
-                        self.tls_dns[_key170] = _val171
+                        self.tls_dns[_key233] = _val234
                     iprot.readMapEnd()
                 else:
                     iprot.skip(ftype)
@@ -5576,36 +7065,36 @@ class BczSystemInfos(object):
         if self.res_dns is not None:
             oprot.writeFieldBegin('res_dns', TType.LIST, 1)
             oprot.writeListBegin(TType.STRING, len(self.res_dns))
-            for iter178 in self.res_dns:
-                oprot.writeString(iter178.encode('utf-8') if sys.version_info[0] == 2 else iter178)
+            for iter241 in self.res_dns:
+                oprot.writeString(iter241.encode('utf-8') if sys.version_info[0] == 2 else iter241)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.data_dns is not None:
             oprot.writeFieldBegin('data_dns', TType.LIST, 2)
             oprot.writeListBegin(TType.STRING, len(self.data_dns))
-            for iter179 in self.data_dns:
-                oprot.writeString(iter179.encode('utf-8') if sys.version_info[0] == 2 else iter179)
+            for iter242 in self.data_dns:
+                oprot.writeString(iter242.encode('utf-8') if sys.version_info[0] == 2 else iter242)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.other_dns is not None:
             oprot.writeFieldBegin('other_dns', TType.MAP, 3)
             oprot.writeMapBegin(TType.STRING, TType.LIST, len(self.other_dns))
-            for kiter180, viter181 in self.other_dns.items():
-                oprot.writeString(kiter180.encode('utf-8') if sys.version_info[0] == 2 else kiter180)
-                oprot.writeListBegin(TType.STRING, len(viter181))
-                for iter182 in viter181:
-                    oprot.writeString(iter182.encode('utf-8') if sys.version_info[0] == 2 else iter182)
+            for kiter243, viter244 in self.other_dns.items():
+                oprot.writeString(kiter243.encode('utf-8') if sys.version_info[0] == 2 else kiter243)
+                oprot.writeListBegin(TType.STRING, len(viter244))
+                for iter245 in viter244:
+                    oprot.writeString(iter245.encode('utf-8') if sys.version_info[0] == 2 else iter245)
                 oprot.writeListEnd()
             oprot.writeMapEnd()
             oprot.writeFieldEnd()
         if self.tls_dns is not None:
             oprot.writeFieldBegin('tls_dns', TType.MAP, 4)
             oprot.writeMapBegin(TType.STRING, TType.LIST, len(self.tls_dns))
-            for kiter183, viter184 in self.tls_dns.items():
-                oprot.writeString(kiter183.encode('utf-8') if sys.version_info[0] == 2 else kiter183)
-                oprot.writeListBegin(TType.STRING, len(viter184))
-                for iter185 in viter184:
-                    oprot.writeString(iter185.encode('utf-8') if sys.version_info[0] == 2 else iter185)
+            for kiter246, viter247 in self.tls_dns.items():
+                oprot.writeString(kiter246.encode('utf-8') if sys.version_info[0] == 2 else kiter246)
+                oprot.writeListBegin(TType.STRING, len(viter247))
+                for iter248 in viter247:
+                    oprot.writeString(iter248.encode('utf-8') if sys.version_info[0] == 2 else iter248)
                 oprot.writeListEnd()
             oprot.writeMapEnd()
             oprot.writeFieldEnd()
@@ -6276,11 +7765,11 @@ class PrivacyAgreementInfo(object):
             elif fid == 3:
                 if ftype == TType.MAP:
                     self.privacy_urls = {}
-                    (_ktype187, _vtype188, _size186) = iprot.readMapBegin()
-                    for _i190 in range(_size186):
-                        _key191 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
-                        _val192 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
-                        self.privacy_urls[_key191] = _val192
+                    (_ktype250, _vtype251, _size249) = iprot.readMapBegin()
+                    for _i253 in range(_size249):
+                        _key254 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        _val255 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        self.privacy_urls[_key254] = _val255
                     iprot.readMapEnd()
                 else:
                     iprot.skip(ftype)
@@ -6305,9 +7794,9 @@ class PrivacyAgreementInfo(object):
         if self.privacy_urls is not None:
             oprot.writeFieldBegin('privacy_urls', TType.MAP, 3)
             oprot.writeMapBegin(TType.STRING, TType.STRING, len(self.privacy_urls))
-            for kiter193, viter194 in self.privacy_urls.items():
-                oprot.writeString(kiter193.encode('utf-8') if sys.version_info[0] == 2 else kiter193)
-                oprot.writeString(viter194.encode('utf-8') if sys.version_info[0] == 2 else viter194)
+            for kiter256, viter257 in self.privacy_urls.items():
+                oprot.writeString(kiter256.encode('utf-8') if sys.version_info[0] == 2 else kiter256)
+                oprot.writeString(viter257.encode('utf-8') if sys.version_info[0] == 2 else viter257)
             oprot.writeMapEnd()
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -6435,10 +7924,10 @@ class get_domain_whitelist_result(object):
             if fid == 1:
                 if ftype == TType.LIST:
                     self.success = []
-                    (_etype198, _size195) = iprot.readListBegin()
-                    for _i199 in range(_size195):
-                        _elem200 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
-                        self.success.append(_elem200)
+                    (_etype261, _size258) = iprot.readListBegin()
+                    for _i262 in range(_size258):
+                        _elem263 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        self.success.append(_elem263)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -6465,8 +7954,8 @@ class get_domain_whitelist_result(object):
         if self.success is not None:
             oprot.writeFieldBegin('success', TType.LIST, 1)
             oprot.writeListBegin(TType.STRING, len(self.success))
-            for iter201 in self.success:
-                oprot.writeString(iter201.encode('utf-8') if sys.version_info[0] == 2 else iter201)
+            for iter264 in self.success:
+                oprot.writeString(iter264.encode('utf-8') if sys.version_info[0] == 2 else iter264)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.boom is not None:
@@ -6601,11 +8090,11 @@ class get_static_config_result(object):
             if fid == 1:
                 if ftype == TType.LIST:
                     self.success = []
-                    (_etype205, _size202) = iprot.readListBegin()
-                    for _i206 in range(_size202):
-                        _elem207 = StaticConfig()
-                        _elem207.read(iprot)
-                        self.success.append(_elem207)
+                    (_etype268, _size265) = iprot.readListBegin()
+                    for _i269 in range(_size265):
+                        _elem270 = StaticConfig()
+                        _elem270.read(iprot)
+                        self.success.append(_elem270)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -6632,8 +8121,8 @@ class get_static_config_result(object):
         if self.success is not None:
             oprot.writeFieldBegin('success', TType.LIST, 1)
             oprot.writeListBegin(TType.STRUCT, len(self.success))
-            for iter208 in self.success:
-                iter208.write(oprot)
+            for iter271 in self.success:
+                iter271.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.boom is not None:
@@ -7106,11 +8595,11 @@ class get_startup_ad_result(object):
             elif fid == 3:
                 if ftype == TType.LIST:
                     self.success = []
-                    (_etype212, _size209) = iprot.readListBegin()
-                    for _i213 in range(_size209):
-                        _elem214 = StartupAd()
-                        _elem214.read(iprot)
-                        self.success.append(_elem214)
+                    (_etype275, _size272) = iprot.readListBegin()
+                    for _i276 in range(_size272):
+                        _elem277 = StartupAd()
+                        _elem277.read(iprot)
+                        self.success.append(_elem277)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -7135,8 +8624,8 @@ class get_startup_ad_result(object):
         if self.success is not None:
             oprot.writeFieldBegin('success', TType.LIST, 3)
             oprot.writeListBegin(TType.STRUCT, len(self.success))
-            for iter215 in self.success:
-                iter215.write(oprot)
+            for iter278 in self.success:
+                iter278.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -7778,22 +9267,22 @@ class MallTabInfo(object):
             elif fid == 2:
                 if ftype == TType.LIST:
                     self.taobao = []
-                    (_etype219, _size216) = iprot.readListBegin()
-                    for _i220 in range(_size216):
-                        _elem221 = MallIconItem()
-                        _elem221.read(iprot)
-                        self.taobao.append(_elem221)
+                    (_etype282, _size279) = iprot.readListBegin()
+                    for _i283 in range(_size279):
+                        _elem284 = MallIconItem()
+                        _elem284.read(iprot)
+                        self.taobao.append(_elem284)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
             elif fid == 3:
                 if ftype == TType.LIST:
                     self.mall = []
-                    (_etype225, _size222) = iprot.readListBegin()
-                    for _i226 in range(_size222):
-                        _elem227 = MallIconItem()
-                        _elem227.read(iprot)
-                        self.mall.append(_elem227)
+                    (_etype288, _size285) = iprot.readListBegin()
+                    for _i289 in range(_size285):
+                        _elem290 = MallIconItem()
+                        _elem290.read(iprot)
+                        self.mall.append(_elem290)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -7814,15 +9303,15 @@ class MallTabInfo(object):
         if self.taobao is not None:
             oprot.writeFieldBegin('taobao', TType.LIST, 2)
             oprot.writeListBegin(TType.STRUCT, len(self.taobao))
-            for iter228 in self.taobao:
-                iter228.write(oprot)
+            for iter291 in self.taobao:
+                iter291.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.mall is not None:
             oprot.writeFieldBegin('mall', TType.LIST, 3)
             oprot.writeListBegin(TType.STRUCT, len(self.mall))
-            for iter229 in self.mall:
-                iter229.write(oprot)
+            for iter292 in self.mall:
+                iter292.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -8197,11 +9686,11 @@ class get_loading_ad_items_result(object):
             if fid == 1:
                 if ftype == TType.LIST:
                     self.success = []
-                    (_etype233, _size230) = iprot.readListBegin()
-                    for _i234 in range(_size230):
-                        _elem235 = AdvertiseLoadingItem()
-                        _elem235.read(iprot)
-                        self.success.append(_elem235)
+                    (_etype296, _size293) = iprot.readListBegin()
+                    for _i297 in range(_size293):
+                        _elem298 = AdvertiseLoadingItem()
+                        _elem298.read(iprot)
+                        self.success.append(_elem298)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -8228,8 +9717,8 @@ class get_loading_ad_items_result(object):
         if self.success is not None:
             oprot.writeFieldBegin('success', TType.LIST, 1)
             oprot.writeListBegin(TType.STRUCT, len(self.success))
-            for iter236 in self.success:
-                iter236.write(oprot)
+            for iter299 in self.success:
+                iter299.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.boom is not None:
@@ -8283,10 +9772,10 @@ class AdvertiseLoadingInfo(object):
             if fid == 1:
                 if ftype == TType.LIST:
                     self.ad_ids = []
-                    (_etype240, _size237) = iprot.readListBegin()
-                    for _i241 in range(_size237):
-                        _elem242 = iprot.readI32()
-                        self.ad_ids.append(_elem242)
+                    (_etype303, _size300) = iprot.readListBegin()
+                    for _i304 in range(_size300):
+                        _elem305 = iprot.readI32()
+                        self.ad_ids.append(_elem305)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -8308,8 +9797,8 @@ class AdvertiseLoadingInfo(object):
         if self.ad_ids is not None:
             oprot.writeFieldBegin('ad_ids', TType.LIST, 1)
             oprot.writeListBegin(TType.I32, len(self.ad_ids))
-            for iter243 in self.ad_ids:
-                oprot.writeI32(iter243)
+            for iter306 in self.ad_ids:
+                oprot.writeI32(iter306)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.module_name is not None:
@@ -8361,11 +9850,11 @@ class get_loading_ad_info_result(object):
             if fid == 1:
                 if ftype == TType.LIST:
                     self.success = []
-                    (_etype247, _size244) = iprot.readListBegin()
-                    for _i248 in range(_size244):
-                        _elem249 = AdvertiseLoadingInfo()
-                        _elem249.read(iprot)
-                        self.success.append(_elem249)
+                    (_etype310, _size307) = iprot.readListBegin()
+                    for _i311 in range(_size307):
+                        _elem312 = AdvertiseLoadingInfo()
+                        _elem312.read(iprot)
+                        self.success.append(_elem312)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -8392,8 +9881,8 @@ class get_loading_ad_info_result(object):
         if self.success is not None:
             oprot.writeFieldBegin('success', TType.LIST, 1)
             oprot.writeListBegin(TType.STRUCT, len(self.success))
-            for iter250 in self.success:
-                iter250.write(oprot)
+            for iter313 in self.success:
+                iter313.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.boom is not None:
@@ -8539,33 +10028,33 @@ class BottomAdvInfos(object):
             if fid == 1:
                 if ftype == TType.LIST:
                     self.carousel_banner = []
-                    (_etype254, _size251) = iprot.readListBegin()
-                    for _i255 in range(_size251):
-                        _elem256 = MainViewBottomAdv()
-                        _elem256.read(iprot)
-                        self.carousel_banner.append(_elem256)
+                    (_etype317, _size314) = iprot.readListBegin()
+                    for _i318 in range(_size314):
+                        _elem319 = MainViewBottomAdv()
+                        _elem319.read(iprot)
+                        self.carousel_banner.append(_elem319)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.LIST:
                     self.horizontal_banner = []
-                    (_etype260, _size257) = iprot.readListBegin()
-                    for _i261 in range(_size257):
-                        _elem262 = MainViewBottomAdv()
-                        _elem262.read(iprot)
-                        self.horizontal_banner.append(_elem262)
+                    (_etype323, _size320) = iprot.readListBegin()
+                    for _i324 in range(_size320):
+                        _elem325 = MainViewBottomAdv()
+                        _elem325.read(iprot)
+                        self.horizontal_banner.append(_elem325)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
             elif fid == 3:
                 if ftype == TType.LIST:
                     self.grid_ad = []
-                    (_etype266, _size263) = iprot.readListBegin()
-                    for _i267 in range(_size263):
-                        _elem268 = MainViewBottomAdv()
-                        _elem268.read(iprot)
-                        self.grid_ad.append(_elem268)
+                    (_etype329, _size326) = iprot.readListBegin()
+                    for _i330 in range(_size326):
+                        _elem331 = MainViewBottomAdv()
+                        _elem331.read(iprot)
+                        self.grid_ad.append(_elem331)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -8582,22 +10071,22 @@ class BottomAdvInfos(object):
         if self.carousel_banner is not None:
             oprot.writeFieldBegin('carousel_banner', TType.LIST, 1)
             oprot.writeListBegin(TType.STRUCT, len(self.carousel_banner))
-            for iter269 in self.carousel_banner:
-                iter269.write(oprot)
+            for iter332 in self.carousel_banner:
+                iter332.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.horizontal_banner is not None:
             oprot.writeFieldBegin('horizontal_banner', TType.LIST, 2)
             oprot.writeListBegin(TType.STRUCT, len(self.horizontal_banner))
-            for iter270 in self.horizontal_banner:
-                iter270.write(oprot)
+            for iter333 in self.horizontal_banner:
+                iter333.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.grid_ad is not None:
             oprot.writeFieldBegin('grid_ad', TType.LIST, 3)
             oprot.writeListBegin(TType.STRUCT, len(self.grid_ad))
-            for iter271 in self.grid_ad:
-                iter271.write(oprot)
+            for iter334 in self.grid_ad:
+                iter334.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -9029,11 +10518,11 @@ class get_main_view_top_banner_advs_result(object):
             if fid == 1:
                 if ftype == TType.LIST:
                     self.success = []
-                    (_etype275, _size272) = iprot.readListBegin()
-                    for _i276 in range(_size272):
-                        _elem277 = MainViewTopBannerAdv()
-                        _elem277.read(iprot)
-                        self.success.append(_elem277)
+                    (_etype338, _size335) = iprot.readListBegin()
+                    for _i339 in range(_size335):
+                        _elem340 = MainViewTopBannerAdv()
+                        _elem340.read(iprot)
+                        self.success.append(_elem340)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -9060,8 +10549,8 @@ class get_main_view_top_banner_advs_result(object):
         if self.success is not None:
             oprot.writeFieldBegin('success', TType.LIST, 1)
             oprot.writeListBegin(TType.STRUCT, len(self.success))
-            for iter278 in self.success:
-                iter278.write(oprot)
+            for iter341 in self.success:
+                iter341.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.boom is not None:
@@ -9389,30 +10878,30 @@ class UserBetaInfo(object):
             if fid == 1:
                 if ftype == TType.LIST:
                     self.beta_types = []
-                    (_etype282, _size279) = iprot.readListBegin()
-                    for _i283 in range(_size279):
-                        _elem284 = iprot.readI32()
-                        self.beta_types.append(_elem284)
+                    (_etype345, _size342) = iprot.readListBegin()
+                    for _i346 in range(_size342):
+                        _elem347 = iprot.readI32()
+                        self.beta_types.append(_elem347)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
             elif fid == 2:
                 if ftype == TType.LIST:
                     self.high_level_book_ids = []
-                    (_etype288, _size285) = iprot.readListBegin()
-                    for _i289 in range(_size285):
-                        _elem290 = iprot.readI32()
-                        self.high_level_book_ids.append(_elem290)
+                    (_etype351, _size348) = iprot.readListBegin()
+                    for _i352 in range(_size348):
+                        _elem353 = iprot.readI32()
+                        self.high_level_book_ids.append(_elem353)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
             elif fid == 3:
                 if ftype == TType.LIST:
                     self.daka_poster_book_ids = []
-                    (_etype294, _size291) = iprot.readListBegin()
-                    for _i295 in range(_size291):
-                        _elem296 = iprot.readI32()
-                        self.daka_poster_book_ids.append(_elem296)
+                    (_etype357, _size354) = iprot.readListBegin()
+                    for _i358 in range(_size354):
+                        _elem359 = iprot.readI32()
+                        self.daka_poster_book_ids.append(_elem359)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -9429,22 +10918,22 @@ class UserBetaInfo(object):
         if self.beta_types is not None:
             oprot.writeFieldBegin('beta_types', TType.LIST, 1)
             oprot.writeListBegin(TType.I32, len(self.beta_types))
-            for iter297 in self.beta_types:
-                oprot.writeI32(iter297)
+            for iter360 in self.beta_types:
+                oprot.writeI32(iter360)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.high_level_book_ids is not None:
             oprot.writeFieldBegin('high_level_book_ids', TType.LIST, 2)
             oprot.writeListBegin(TType.I32, len(self.high_level_book_ids))
-            for iter298 in self.high_level_book_ids:
-                oprot.writeI32(iter298)
+            for iter361 in self.high_level_book_ids:
+                oprot.writeI32(iter361)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.daka_poster_book_ids is not None:
             oprot.writeFieldBegin('daka_poster_book_ids', TType.LIST, 3)
             oprot.writeListBegin(TType.I32, len(self.daka_poster_book_ids))
-            for iter299 in self.daka_poster_book_ids:
-                oprot.writeI32(iter299)
+            for iter362 in self.daka_poster_book_ids:
+                oprot.writeI32(iter362)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -9568,10 +11057,10 @@ class report_event_args(object):
             if fid == 1:
                 if ftype == TType.LIST:
                     self.jsons = []
-                    (_etype303, _size300) = iprot.readListBegin()
-                    for _i304 in range(_size300):
-                        _elem305 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
-                        self.jsons.append(_elem305)
+                    (_etype366, _size363) = iprot.readListBegin()
+                    for _i367 in range(_size363):
+                        _elem368 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        self.jsons.append(_elem368)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -9588,8 +11077,8 @@ class report_event_args(object):
         if self.jsons is not None:
             oprot.writeFieldBegin('jsons', TType.LIST, 1)
             oprot.writeListBegin(TType.STRING, len(self.jsons))
-            for iter306 in self.jsons:
-                oprot.writeString(iter306.encode('utf-8') if sys.version_info[0] == 2 else iter306)
+            for iter369 in self.jsons:
+                oprot.writeString(iter369.encode('utf-8') if sys.version_info[0] == 2 else iter369)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -9906,10 +11395,10 @@ class Feedback(object):
             if fid == 1:
                 if ftype == TType.LIST:
                     self.selection = []
-                    (_etype310, _size307) = iprot.readListBegin()
-                    for _i311 in range(_size307):
-                        _elem312 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
-                        self.selection.append(_elem312)
+                    (_etype373, _size370) = iprot.readListBegin()
+                    for _i374 in range(_size370):
+                        _elem375 = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                        self.selection.append(_elem375)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -9931,8 +11420,8 @@ class Feedback(object):
         if self.selection is not None:
             oprot.writeFieldBegin('selection', TType.LIST, 1)
             oprot.writeListBegin(TType.STRING, len(self.selection))
-            for iter313 in self.selection:
-                oprot.writeString(iter313.encode('utf-8') if sys.version_info[0] == 2 else iter313)
+            for iter376 in self.selection:
+                oprot.writeString(iter376.encode('utf-8') if sys.version_info[0] == 2 else iter376)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.toast is not None:
@@ -10545,6 +12034,388 @@ class get_book_resource_update_info_result(object):
 
     def __ne__(self, other):
         return not (self == other)
+
+
+class BESystemException(TException):
+    """
+    Attributes:
+     - from_service
+     - from_method
+     - code
+     - message
+
+    """
+
+
+    def __init__(self, from_service=None, from_method=None, code=None, message=None,):
+        super(BESystemException, self).__setattr__('from_service', from_service)
+        super(BESystemException, self).__setattr__('from_method', from_method)
+        super(BESystemException, self).__setattr__('code', code)
+        super(BESystemException, self).__setattr__('message', message)
+
+    def __setattr__(self, *args):
+        raise TypeError("can't modify immutable instance")
+
+    def __delattr__(self, *args):
+        raise TypeError("can't modify immutable instance")
+
+    def __hash__(self):
+        return hash(self.__class__) ^ hash((self.from_service, self.from_method, self.code, self.message, ))
+
+    @classmethod
+    def read(cls, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and cls.thrift_spec is not None:
+            return iprot._fast_decode(None, iprot, [cls, cls.thrift_spec])
+        iprot.readStructBegin()
+        from_service = None
+        from_method = None
+        code = None
+        message = None
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.STRING:
+                    from_service = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.STRING:
+                    from_method = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 3:
+                if ftype == TType.I32:
+                    code = iprot.readI32()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 4:
+                if ftype == TType.STRING:
+                    message = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+        return cls(
+            from_service=from_service,
+            from_method=from_method,
+            code=code,
+            message=message,
+        )
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('BESystemException')
+        if self.from_service is not None:
+            oprot.writeFieldBegin('from_service', TType.STRING, 1)
+            oprot.writeString(self.from_service.encode('utf-8') if sys.version_info[0] == 2 else self.from_service)
+            oprot.writeFieldEnd()
+        if self.from_method is not None:
+            oprot.writeFieldBegin('from_method', TType.STRING, 2)
+            oprot.writeString(self.from_method.encode('utf-8') if sys.version_info[0] == 2 else self.from_method)
+            oprot.writeFieldEnd()
+        if self.code is not None:
+            oprot.writeFieldBegin('code', TType.I32, 3)
+            oprot.writeI32(self.code)
+            oprot.writeFieldEnd()
+        if self.message is not None:
+            oprot.writeFieldBegin('message', TType.STRING, 4)
+            oprot.writeString(self.message.encode('utf-8') if sys.version_info[0] == 2 else self.message)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __str__(self):
+        return repr(self)
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+
+
+class BELogicException(TException):
+    """
+    Attributes:
+     - from_service
+     - from_method
+     - code
+     - message
+
+    """
+
+
+    def __init__(self, from_service=None, from_method=None, code=None, message=None,):
+        super(BELogicException, self).__setattr__('from_service', from_service)
+        super(BELogicException, self).__setattr__('from_method', from_method)
+        super(BELogicException, self).__setattr__('code', code)
+        super(BELogicException, self).__setattr__('message', message)
+
+    def __setattr__(self, *args):
+        raise TypeError("can't modify immutable instance")
+
+    def __delattr__(self, *args):
+        raise TypeError("can't modify immutable instance")
+
+    def __hash__(self):
+        return hash(self.__class__) ^ hash((self.from_service, self.from_method, self.code, self.message, ))
+
+    @classmethod
+    def read(cls, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and cls.thrift_spec is not None:
+            return iprot._fast_decode(None, iprot, [cls, cls.thrift_spec])
+        iprot.readStructBegin()
+        from_service = None
+        from_method = None
+        code = None
+        message = None
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.STRING:
+                    from_service = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.STRING:
+                    from_method = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 3:
+                if ftype == TType.I32:
+                    code = iprot.readI32()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 4:
+                if ftype == TType.STRING:
+                    message = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+        return cls(
+            from_service=from_service,
+            from_method=from_method,
+            code=code,
+            message=message,
+        )
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('BELogicException')
+        if self.from_service is not None:
+            oprot.writeFieldBegin('from_service', TType.STRING, 1)
+            oprot.writeString(self.from_service.encode('utf-8') if sys.version_info[0] == 2 else self.from_service)
+            oprot.writeFieldEnd()
+        if self.from_method is not None:
+            oprot.writeFieldBegin('from_method', TType.STRING, 2)
+            oprot.writeString(self.from_method.encode('utf-8') if sys.version_info[0] == 2 else self.from_method)
+            oprot.writeFieldEnd()
+        if self.code is not None:
+            oprot.writeFieldBegin('code', TType.I32, 3)
+            oprot.writeI32(self.code)
+            oprot.writeFieldEnd()
+        if self.message is not None:
+            oprot.writeFieldBegin('message', TType.STRING, 4)
+            oprot.writeString(self.message.encode('utf-8') if sys.version_info[0] == 2 else self.message)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __str__(self):
+        return repr(self)
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+
+
+class send_share_success_args(object):
+    """
+    Attributes:
+     - module_name
+     - timestamp
+     - channel
+
+    """
+
+
+    def __init__(self, module_name=None, timestamp=None, channel=None,):
+        self.module_name = module_name
+        self.timestamp = timestamp
+        self.channel = channel
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.I32:
+                    self.module_name = iprot.readI32()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.I64:
+                    self.timestamp = iprot.readI64()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 3:
+                if ftype == TType.I32:
+                    self.channel = iprot.readI32()
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('send_share_success_args')
+        if self.module_name is not None:
+            oprot.writeFieldBegin('module_name', TType.I32, 1)
+            oprot.writeI32(self.module_name)
+            oprot.writeFieldEnd()
+        if self.timestamp is not None:
+            oprot.writeFieldBegin('timestamp', TType.I64, 2)
+            oprot.writeI64(self.timestamp)
+            oprot.writeFieldEnd()
+        if self.channel is not None:
+            oprot.writeFieldBegin('channel', TType.I32, 3)
+            oprot.writeI32(self.channel)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+
+
+class send_share_success_result(object):
+    """
+    Attributes:
+     - success
+     - sysException
+     - logicException
+
+    """
+
+
+    def __init__(self, success=None, sysException=None, logicException=None,):
+        self.success = success
+        self.sysException = sysException
+        self.logicException = logicException
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.BOOL:
+                    self.success = iprot.readBool()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.STRUCT:
+                    self.sysException = BESystemException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 3:
+                if ftype == TType.STRUCT:
+                    self.logicException = BELogicException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('send_share_success_result')
+        if self.success is not None:
+            oprot.writeFieldBegin('success', TType.BOOL, 1)
+            oprot.writeBool(self.success)
+            oprot.writeFieldEnd()
+        if self.sysException is not None:
+            oprot.writeFieldBegin('sysException', TType.STRUCT, 2)
+            self.sysException.write(oprot)
+            oprot.writeFieldEnd()
+        if self.logicException is not None:
+            oprot.writeFieldBegin('logicException', TType.STRUCT, 3)
+            self.logicException.write(oprot)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
 all_structs.append(LogicException)
 LogicException.thrift_spec = (
     None,  # 0
@@ -10817,6 +12688,11 @@ UserBookListInfo.thrift_spec = (
     (3, TType.LIST, 'levels_info', (TType.STRUCT, [BookLevelInfo, None], False), None, ),  # 3
     (4, TType.LIST, 'all_tops', (TType.STRUCT, [BookLevelInfo, None], False), None, ),  # 4
 )
+all_structs.append(get_all_books_basic_info_v3_args)
+get_all_books_basic_info_v3_args.thrift_spec = (
+    None,  # 0
+    (1, TType.STRUCT, 'book_list_info', [UserBookListInfo, None], None, ),  # 1
+)
 all_structs.append(win_streak_status_args)
 win_streak_status_args.thrift_spec = (
     None,  # 0
@@ -10837,6 +12713,18 @@ win_streak_status_result.thrift_spec = (
     (1, TType.STRUCT, 'success', [WinStreakStatus, None], None, ),  # 1
     (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
     (3, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 3
+)
+all_structs.append(submit_win_streak_records_args)
+submit_win_streak_records_args.thrift_spec = (
+    None,  # 0
+    (1, TType.I32, 'client_date', None, None, ),  # 1
+    (2, TType.LIST, 'win_streak_dates', (TType.I32, None, False), None, ),  # 2
+)
+all_structs.append(submit_win_streak_records_result)
+submit_win_streak_records_result.thrift_spec = (
+    None,  # 0
+    (1, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 1
+    (2, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 2
 )
 all_structs.append(user_limit_info_v2_result)
 user_limit_info_v2_result.thrift_spec = (
@@ -11000,6 +12888,111 @@ all_structs.append(get_train_page_resource_result)
 get_train_page_resource_result.thrift_spec = (
     None,  # 0
     (1, TType.STRUCT, 'success', [TrainPageResources, None], None, ),  # 1
+    (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
+    (3, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 3
+)
+all_structs.append(StudyExperienceRecord)
+StudyExperienceRecord.thrift_spec = (
+    None,  # 0
+    (1, TType.STRING, 'questionType', 'UTF8', None, ),  # 1
+    (2, TType.I32, 'behavior', None, None, ),  # 2
+    (3, TType.I32, 'cnt', None, None, ),  # 3
+)
+all_structs.append(submit_experience_record_args)
+submit_experience_record_args.thrift_spec = (
+    None,  # 0
+    (1, TType.LIST, 'records', (TType.STRUCT, [StudyExperienceRecord, None], False), None, ),  # 1
+)
+all_structs.append(submit_experience_record_result)
+submit_experience_record_result.thrift_spec = (
+    None,  # 0
+    (1, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 1
+    (2, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 2
+)
+all_structs.append(get_daka_background_datas_args)
+get_daka_background_datas_args.thrift_spec = (
+    None,  # 0
+    (1, TType.LIST, 'topic_ids', (TType.I32, None, False), None, ),  # 1
+)
+all_structs.append(DakaBackgroundCategoryInfo)
+DakaBackgroundCategoryInfo.thrift_spec = (
+    None,  # 0
+    (1, TType.STRING, 'name', 'UTF8', None, ),  # 1
+    (2, TType.LIST, 'images', (TType.STRING, 'UTF8', False), None, ),  # 2
+    (3, TType.LIST, 'colors', (TType.STRING, 'UTF8', False), None, ),  # 3
+    (4, TType.LIST, 'image_ids', (TType.I64, None, False), None, ),  # 4
+    (5, TType.STRING, 'sentence', 'UTF8', None, ),  # 5
+    (6, TType.STRING, 'sen_mean', 'UTF8', None, ),  # 6
+    (7, TType.STRING, 'sen_source', 'UTF8', None, ),  # 7
+    (8, TType.I32, 'win_days', None, None, ),  # 8
+    (9, TType.I32, 'win_type', None, None, ),  # 9
+)
+all_structs.append(DakaBackgroundData)
+DakaBackgroundData.thrift_spec = (
+    None,  # 0
+    (1, TType.LIST, 'category_info', (TType.STRUCT, [DakaBackgroundCategoryInfo, None], False), None, ),  # 1
+    (2, TType.STRING, 'logo', 'UTF8', None, ),  # 2
+    (3, TType.STRING, 'title', 'UTF8', None, ),  # 3
+    (4, TType.STRING, 'qr_image', 'UTF8', None, ),  # 4
+)
+all_structs.append(get_daka_background_datas_result)
+get_daka_background_datas_result.thrift_spec = (
+    None,  # 0
+    (1, TType.STRUCT, 'success', [DakaBackgroundData, None], None, ),  # 1
+    (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
+    (3, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 3
+)
+all_structs.append(share_bonus_args)
+share_bonus_args.thrift_spec = (
+    None,  # 0
+    (1, TType.I64, 'client_timestamp_ms', None, None, ),  # 1
+)
+all_structs.append(DakaShareBonusResult)
+DakaShareBonusResult.thrift_spec = (
+    None,  # 0
+    (1, TType.I32, 'coinCount', None, None, ),  # 1
+    (2, TType.I32, 'status', None, None, ),  # 2
+    (3, TType.STRING, 'message', 'UTF8', None, ),  # 3
+    (4, TType.STRING, 'shareSuccess', 'UTF8', None, ),  # 4
+    (5, TType.STRING, 'extraTip', 'UTF8', None, ),  # 5
+    (6, TType.STRING, 'action', 'UTF8', None, ),  # 6
+    (7, TType.STRING, 'actionUrl', 'UTF8', None, ),  # 7
+)
+all_structs.append(share_bonus_result)
+share_bonus_result.thrift_spec = (
+    None,  # 0
+    (1, TType.STRUCT, 'success', [DakaShareBonusResult, None], None, ),  # 1
+    (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
+    (3, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 3
+)
+all_structs.append(Task)
+Task.thrift_spec = (
+    None,  # 0
+    (1, TType.I32, 'task_id', None, None, ),  # 1
+    (2, TType.I32, 'task_type', None, None, ),  # 2
+    (3, TType.STRING, 'task_title', 'UTF8', None, ),  # 3
+    (4, TType.STRING, 'task_sub_title', 'UTF8', None, ),  # 4
+    (5, TType.STRING, 'award', 'UTF8', None, ),  # 5
+    (6, TType.I32, 'status', None, None, ),  # 6
+    (7, TType.STRING, 'button_desc', 'UTF8', None, ),  # 7
+    (8, TType.I32, 'button_action_type', None, None, ),  # 8
+    (9, TType.STRING, 'button_redirect_url', 'UTF8', None, ),  # 9
+)
+all_structs.append(CreditCenter)
+CreditCenter.thrift_spec = (
+    None,  # 0
+    (1, TType.I32, 'show_credit_center', None, None, ),  # 1
+    (2, TType.I32, 'credit', None, None, ),  # 2
+    (3, TType.I32, 'daily_inc_credit', None, None, ),  # 3
+    (4, TType.LIST, 'credit_item_img', (TType.STRING, 'UTF8', False), None, ),  # 4
+    (5, TType.I32, 'new_flag', None, None, ),  # 5
+    (6, TType.STRING, 'credit_mall_url', 'UTF8', None, ),  # 6
+    (7, TType.LIST, 'task', (TType.STRUCT, [Task, None], False), None, ),  # 7
+)
+all_structs.append(credit_task_center_result)
+credit_task_center_result.thrift_spec = (
+    None,  # 0
+    (1, TType.STRUCT, 'success', [CreditCenter, None], None, ),  # 1
     (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
     (3, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 3
 )
@@ -11431,6 +13424,36 @@ get_book_resource_update_info_result.thrift_spec = (
     (1, TType.STRUCT, 'success', [BookResourceUpdateInfo, None], None, ),  # 1
     (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
     (3, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 3
+)
+all_structs.append(BESystemException)
+BESystemException.thrift_spec = (
+    None,  # 0
+    (1, TType.STRING, 'from_service', 'UTF8', None, ),  # 1
+    (2, TType.STRING, 'from_method', 'UTF8', None, ),  # 2
+    (3, TType.I32, 'code', None, None, ),  # 3
+    (4, TType.STRING, 'message', 'UTF8', None, ),  # 4
+)
+all_structs.append(BELogicException)
+BELogicException.thrift_spec = (
+    None,  # 0
+    (1, TType.STRING, 'from_service', 'UTF8', None, ),  # 1
+    (2, TType.STRING, 'from_method', 'UTF8', None, ),  # 2
+    (3, TType.I32, 'code', None, None, ),  # 3
+    (4, TType.STRING, 'message', 'UTF8', None, ),  # 4
+)
+all_structs.append(send_share_success_args)
+send_share_success_args.thrift_spec = (
+    None,  # 0
+    (1, TType.I32, 'module_name', None, None, ),  # 1
+    (2, TType.I64, 'timestamp', None, None, ),  # 2
+    (3, TType.I32, 'channel', None, None, ),  # 3
+)
+all_structs.append(send_share_success_result)
+send_share_success_result.thrift_spec = (
+    None,  # 0
+    (1, TType.BOOL, 'success', None, None, ),  # 1
+    (2, TType.STRUCT, 'sysException', [BESystemException, None], None, ),  # 2
+    (3, TType.STRUCT, 'logicException', [BELogicException, None], None, ),  # 3
 )
 fix_spec(all_structs)
 del all_structs

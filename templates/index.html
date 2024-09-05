@@ -15,7 +15,7 @@
     window.onload = ()=>{
       let userData = JSON.parse(localStorage.getItem('userData'));
       if (userData == undefined) {
-        window.location.href = 'login';
+        window.location.href = 'accounts';
       } else {
         window.location.href = 'user';
       }

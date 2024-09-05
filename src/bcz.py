@@ -5,6 +5,7 @@ import struct
 import sqlite3
 import hashlib
 import requests
+import random
 from thrift.transport import TTransport
 from thrift.protocol import TCompactProtocol
 
@@ -298,7 +299,7 @@ def userBasicInfo(token: str) -> UserBasicInfoPlusV2:
         UserBasicInfoPlusV2: 用户信息
     """    
     timestamp = round(time.time())
-    url = "https://learn.baicizhan.com/rpc/user_study/user_basic_info_v2/{timestamp}"
+    url = f"https://learn.baicizhan.com/rpc/user_study/user_basic_info_v2/{timestamp}"
     device_id = hashlib.md5(token.encode("utf-8")).hexdigest()[:16]
     serial = hashlib.md5(token.encode("utf-8")).hexdigest()[:24]
     headers = {
@@ -411,7 +412,8 @@ def getCurrentBook(token: str) -> int:
     info = userBasicInfo(token)
     return info.user_info.current_word_level_id
 
-def getRandomWordIDInBook(db_path: str, book_id: int, count: int) -> list[int]:
+
+def getRandomWordIDInBook(db_path: str, book_id: int, count: int, word_learnt: list) -> list[int]:
     """获取指定单词数内指定数量随机单词ID
 
     Args:
@@ -425,24 +427,28 @@ def getRandomWordIDInBook(db_path: str, book_id: int, count: int) -> list[int]:
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT TOPIC_ID FROM TOPIC_BOOK_MAP WHERE BOOK_IDS LIKE ? ORDER BY RANDOM() LIMIT ?;",
-        (f'%{book_id}%', count )
+        "SELECT TOPIC_ID FROM TOPIC_BOOK_MAP WHERE BOOK_IDS LIKE ? ORDER BY RANDOM();",
+        (f'%{book_id}%',)
     )
     result = cursor.fetchall()
     conn.close()
+    # 从result中去除已经背过的单词
+    result = [i for i in result if i[0] not in word_learnt]
+    if len(result) > count:
+        result = random.sample(result, count)
     words = [i[0] for i in result]
     return words
     
 
 if __name__ == "__main__":
     ...
-    token = "irYnVIR41ocNA6cq2OOrWTDunlbQzdAXIVwYYZWek8I%3D"
+    # token = ""
 
     # book_id = getCurrentBook(token)
     # print(updateDoneData(token, book_id, getRandomWordIDInBook('lookup.db', book_id, count)))
 
-    # print(daka(token, date, count))
+    # print(daka(token, '20240829', 5))
 
-    print(getAllBooks(token))
+    # print(getAllBooks(token))
     # print(sendSmsVerifyCode(""))
     # print(loginWithPhone("", ""))

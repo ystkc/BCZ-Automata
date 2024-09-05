@@ -25,13 +25,18 @@ if len(sys.argv) <= 1 or sys.argv[1] == '--help':
     print('')
     print('Functions:')
     print('  UserSelectedBookInfo select_book(select_book_args args_)')
-    print('  i32 update_done_data(update_done_data_args args_)')
+    print('  i32 update_done_data(i64 last_sync_at,  arr_done_records, i32 current_word_level_id, bool is_today_completed)')
     print('  UserBookListInfo get_all_books_basic_info_v3()')
+    print('  void submit_experience_record( records)')
+    print('  DakaBackgroundData get_daka_background_datas( topic_ids)')
+    print('  DakaShareBonusResult share_bonus(i64 client_timestamp_ms)')
+    print('  CreditCenter credit_task_center()')
     print('  UserBasicInfoPlusV2 user_basic_info_v2()')
     print('  UserStudyConfig get_user_study_config()')
     print('  UserStudyMode get_user_study_mode()')
     print('  UserLimitInfoV2 user_limit_info_v2()')
     print('  WinStreakStatus win_streak_status(i32 client_date)')
+    print('  void submit_win_streak_records(i32 client_date,  win_streak_dates)')
     print('   get_books_replace_info()')
     print('  MainPageJS get_main_page_js()')
     print('  UserDakaShareInfo user_daka_v2(user_daka_v2_args args_)')
@@ -122,16 +127,40 @@ if cmd == 'select_book':
     pp.pprint(client.select_book(eval(args[0]),))
 
 elif cmd == 'update_done_data':
-    if len(args) != 1:
-        print('update_done_data requires 1 args')
+    if len(args) != 4:
+        print('update_done_data requires 4 args')
         sys.exit(1)
-    pp.pprint(client.update_done_data(eval(args[0]),))
+    pp.pprint(client.update_done_data(eval(args[0]), eval(args[1]), eval(args[2]), eval(args[3]),))
 
 elif cmd == 'get_all_books_basic_info_v3':
     if len(args) != 0:
         print('get_all_books_basic_info_v3 requires 0 args')
         sys.exit(1)
     pp.pprint(client.get_all_books_basic_info_v3())
+
+elif cmd == 'submit_experience_record':
+    if len(args) != 1:
+        print('submit_experience_record requires 1 args')
+        sys.exit(1)
+    pp.pprint(client.submit_experience_record(eval(args[0]),))
+
+elif cmd == 'get_daka_background_datas':
+    if len(args) != 1:
+        print('get_daka_background_datas requires 1 args')
+        sys.exit(1)
+    pp.pprint(client.get_daka_background_datas(eval(args[0]),))
+
+elif cmd == 'share_bonus':
+    if len(args) != 1:
+        print('share_bonus requires 1 args')
+        sys.exit(1)
+    pp.pprint(client.share_bonus(eval(args[0]),))
+
+elif cmd == 'credit_task_center':
+    if len(args) != 0:
+        print('credit_task_center requires 0 args')
+        sys.exit(1)
+    pp.pprint(client.credit_task_center())
 
 elif cmd == 'user_basic_info_v2':
     if len(args) != 0:
@@ -162,6 +191,12 @@ elif cmd == 'win_streak_status':
         print('win_streak_status requires 1 args')
         sys.exit(1)
     pp.pprint(client.win_streak_status(eval(args[0]),))
+
+elif cmd == 'submit_win_streak_records':
+    if len(args) != 2:
+        print('submit_win_streak_records requires 2 args')
+        sys.exit(1)
+    pp.pprint(client.submit_win_streak_records(eval(args[0]), eval(args[1]),))
 
 elif cmd == 'get_books_replace_info':
     if len(args) != 0:
