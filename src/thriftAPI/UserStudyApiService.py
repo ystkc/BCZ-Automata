@@ -68,6 +68,14 @@ class Iface(object):
     def credit_task_center(self):
         pass
 
+    def upload_task_action(self, req):
+        """
+        Parameters:
+         - req
+
+        """
+        pass
+
     def user_basic_info_v2(self):
         pass
 
@@ -361,6 +369,40 @@ class Client(Iface):
         if result.boom is not None:
             raise result.boom
         raise TApplicationException(TApplicationException.MISSING_RESULT, "credit_task_center failed: unknown result")
+
+    def upload_task_action(self, req):
+        """
+        Parameters:
+         - req
+
+        """
+        self.send_upload_task_action(req)
+        self.recv_upload_task_action()
+
+    def send_upload_task_action(self, req):
+        self._oprot.writeMessageBegin('upload_task_action', TMessageType.CALL, self._seqid)
+        args = upload_task_action_args()
+        args.req = req
+        args.write(self._oprot)
+        self._oprot.writeMessageEnd()
+        self._oprot.trans.flush()
+
+    def recv_upload_task_action(self):
+        iprot = self._iprot
+        (fname, mtype, rseqid) = iprot.readMessageBegin()
+        if mtype == TMessageType.EXCEPTION:
+            x = TApplicationException()
+            x.read(iprot)
+            iprot.readMessageEnd()
+            raise x
+        result = upload_task_action_result()
+        result.read(iprot)
+        iprot.readMessageEnd()
+        if result.bomb is not None:
+            raise result.bomb
+        if result.boom is not None:
+            raise result.boom
+        return
 
     def user_basic_info_v2(self):
         self.send_user_basic_info_v2()
@@ -692,6 +734,7 @@ class Processor(Iface, TProcessor):
         self._processMap["get_daka_background_datas"] = Processor.process_get_daka_background_datas
         self._processMap["share_bonus"] = Processor.process_share_bonus
         self._processMap["credit_task_center"] = Processor.process_credit_task_center
+        self._processMap["upload_task_action"] = Processor.process_upload_task_action
         self._processMap["user_basic_info_v2"] = Processor.process_user_basic_info_v2
         self._processMap["get_user_study_config"] = Processor.process_get_user_study_config
         self._processMap["get_user_study_mode"] = Processor.process_get_user_study_mode
@@ -917,6 +960,35 @@ class Processor(Iface, TProcessor):
             msg_type = TMessageType.EXCEPTION
             result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
         oprot.writeMessageBegin("credit_task_center", msg_type, seqid)
+        result.write(oprot)
+        oprot.writeMessageEnd()
+        oprot.trans.flush()
+
+    def process_upload_task_action(self, seqid, iprot, oprot):
+        args = upload_task_action_args()
+        args.read(iprot)
+        iprot.readMessageEnd()
+        result = upload_task_action_result()
+        try:
+            self._handler.upload_task_action(args.req)
+            msg_type = TMessageType.REPLY
+        except TTransport.TTransportException:
+            raise
+        except LogicException as bomb:
+            msg_type = TMessageType.REPLY
+            result.bomb = bomb
+        except SystemException as boom:
+            msg_type = TMessageType.REPLY
+            result.boom = boom
+        except TApplicationException as ex:
+            logging.exception('TApplication exception in handler')
+            msg_type = TMessageType.EXCEPTION
+            result = ex
+        except Exception:
+            logging.exception('Unexpected exception in handler')
+            msg_type = TMessageType.EXCEPTION
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+        oprot.writeMessageBegin("upload_task_action", msg_type, seqid)
         result.write(oprot)
         oprot.writeMessageEnd()
         oprot.trans.flush()
@@ -1373,11 +1445,11 @@ class update_done_data_args(object):
             elif fid == 2:
                 if ftype == TType.LIST:
                     self.arr_done_records = []
-                    (_etype387, _size384) = iprot.readListBegin()
-                    for _i388 in range(_size384):
-                        _elem389 = UserDoneWordRecord()
-                        _elem389.read(iprot)
-                        self.arr_done_records.append(_elem389)
+                    (_etype394, _size391) = iprot.readListBegin()
+                    for _i395 in range(_size391):
+                        _elem396 = UserDoneWordRecord()
+                        _elem396.read(iprot)
+                        self.arr_done_records.append(_elem396)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -1408,8 +1480,8 @@ class update_done_data_args(object):
         if self.arr_done_records is not None:
             oprot.writeFieldBegin('arr_done_records', TType.LIST, 2)
             oprot.writeListBegin(TType.STRUCT, len(self.arr_done_records))
-            for iter390 in self.arr_done_records:
-                iter390.write(oprot)
+            for iter397 in self.arr_done_records:
+                iter397.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.current_word_level_id is not None:
@@ -1683,11 +1755,11 @@ class submit_experience_record_args(object):
             if fid == 1:
                 if ftype == TType.LIST:
                     self.records = []
-                    (_etype394, _size391) = iprot.readListBegin()
-                    for _i395 in range(_size391):
-                        _elem396 = StudyExperienceRecord()
-                        _elem396.read(iprot)
-                        self.records.append(_elem396)
+                    (_etype401, _size398) = iprot.readListBegin()
+                    for _i402 in range(_size398):
+                        _elem403 = StudyExperienceRecord()
+                        _elem403.read(iprot)
+                        self.records.append(_elem403)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -1704,8 +1776,8 @@ class submit_experience_record_args(object):
         if self.records is not None:
             oprot.writeFieldBegin('records', TType.LIST, 1)
             oprot.writeListBegin(TType.STRUCT, len(self.records))
-            for iter397 in self.records:
-                iter397.write(oprot)
+            for iter404 in self.records:
+                iter404.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -1828,10 +1900,10 @@ class get_daka_background_datas_args(object):
             if fid == 1:
                 if ftype == TType.LIST:
                     self.topic_ids = []
-                    (_etype401, _size398) = iprot.readListBegin()
-                    for _i402 in range(_size398):
-                        _elem403 = iprot.readI32()
-                        self.topic_ids.append(_elem403)
+                    (_etype408, _size405) = iprot.readListBegin()
+                    for _i409 in range(_size405):
+                        _elem410 = iprot.readI32()
+                        self.topic_ids.append(_elem410)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -1848,8 +1920,8 @@ class get_daka_background_datas_args(object):
         if self.topic_ids is not None:
             oprot.writeFieldBegin('topic_ids', TType.LIST, 1)
             oprot.writeListBegin(TType.I32, len(self.topic_ids))
-            for iter404 in self.topic_ids:
-                oprot.writeI32(iter404)
+            for iter411 in self.topic_ids:
+                oprot.writeI32(iter411)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -2233,6 +2305,151 @@ class credit_task_center_result(object):
 all_structs.append(credit_task_center_result)
 credit_task_center_result.thrift_spec = (
     (0, TType.STRUCT, 'success', [CreditCenter, None], None, ),  # 0
+    (1, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 1
+    (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
+)
+
+
+class upload_task_action_args(object):
+    """
+    Attributes:
+     - req
+
+    """
+
+
+    def __init__(self, req=None,):
+        self.req = req
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.LIST:
+                    self.req = []
+                    (_etype415, _size412) = iprot.readListBegin()
+                    for _i416 in range(_size412):
+                        _elem417 = TaskUploadReq()
+                        _elem417.read(iprot)
+                        self.req.append(_elem417)
+                    iprot.readListEnd()
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('upload_task_action_args')
+        if self.req is not None:
+            oprot.writeFieldBegin('req', TType.LIST, 1)
+            oprot.writeListBegin(TType.STRUCT, len(self.req))
+            for iter418 in self.req:
+                iter418.write(oprot)
+            oprot.writeListEnd()
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+all_structs.append(upload_task_action_args)
+upload_task_action_args.thrift_spec = (
+    None,  # 0
+    (1, TType.LIST, 'req', (TType.STRUCT, [TaskUploadReq, None], False), None, ),  # 1
+)
+
+
+class upload_task_action_result(object):
+    """
+    Attributes:
+     - bomb
+     - boom
+
+    """
+
+
+    def __init__(self, bomb=None, boom=None,):
+        self.bomb = bomb
+        self.boom = boom
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.STRUCT:
+                    self.bomb = LogicException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.STRUCT:
+                    self.boom = SystemException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('upload_task_action_result')
+        if self.bomb is not None:
+            oprot.writeFieldBegin('bomb', TType.STRUCT, 1)
+            self.bomb.write(oprot)
+            oprot.writeFieldEnd()
+        if self.boom is not None:
+            oprot.writeFieldBegin('boom', TType.STRUCT, 2)
+            self.boom.write(oprot)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+all_structs.append(upload_task_action_result)
+upload_task_action_result.thrift_spec = (
+    None,  # 0
     (1, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 1
     (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
 )
@@ -2932,10 +3149,10 @@ class submit_win_streak_records_args(object):
             elif fid == 2:
                 if ftype == TType.LIST:
                     self.win_streak_dates = []
-                    (_etype408, _size405) = iprot.readListBegin()
-                    for _i409 in range(_size405):
-                        _elem410 = iprot.readI32()
-                        self.win_streak_dates.append(_elem410)
+                    (_etype422, _size419) = iprot.readListBegin()
+                    for _i423 in range(_size419):
+                        _elem424 = iprot.readI32()
+                        self.win_streak_dates.append(_elem424)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -2956,8 +3173,8 @@ class submit_win_streak_records_args(object):
         if self.win_streak_dates is not None:
             oprot.writeFieldBegin('win_streak_dates', TType.LIST, 2)
             oprot.writeListBegin(TType.I32, len(self.win_streak_dates))
-            for iter411 in self.win_streak_dates:
-                oprot.writeI32(iter411)
+            for iter425 in self.win_streak_dates:
+                oprot.writeI32(iter425)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -3128,11 +3345,11 @@ class get_books_replace_info_result(object):
             if fid == 0:
                 if ftype == TType.LIST:
                     self.success = []
-                    (_etype415, _size412) = iprot.readListBegin()
-                    for _i416 in range(_size412):
-                        _elem417 = BookReplaceInfo()
-                        _elem417.read(iprot)
-                        self.success.append(_elem417)
+                    (_etype429, _size426) = iprot.readListBegin()
+                    for _i430 in range(_size426):
+                        _elem431 = BookReplaceInfo()
+                        _elem431.read(iprot)
+                        self.success.append(_elem431)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -3159,8 +3376,8 @@ class get_books_replace_info_result(object):
         if self.success is not None:
             oprot.writeFieldBegin('success', TType.LIST, 0)
             oprot.writeListBegin(TType.STRUCT, len(self.success))
-            for iter418 in self.success:
-                iter418.write(oprot)
+            for iter432 in self.success:
+                iter432.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         if self.bomb is not None:

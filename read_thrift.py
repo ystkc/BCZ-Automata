@@ -8,19 +8,21 @@ from src.thrift_utils import print_thrift_object
 
 
 
-content = 'gkEBEnVzZXJfYmFzaWNfaW5mb192MgwAHBWyBhgM6auY6ICD6K+N5rGHFQYYCem+meaXuuaXuhhUaHR0cHM6Ly92b2wtdjYuYmN6Y2RuLmNvbS91Z2MvMjA1NjI3Nzk4NC9hdmF0YXIvMzlCNjdCNzVEQTdBMzkyNkNEOTVGMjQwNERDQkQ1NkIuanBnFgAsFQAYABYAFQAYABUAEgAYSOWujOaVtOaUtuW9lemrmOiAg+WfuuehgOivjeaxh+WSjOmrmOWIhuivjeaxh++8jOmAguWQiOWFqOWbveWQhOWcsOiAg+eUnxhPaHR0cHM6Ly83bi5iY3pjZG4uY29tL2Jvb2svZGVzY3JpcHRpb24vNDA5LzBmNWMwMTJmNzg2YTYwMjdmNDc0NWVkOTgyYzM3MzY4LnBuZxwVAhUWABgG5bm/5LicHBIVAAAAHBUAFQIVABUAFQAWxIPC7QwW4v+eqwoWAhYAFQAVABm8FRQVyAEVAgAVKBWQAxUCABU8FdgEFQIAFVAVoAYVAgAVZBXoBxUCABV4FbAJFQIAFYwBFfgKFQIAFaABFcAMFQIAFbQBFYgOFQIAFcgBFdAPFQIAFdwBFZgRFQIAFQIVBBUAFQYYjgF7ImVuYWJsZVN0dWR5U3BlbGxpbmciOnRydWUsImVuYWJsZVJldmlld1NwZWxsaW5nIjp0cnVlLCJlbmFibGVMaXN0ZW5pbmciOnRydWUsImVuYWJsZUNvbmZ1c2luZ09wdGlvbiI6dHJ1ZSwid29yZEFjY2VudCI6MCwiZGlzcGxheUltZyI6ZmFsc2V9FQIWqqjH7QwAHBbSlMftDBUKFSgAAAA='
+content = 'GRwYCWxlYXJuTW9yZRUKAAA='
 # 要从方法名后面开始复制！不然解读不了
 decoded_content = base64.b64decode(content)
 # print(decoded_content)
 transport = TTransport.TMemoryBuffer(decoded_content)
 protocol = TCompactProtocol.TCompactProtocol(transport)
 
-from src.thriftAPI import UserStudyApiService
-client = UserStudyApiService.Client(protocol)
-result = client.recv_user_basic_info_v2()
+from src.thriftAPI.ttypes import *
+# client = UserStudyApiService.Client(protocol)
+args = upload_task_action_args()
+args.read(protocol)
+print_thrift_object(args)
 transport.close()
 
-print_thrift_object(result)
+# print_thrift_object(result)
 
 # i32读取方式：
 # protocol.readStructBegin()

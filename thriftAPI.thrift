@@ -521,6 +521,14 @@ struct credit_task_center_result{
     2: SystemException boom,
     3: LogicException bomb
 }
+## upload_task_action
+struct upload_task_action_args{
+    1: list<TaskUploadReq> req
+}
+struct TaskUploadReq{
+    1: string action,
+    2: i32 cnt
+}
 
 
 service UserStudyApiService {
@@ -531,6 +539,7 @@ service UserStudyApiService {
     DakaBackgroundData get_daka_background_datas(1: list<i32> topic_ids) throws (1: LogicException bomb, 2: SystemException boom)
     DakaShareBonusResult share_bonus(1: i64 client_timestamp_ms) throws (1: LogicException bomb, 2: SystemException boom)
     CreditCenter credit_task_center() throws (1: LogicException bomb, 2: SystemException boom)
+    void upload_task_action(1: list<TaskUploadReq> req) throws (1: LogicException bomb, 2: SystemException boom)
     # C
     UserBasicInfoPlusV2 user_basic_info_v2() throws (1: LogicException bomb, 2: SystemException boom)
     UserStudyConfig get_user_study_config() throws (1: LogicException bomb, 2: SystemException boom)

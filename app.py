@@ -346,6 +346,11 @@ def own_groups():
                 group['introduction'] = ''
             if group['notice'] is None:
                 group['notice'] = ''
+            # 检查如果introduction和notice中有连续2个以上换行符，则替换成一个换行符
+            while group['introduction'].count('\n\n\n') > 0:
+                group['introduction'] = group['introduction'].replace('\n\n\n', '\n')
+            while group['notice'].count('\n\n\n') > 0:
+                group['notice'] = group['notice'].replace('\n\n\n', '\n')
             introduction = group['introduction'].replace('\n', '<br>')
             notice = group['notice'].replace('\n', '<br>')
             groups.append({
