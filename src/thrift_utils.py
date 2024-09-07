@@ -333,46 +333,39 @@ report_json = [
         "event_id": "together_recite_click",
         "extra_info": "{\"button\":\"coin\",\"channel\":\"class\"}"
     },
-    {# 23 班级段位奖励
+    {# 24 班级段位奖励
         "log_time": "1723852064583",
         "product_id": "bcz_app_h5",
         "stat_group": "explore-common",
         "event_id": "together_recite_click",
         "extra_info": "{\"button\":\"coin\",\"channel\":\"class_level\"}"
     },
-    {# 24 点击商城
+    {# 25 点击商城
         "event_id": "mall-tab-click",
         "log_time": "1723852206439",
         "product_id": "bcz_app",
         "stat_group": "main-study"
     },
-    {# 25 加载商城
+    {# 26 加载商城
         "event_id": "mall-tab-click_extra_v2",
         "extra_info": "{\"servertype\":1,\"imageurl\":\"https://vol-v6.bczcdn.com/r/ltxwm285a8njpqetlsmf66453zsulws4.png\",\"taobaoinstalled\":false,\"aid\":\"10000\",\"jumptype\":1}",
         "log_time": "1723852206446",
         "product_id": "bcz_app",
         "stat_group": "h5-error"
     },
-    {# 26 商城heartbeat
+    {# 27 商城heartbeat
         "log_time": "1723852214632",
         "product_id": "bcz_app_h5",
         "stat_group": "bcz-mall-common",
         "event_id": "mall_carousel_show",
         "extra_info": "{\"trace\":\"bcz_app_main\",\"_path\":\"/homeV2\",\"banner_idx\":2,\"link_url\":\"https://learn.baicizhan.com/new_copper/link-to-duiba?linkTo=https%3A%2F%2Factivity-6.m.duiba.com.cn%2Fhdtool%2Findex%3Fid%3D272751389954266%26dbnewopen\"}"
     },
-    {# 27 任务中心
+    {# 28 任务中心
         "stat_group": "activity-common",
         "event_id": "study_task_main_show",
         "product_id": "bcz_app_h5",
         "log_time": "1725581943815",
         "extra_info": "{\"task_id\":1631590}"# 最后一个任务
-    },
-    {# 28 任务显示
-        "stat_group": "activity-common",
-        "event_id": "study_task_main_show",
-        "product_id": "bcz_app_h5",
-        "log_time": "1725581943856",
-        "extra_info": "{\"task_id\":1742941}"# 除了最后一个任务
     }
 
 
@@ -2052,6 +2045,8 @@ def yzdd(user_cookie=user_cookie, user_config=user_config):
 
 def daka(user_cookie=user_cookie, user_config=user_config, only_yzdd=False):
     '''为用户打卡'''
+    
+    
     yield yzdd(user_cookie=user_cookie, user_config=user_config)
     if only_yzdd or user_config.get('only_yzdd', "False") == "True":
         return
@@ -2268,7 +2263,7 @@ def daka(user_cookie=user_cookie, user_config=user_config, only_yzdd=False):
             ]
             report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=0)
             sleep_time = (random.randint(3000, 6000) / 1000)
-            if random.randint(1, 4) == 1:
+            if random.randint(1, 5) == 1:
                 # 错题
                 review_wrong_cnt += 1
                 time.sleep(sleep_time)
@@ -2416,63 +2411,62 @@ def daka(user_cookie=user_cookie, user_config=user_config, only_yzdd=False):
         progress = monthly_task_data.get('progress', 'null')
         total = monthly_task_data.get('actionCnt', 'null')
 
-    if progress != 'null' and total != 'null':
-        # 前往任务中心领取奖励
-        def get_award(user_task_id):
+
+    # 前往任务中心领取奖励
+    def get_award(user_task_id, task_award_list):
             # https://social.baicizhan.com/api/task/v2/getAward?userTaskId=1631594
             time_long = int(time.time() * 1000)
             headers = getHeaders("$social", user_cookie, time_long, index=1)
             headers['Content-Type']= 'application/json'
             response = send_http2_request('POST', f'https://{headers["Host"]}/api/task/v2/getAward?userTaskId={user_task_id}', headers, content = '{}')
-            return response.json()
+            data = response.json()
+            if data.get('code', 0) == 1:
+                return get_award_str(task_award_list)
+            else:
+                return f'失败{data.get("msg", "")}'
         
-        def get_award_str(award_list):
-            award_str = ''
-            for award in award_list:
-                award_str += f'{award["type"]}+{award["cnt"]} '
+    def get_award_str(award_list):
+        award_str = ''
+        for award in award_list:
+            award_str += f'{award["type"]}+{award["cnt"]} '
 
-        def get_task_center_reward_desc():
-            # https://social.baicizhan.com/api/task/v2/home
+    def get_task_center_reward_desc(user_cookie, user_config):
+        # https://social.baicizhan.com/api/task/v2/home
 
-            time_long = int(time.time() * 1000)
-            headers = getHeaders("$social", user_cookie, time_long, index=1)
-            response = send_http2_request('GET', f'https://{headers["Host"]}/api/task/v2/home', headers, None)
-            data = response.json()['data']
-            last_task_id = data['taskList'][-1]['userTaskId']
-            payload = {
-                {"index": 27, "extra_info": "{\"task_id\":%d}" % last_task_id}
-            }
-            message = ""
+        time_long = int(time.time() * 1000)
+        headers = getHeaders("$social", user_cookie, time_long, index=1)
+        response = send_http2_request('GET', f'https://{headers["Host"]}/api/task/v2/home', headers, None)
+        data = response.json()['data']
+        message = ""
+        for task in data['taskList']:
+            task_id = task['userTaskId']
+            task_name = task['taskName']
+            task_type = task['taskType']
+            task_progress = task['progress']
+            task_action_cnt = task['actionCnt']
+            message += f'#{task_type}.{task_name}{task_progress}/{task_action_cnt} '
+            payload = [
+                {"index": 28, "extra_info": "{\"task_id\":%d}" % task_id}
+            ]
             report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=1)
-            for task in data['taskList']:
-                task_id = task['userTaskId']
-                payload = {
-                    {"index": 28, "extra_info": "{\"task_id\":%d}" % task_id}
-                }
-                report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=1)
-                time.sleep(response_wait_second)
-                if task['taskType'] == 31: # taskName=完成今日学习计划
-                    if task['status'] == 1:
-                        if (get_award(task['userTaskId']).get('code', 0) == 1):
-                            award_str = get_award_str(task['awardList'])
-                            message += f'#31今日学习计划{award_str}<br>'
-                        else:
-                            message += f'#31今日学习计划领取失败<br>'
-                # if task['taskType'] == 32: # taskName=完成1局单词消消练（忽略）
-                if task['taskType'] == 33: # taskName=加量学5个单词
-                    time.sleep(1500)
-                    user_study.user_study_upload_task_action(user_cookie=user_cookie, user_config=user_config, task_upload_req_list=[['learnMore', 5]])
-                    time.sleep(3000)
-                    if (get_award(task['userTaskId']).get('code', 0) == 1):
-                        award_str = get_award_str(task['awardList'])
-                        message += f'#33加量学5个单词{award_str}<br>'
-                    else:
-                        message += f'#33加量学5个单词领取失败<br>'
-                else:
-                    message += f'#{task["taskType"]}{task["taskName"]}<br>'
-                    # 其他还没记录，先返回描述供开发
-            return message
-        message_str += get_task_center_reward_desc()
+            
+            if task['status'] == 1:
+                message += f"领取{get_award(task['userTaskId'], task['awardList'])}<br>"
+            if task_name == '加量学5个单词':
+                time.sleep(1.5)
+                user_study.user_study_upload_task_action(user_cookie=user_cookie, user_config=user_config, task_upload_req_list=[['learnMore', 5]])
+                time.sleep(3)
+                message += f"领取{get_award(task['userTaskId'], task['awardList'])}<br>"
+            # elif task_name == '完成今日学习计划':
+            # elif taskname == '完成1局单词消消练':
+            else:
+                message += '<br>'
+            # 其他还没记录，先返回描述供开发
+        return message
+    
+    if progress != 'null' and total != 'null':
+        # 前往任务中心领取奖励
+        message_str += get_task_center_reward_desc(user_cookie, user_config)
 
     message_str += f'{win_streak_days}天<br>学习分{score}排{rank}段第{level_in_rank}名 月任务{progress}/{total}<br>分享中'
     yield message_str
@@ -2630,7 +2624,7 @@ def daka(user_cookie=user_cookie, user_config=user_config, only_yzdd=False):
         
     def class_reward_desc(type):# 班级奖励
         payload=[
-            {"index": 23},# 点击领取班级奖励
+            {"index": 23 + type},# 点击领取班级奖励
         ]
         report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=0)
 
@@ -2689,12 +2683,12 @@ def daka(user_cookie=user_cookie, user_config=user_config, only_yzdd=False):
     time.sleep(react_wait_second)
 
     payload=[
-        {"index": 24},# 点击
-        {"index": 25} # 加载商城
+        {"index": 25},# 点击
+        {"index": 26} # 加载商城
     ]
     report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=0)
     payload=[
-        {"index": 26},# heartbeat
+        {"index": 27},# heartbeat
     ]
     report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=1)
     time.sleep(react_wait_second)

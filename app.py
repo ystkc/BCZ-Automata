@@ -8,6 +8,7 @@ import hashlib
 import certifi
 import random
 import datetime
+import traceback
 
 from flask import Flask, Response, render_template, jsonify, request
 from werkzeug.serving import WSGIRequestHandler, _log
@@ -214,8 +215,14 @@ pace = 6
 def change_notice_sse_func(unique_id, group_share_key, content):
     for event in change_notice_sse_func_(unique_id, group_share_key, content):
         target = event.replace('\n', '<br>')
+        target = target.replace('\r', '<br>')
+        target = target.replace('<br><br>', '<br>')
+        # print(target)
         yield f"data: {target}\n\n"
 def change_notice_sse_func_(unique_id, group_share_key, content):
+    # print(content)
+    # yield content
+    # return
     user_dict = user_dict_obj.find(unique_id)
     time_long = int(time.time() * 1000)
     headers = getHeaders('$group', user_dict['cookie'], time_long, index = 1)
@@ -230,6 +237,10 @@ def change_notice_sse_func_(unique_id, group_share_key, content):
         yield '通知发送成功<br><br>' + content
     elif response_json['message'] == '小班公告内容涉嫌违规，请修改':
         reversed = False
+        if content[0] == '#':
+            message_str = f'{response_json["message"]}<br>{content}'
+            yield message_str
+            return
         if content[0] == '<' or content[0] == '>':
             reversed = True
             response_json['message'] += '_reversed'
@@ -418,7 +429,9 @@ def daka_sse(unique_id):
     except Exception as e:
         with open(f'error_{unique_id}_{int(time.time())}.txt', 'w', encoding='utf-8') as f:
             f.write(str(e))
-        return restful(400, f'{e}')
+            f.write(traceback.format_exc())
+            raise e 
+            
         
 
 @app.route('/api/more_groups', methods=['POST'])

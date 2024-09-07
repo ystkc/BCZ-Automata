@@ -166,6 +166,7 @@ function changeNotice(element, group_share_key, unique_id){
     let sse = new EventSource(`/api/change_notice_sse?group_share_key=${group_share_key}&unique_id=${unique_id}`);
     sse.onmessage = function(event) {
         notice_span.innerHTML = event.data;
+        // console.log(event.data);
     };
   })
  .catch(function(error) {
