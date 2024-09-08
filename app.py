@@ -379,7 +379,7 @@ def own_groups():
         headers = getHeaders('$group', user_dict['cookie'], time_long, index = 1)
         response = requests.get('https://group.baicizhan.com/group/study_words_together_home_page', headers=headers)
         response_json = response.json()
-        print(response_json['data']['todayDaka'])
+        # print(response_json['data']['todayDaka'])
         today_daka = '1已打卡' if response_json['data']['todayDaka'] else '0未打卡'
         
         response = requests.get('https://group.baicizhan.com/group/get_group_user_info', headers=getHeaders('$group', user_dict['cookie'], time_long, index = 1)) # 我的小班
@@ -423,8 +423,10 @@ def daka():
     
 def daka_sse(unique_id):
     try:
-        user_dict = user_dict_obj.find(unique_id)
-        for msg in thrift_utils.daka(user_cookie = user_dict['cookie'], user_config = user_dict['config']):
+        index, user_dict = user_dict_obj.find(unique_id)
+        user_dict['config']['user_index'] = index
+        user_cnt = len(user_dict_list)
+        for msg in thrift_utils.daka(user_cookie = user_dict['cookie'], user_config = user_dict['config'], total_user_cnt=user_cnt):
             yield f'data: {msg}\n\n'
     except Exception as e:
         with open(f'error_{unique_id}_{int(time.time())}.txt', 'w', encoding='utf-8') as f:

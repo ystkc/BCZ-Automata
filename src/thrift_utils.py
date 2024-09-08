@@ -30,7 +30,7 @@ import traceback
 
 
 default_headers = [
-    {
+    {# thrift请求头
         "Accept": "application/x-thrift",
         "User-Agent": "bcz_app/android/7.6.1",
         "Cookie": {
@@ -50,7 +50,7 @@ default_headers = [
         "Host": "system.baicizhan.com",
         "Connection": "Keep-Alive",
         "Accept-Encoding": "gzip"
-    },{
+    },{# json请求头
         "Host": "group.baicizhan.com",
         "Connection": "keep-alive",
         "User-Agent": "bcz_app_android/7060100 android_version/12 device_name/DCO-AL00 - HUAWEI",
@@ -74,6 +74,45 @@ default_headers = [
             "channel": "qq",
             "client_time": "",
             "serial": ""
+        }
+    },{# options请求头
+        "Host": "",
+        "Connection": "keep-alive",
+        "Accept": "*/*",
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "content-type",
+        "Origin": "https://pk.baicizhan.com",
+        "User-Agent": "bcz_app_android/7060901 android_version/12 device_name/DCO-AL00 - HUAWEI",
+        "Sec-Fetch-Mode": "cors",
+        "X-Requested-With": "com.jiongji.andriod.card",
+        "Sec-Fetch-Site": "same-site",
+        "Sec-Fetch-Dest": "empty",
+        "Referer": "https://pk.baicizhan.com/",
+        "Accept-Encoding": "gzip, deflate",
+        "Accept-Language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7"
+    },{# pk请求头
+        "Host": "pkonline1.baicizhan.com",
+        "Connection": "keep-alive",
+        "User-Agent": "bcz_app_android/7060901 android_version/12 device_name/DCO-AL00 - HUAWEI",
+        "Accept": "*/*",
+        "Origin": "https://pk.baicizhan.com",
+        "X-Requested-With": "com.jiongji.andriod.card",
+        "Sec-Fetch-Site": "same-site",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Dest": "empty",
+        "Referer": "https://pk.baicizhan.com/",
+        "Accept-Encoding": "gzip, deflate",
+        "Accept-Language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Cookie": {
+            "access_token": "",
+            "Pay-Support-H5": "alipay_mob_client:weixin_app:qq_app",
+            "device_name": "android/DCO-AL00-HUAWEI",
+            "bcz_dmid": "2a16dfbb",
+            "device_version": "12",
+            "device_id": "",
+            "app_name": "7060100",
+            "channel": "qq",
+            "client_time": ""
         }
     }
 ]
@@ -149,7 +188,7 @@ class user_dict:
         unique_id = int(unique_id)
         for i in range(len(self.user_dict_list)):
             if self.user_dict_list[i]['config']['unique_id'] == unique_id:
-                return self.user_dict_list[i]
+                return i, self.user_dict_list[i]
         return None
     
     def update_book_id(self, unique_id, book_id):
@@ -366,6 +405,69 @@ report_json = [
         "product_id": "bcz_app_h5",
         "log_time": "1725581943815",
         "extra_info": "{\"task_id\":1631590}"# 最后一个任务
+    },
+    {# 29 pk加载
+        "stat_group": "activity-common",
+        "event_id": "BCZ_NCSVC_ActivityHomePageView",
+        "product_id": "bcz_app_h5",
+        "log_time": 1725754449459,
+        "extra_info": "{\"ABPage\":\"B\"}"
+    },
+    {# 30 pk主页面
+        "stat_group": "activity-common",
+        "event_id": "BCZ_NCSVC_ArenaHomePageView",
+        "product_id": "bcz_app_h5",
+        "log_time": 1725754449945,
+        "extra_info": "{\"SignStatus\":1}"
+    },
+    {# 31 进入pk准备页面
+        "stat_group": "activity-common",
+        "event_id": "BCZ_NCSVC_ArenaHomePageGoPKClick",
+        "product_id": "bcz_app_h5",
+        "log_time": 1725754453782,
+        "extra_info": "{\"SignStatus\":1}"
+    },
+    {# 32 pk练习页面
+        "stat_group": "activity-common",
+        "event_id": "BCZ_NCSVC_PKPracticeMainPageView",
+        "product_id": "bcz_app_h5",
+        "log_time": 1725754453883,
+        "extra_info": "{}"
+    },
+    {# 33 pk开始
+        "stat_group": "activity-common",
+        "event_id": "PKPracticePageBeginClick",
+        "product_id": "bcz_app_h5",
+        "log_time": 1725756092359,
+        "extra_info": "{}"
+    },
+    {# 34 pk回合开始
+        "stat_group": "activity-common",
+        "event_id": "BCZ_NCSVC_PKPracticeChallengeBegin",
+        "product_id": "bcz_app_h5",
+        "log_time": 1725756094213,
+        "extra_info": "{\"CurrentRound\":0}"
+    },
+    {# 35 pk匹配成功
+        "stat_group": "activity-common",
+        "event_id": "PKMatchSuccess",
+        "product_id": "bcz_app_h5",
+        "log_time": 1725756096025,
+        "extra_info": "{\"MatchTime\":1811}"
+    },
+    {# 36 pk选择答案
+        "stat_group": "activity-common",
+        "event_id": "PKQuestionChoiceClick",
+        "product_id": "bcz_app_h5",
+        "log_time": 1725756102245,
+        "extra_info": "{\"ContestId\":null,\"ChallengeId\":15034976,\"QuesOrder\":1,\"PuzzleId\":12656,\"ChoiceOrder\":3,\"CostTime\":2824,\"IsRight\":false}"
+    },
+    {# 37 pk结束
+        "stat_group": "activity-common",
+        "event_id": "BCZ_NCSVC_PKPracticeChallengeFinish",
+        "product_id": "bcz_app_h5",
+        "log_time": 1725756149177,
+        "extra_info": "{\"CurrentRound\":1}"
     }
 
 
@@ -400,7 +502,8 @@ host_dict = {
     'advertise': ['https://advertise.baicizhan.com', 'https://advertise.bczeducation.cn', 'http://advertise.baicizhan.com', 'http://advertise.bczeducation.cn'],
     'group': ['https://group.baicizhan.com', 'https://group.bczeducation.cn', 'http://group.baicizhan.com', 'http://group.bczeducation.cn'],
     'social': ['https://social.baicizhan.com', 'https://social.bczeducation.cn', 'http://social.baicizhan.com', 'http://social.bczeducation.cn'],
-    "pkonline":['https://pkonline2.baicizhan.com']
+    "pkonline2":['https://pkonline2.baicizhan.com'],
+    "pkonline1":['https://pkonline1.baicizhan.com']
 }
 
 def generator(content):
@@ -452,17 +555,18 @@ def getHeaders(host: str, user_cookie: dict, time_long: int, wrap_url: str = '',
     返回headers(非wrap_url)，返回headers_str(wrap_url)'''
     headers = default_headers[index].copy()
     # 将cookie中的时间戳更新
-    for k, _ in headers['Cookie'].items():
-        if k == 'client_time':
-            headers['Cookie'][k] = str(time_long)
-        elif k =='serial':
-            device_id = headers['Cookie']['device_id']
-            headers['Cookie'][k] = f"{device_id[:6]}{device_id[13:]}{str(time_long & 67108863)}"
-        else:
-            # 由于user_cookie并不是所有接口都需要的，所以需要判断一下
-            headers['Cookie'][k] = user_cookie[k]
-    # 将cookie转换为字符串
-    headers['Cookie'] = '; '.join([f'{k}={v}' for k, v in headers['Cookie'].items()])
+    if headers.get('Cookie') is not None:
+        for k, _ in headers['Cookie'].items():
+            if k == 'client_time':
+                headers['Cookie'][k] = str(time_long)
+            elif k =='serial':
+                device_id = headers['Cookie']['device_id']
+                headers['Cookie'][k] = f"{device_id[:6]}{device_id[13:]}{str(time_long & 67108863)}"
+            else:
+                # 由于user_cookie并不是所有接口都需要的，所以需要判断一下
+                headers['Cookie'][k] = user_cookie[k]
+        # 将cookie转换为字符串
+        headers['Cookie'] = '; '.join([f'{k}={v}' for k, v in headers['Cookie'].items()])
     if host[0] == '$':
         # 需要将目标中的https://或http://去掉
         parsed = host_dict[host[1:]][0].split('://')
@@ -1975,11 +2079,292 @@ def heartbeat_demon(user_cookie=user_cookie, user_config=user_config):
             if unique_id not in daka_list:
                 break
 
+
+def puzzle_init(puzzle_category):
+    conn = sqlite3.connect('puzzle.db')
+    cursor = conn.cursor()
+    cursor.execute(f'''CREATE TABLE IF NOT EXISTS {puzzle_category} (
+        ID INTEGER UNIQUE,
+        QUESTION TEXT,
+        CHN_MEAN TEXT,
+        ANSWER TEXT,
+        OPTIONS1 TEXT,
+        OPTIONS2 TEXT,
+        OPTIONS3 TEXT,
+        TOPIC_ID INTEGER)
+    ''')
+    conn.commit()
+
+def puzzle_solver(puzzle_dict, puzzle_category):
+    # 链接数据库
+    conn = sqlite3.connect('puzzle.db')
+    cursor = conn.cursor()
+    id = puzzle_dict['id']
+    chn_mean = puzzle_dict['chnMean']
+    option_list = puzzle_dict['options'].copy()
+    answer = puzzle_dict['rightAnswer']
+    question = puzzle_dict['question']
+    topic_id = puzzle_dict['topicId']
+    answer_text = ''
+    stored = False
+    if answer is None:
+        answer = 0
+        # 查找答案
+        cursor.execute(f'''SELECT ANSWER FROM {puzzle_category} WHERE ID == ?''', (id, ))
+        result = cursor.fetchone()
+        if result is not None:
+            for i, option in enumerate(option_list):
+                if option == result[0]:
+                    answer = i + 1
+                    stored = True
+                    break
+            if not stored:
+                print('题目过期...更新中')
+    else:
+        answer_text = option_list[answer - 1]
+        option_list.pop(answer - 1)
+    if not stored and answer != 0:
+        cursor.execute(f'''INSERT OR REPLACE INTO {puzzle_category} (ID, QUESTION, CHN_MEAN, ANSWER, OPTIONS1, OPTIONS2, OPTIONS3, TOPIC_ID) VALUES (?, ?, ?, ?, ?, ?,?, ?)''', (id, question, chn_mean, answer_text, option_list[0], option_list[1], option_list[2], topic_id))
+        conn.commit()
+    if answer == 0:
+        answer = random.randint(0, 4)
+        if answer == 0:
+            answer = 1 # 干扰概率
+    return answer
+    
+
+def print_puzzle(puzzle_dict):
+    chn_mean = puzzle_dict['chnMean']
+    option_list = puzzle_dict['options']
+    question = puzzle_dict['question']
+    answer = puzzle_dict['rightAnswer']
+    result = f'{question}({chn_mean})('
+    for i, option in enumerate(option_list):
+        if i == answer - 1:
+            result += f'<font color="green">{option}</font>/'
+        else:
+            result += f'{option}/'
+    result += ')'
+    return result
+
+def automated_notice_explorer(user_cookie=user_cookie, user_config=user_config):
+    '''explorer自动化通知'''
+    if user_config.get('no_explorer', False) == True:
+        yield f'{user_config["name"]}不参加explorer'
+        return
+
+def pkonline(user_cookie=user_cookie, user_config=user_config):
+    '''pkonline'''
+    if user_config.get('no_pk', False) == True:
+        yield f'{user_config["name"]}不参加pk'
+        return
+    puzzle_init('BCZ_NCSVC')
+    # https://pk.baicizhan.com/contest2024/sign/?code=mB5AG9fCzo
+    # https://pk.baicizhan.com/contest2024/preparation/index.html?code=mB5AG9fCzo
+    # https://pkonline1.baicizhan.com/api/contest/2024/tournament/status?code=mB5AG9fCzo
+    time_long = int(time.time() * 1000)
+    headers = getHeaders("$pk", user_cookie, time_long, index=1)
+    url = f'https://{headers["Host"]}/contest2024/sign/?code=mB5AG9fCzo'
+    response = send_http2_request('GET', url, headers, None)
+    url = f'https://{headers["Host"]}/contest2024/preparation/index.html?code=mB5AG9fCzo'
+    response = send_http2_request('GET', url, headers, None)
+
+    headers = getHeaders("$pkonline1", user_cookie, time_long, index=3)
+    url = f'https://{headers["Host"]}/api/contest/2024/tournament/status?code=mB5AG9fCzo'
+    response = send_http2_request('GET', url, headers, None)
+    data = response.json()['data']
+    if data['status'] == 1:
+        yield f'pk正在进行 '
+    extra_info = "{\"ABPage\":\"B\"}"
+    if data['college'] == False:
+        extra_info = "{\"ABPage\":\"A\"}"
+    payload = [
+        {"index": 29, "extra_info": extra_info}, # pk加载
+    ]
+    report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=1)
+    # https://pkonline1.baicizhan.com/api/contest/2024/prepare/main?code=mB5AG9fCzo
+    url = f'https://{headers["Host"]}/api/contest/2024/prepare/main?code=mB5AG9fCzo'
+    response = send_http2_request('GET', url, headers, None)
+    data = response.json()['data']
+    if data['todayPKFinished'] == True:
+        yield f'今日PK已结束'
+        return
+    yield '开始pk'
+    payload = [
+        {"index": 30}, # pk主页
+    ]
+    report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=1)
+    # https://pkonline1.baicizhan.com/api/contest/2024/prepare/pkMain?code=mB5AG9fCzo
+    url = f'https://{headers["Host"]}/api/contest/2024/prepare/pkMain?code=mB5AG9fCzo'
+    response = send_http2_request('GET', url, headers, None)
+    data = response.json()['data']
+    daily_round = data['dailyRound']
+    yield f' 今已完成{daily_round}/3 '
+    time.sleep(1)
+    if daily_round < 3:
+        payload = [
+            {"index": 31} # 进入pk
+        ]
+        report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=1)
+        
+        # https://pkonline1.baicizhan.com/api/contest/2024/tournament/failed_puzzle?lastId=
+        time_long = int(time.time() * 1000)
+        headers = getHeaders("$pkonline1", user_cookie, time_long, index=3)
+        url = f'https://{headers["Host"]}/api/contest/2024/tournament/failed_puzzle?lastId='
+        response = send_http2_request('GET', url, headers, None)
+        data = response.json()['data']
+
+        payload = [
+            {"index": 32} # pk练习页面
+        ]
+        report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=1)
+        time.sleep(1)
+        payload = [
+            {"index": 33} # 点击开始按钮
+        ]
+        report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=1)
+        # https://pk.baicizhan.com/contest2024/contest/index.html?code=mB5AG9fCzo&mode=practice
+        time_long = int(time.time() * 1000)
+        headers = getHeaders("$pk", user_cookie, time_long, index=3)
+        url = f'https://{headers["Host"]}/contest2024/contest/index.html?code=mB5AG9fCzo&mode=practice'
+        response = send_http2_request('GET', url, headers, None)
+
+        while True:
+            payload = [
+                {"index": 34, "extra_info": "{\"CurrentRound\":%d}" % 0} # pk开始（CurrentRound是摆设）
+            ]
+            report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=1)
+            # 匹配
+            # https://pkonline1.baicizhan.com/api/contest/practice/match?code=mB5AG9fCzo&contestId=null
+            
+            time_long = int(time.time() * 1000)
+            headers = getHeaders("$pkonline1", user_cookie, time_long, index=3)
+            url = f'https://{headers["Host"]}/api/contest/practice/match?code=mB5AG9fCzo&contestId=null'
+            response = send_http2_request('GET', url, headers, None)
+            data = response.json()['data']
+            challenge_id = data['challengeId']
+            current_round = data['currentRound']
+            yield f'第{current_round}轮<br>'
+            payload = [
+                {"index": 35, "extra_info": "{\"MatchTime\":%d}" % (int(time.time() * 1000) - time_long)} # pk匹配成功
+            ]
+            report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=1)
+
+            post_headers = getHeaders("$pkonline1", user_cookie, time_long, index=3)
+            post_headers['content-type'] = 'application/json'
+            options_headers = getHeaders("$pkonline1", user_cookie, time_long, index=2)# 这两个请求头一直使用到结束
+            time.sleep(3)
+
+            prev_order = 0
+            while True:
+                # 开始答题
+                # https://pkonline1.baicizhan.com/api/contest/practice/heartbeat
+                url = f'https://{options_headers["Host"]}/api/contest/practice/heartbeat'
+                response = send_http2_request('OPTIONS', url, options_headers, None)
+                content = {
+                    "challengeId": challenge_id
+                }
+                content_str = json.dumps(content)
+                response = send_http2_request('POST', url, post_headers, content_str)
+                data = response.json()['data']
+                order = data['order']
+                while order == 0 or order == prev_order:
+                    response = send_http2_request('POST', url, post_headers, content_str)
+                    data = response.json()['data']
+                    order = data['order']
+                    time.sleep(1)
+                yield f'第{order}题'
+                rival_escaped = data['rivalEscaped']
+                ans = puzzle_solver(data['puzzle'], 'BCZ_NCSVC')
+                response_thresh = 4000
+                response_delay = random.randint(2000, response_thresh)
+                start_timestamp = int(time.time() * 1000)
+                session_cnt = int(response_delay / 1000)
+                session_delay = response_delay % 1000
+                for i in range(session_cnt):
+                    time.sleep(1)
+                    response = send_http2_request('POST', url, post_headers, content_str)
+                    rival_escaped = response.json()['data']['rivalEscaped']
+                    if rival_escaped:
+                        break
+                time.sleep(session_delay / 1000)
+                ans_content = {
+                    "challengeId": challenge_id,
+                    "order": order,
+                    "answer": ans
+                }
+                ans_content_str = json.dumps(ans_content)
+                response = send_http2_request('POST', url, post_headers, ans_content_str)
+                data = response.json()['data']
+                rival_escaped = data['rivalEscaped']
+                payload = [
+                    {"index": 36, "extra_info": "{\"ContestId\":null,\"ChallengeId\":%d,\"QuesOrder\":%d,\"PuzzleId\":%d,\"ChoiceOrder\":%d,\"CostTime\":%d,\"IsRight\":false}" % (challenge_id, order, data['puzzle']['id'], ans, int(time.time() * 1000 - start_timestamp))} # pk答题成功
+                ]
+                report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=1)
+                if data['rivalAnswer'] is None and not rival_escaped:
+                # 等待对手作答
+                    while True:
+                        response = send_http2_request('POST', url, post_headers, content_str)
+                        data = response.json()['data']
+                        if data['rivalAnswer'] is not None or data['rivalEscaped']:
+                            break
+                        time.sleep(1)
+                # 检查答案
+                puzzle_solver(data['puzzle'], 'BCZ_NCSVC')
+                right_answer = data['puzzle']['rightAnswer']
+                my_answer = '√' if data['meAnswer'] == right_answer else '×'
+                rival_answer = '已逃跑'
+                if not rival_escaped:
+                    rival_answer = '√' if data['rivalAnswer'] == right_answer else '×'
+                puzzle_str = print_puzzle(data['puzzle'])
+                yield f'{puzzle_str} {my_answer}/{rival_answer}<br>'
+
+                time.sleep(3)
+                if order == 7:
+                    break
+                prev_order = order # 防止刷新不及时导致重复答题
+
+            # 结束本轮pk
+            payload = [
+                # "{\"CurrentRound\":1}"
+                {"index": 37, "extra_info": "{\"CurrentRound\":%d}" % current_round} # pk结束
+            ]
+            report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=1)
+            # https://pkonline1.baicizhan.com/api/contest/practice/result?contestId=null&challengeId=15133142&code=mB5AG9fCzo
+            time_long = int(time.time() * 1000)
+            headers = getHeaders("$pkonline1", user_cookie, time_long, index=3)
+            url = f'https://{headers["Host"]}/api/contest/practice/result?contestId=null&challengeId={challenge_id}&code=mB5AG9fCzo'
+            response = send_http2_request('GET', url, headers, None)
+            data = response.json()['data']
+            daily_finished = data['dailyFinished']
+            if daily_finished:
+                yield f'完成3轮 +50铜板<br>'
+                break
+            else:
+                yield f'完成第{current_round}轮<br>'
+                random_wait_second = random.randint(1,4)
+                time.sleep(random_wait_second)
+
+            
+
+
+        
+
+
+        
+
+
+
+    
+    
 def yzdd(user_cookie=user_cookie, user_config=user_config):
     '''一站到底'''
+    # 如果是星期日，跳过
+    if datetime.datetime.now().weekday() == 6:
+        return "$星期日，跳过"
     # https://pkonline2.baicizhan.com/api/contest/2024/one_fight/get_exam_question?bczId=0&day=
     time_long = int(time.time() * 1000)
-    headers = getHeaders("$pkonline", user_cookie, time_long, index=1)
+    headers = getHeaders("$pkonline2", user_cookie, time_long, index=1)
     url = f'https://{headers["Host"]}/api/contest/2024/one_fight/get_exam_question?bczId=0&day='
     response = send_http2_request('GET', url, headers, None)
     data = response.json()['data']
@@ -2006,7 +2391,7 @@ def yzdd(user_cookie=user_cookie, user_config=user_config):
         # https://pkonline2.baicizhan.com/api/contest/2024/one_fight/submit_exam
         # Content-Type: application/json; charset=UTF-8
         time.sleep(random.randint(2000, 4000) / 1000)
-        headers = getHeaders("$pkonline", user_cookie, time_long, index=1)
+        headers = getHeaders("$pkonline2", user_cookie, time_long, index=1)
         headers['Content-Type'] = 'application/json; charset=UTF-8'
         url = f'https://{headers["Host"]}/api/contest/2024/one_fight/submit_exam'
         payload = {
@@ -2018,7 +2403,7 @@ def yzdd(user_cookie=user_cookie, user_config=user_config):
 
         # 重新请求题目
         # https://pkonline2.baicizhan.com/api/contest/2024/one_fight/get_exam_question?bczId=0&day=
-        headers = getHeaders("$pkonline", user_cookie, time_long, index=1)
+        headers = getHeaders("$pkonline2", user_cookie, time_long, index=1)
         url = f'https://{headers["Host"]}/api/contest/2024/one_fight/get_exam_question?bczId=0&day='
         response = send_http2_request('GET', url, headers, None)
         data = response.json()['data']
@@ -2042,13 +2427,32 @@ def yzdd(user_cookie=user_cookie, user_config=user_config):
     conn.close()
     return f'$今日题目:{title}:<img src="{image}" width="100px" height="100px"><br>正确答案:{options[0]}<br>选项1:{options[1]}<br>选项2:{options[2]}<br>选项3:{options[3]}<br>'
 
+def get_class_range(user_config=user_config, total_user_cnt = 18):
+    user_index = int(user_config['user_index'])
+    total_user_cnt = total_user_cnt
+    # 获取今日日期
+    today = datetime.datetime.now().strftime('%Y%m%d')
+    # 获取日期最后一位
+    date_last_num = int(today[-1])
+    # 将这100个班级分成total_user_cnt份
+    cnt = 100 // total_user_cnt
+    num_start = cnt * (user_index - 1) + 1
+    num_end = cnt * user_index
+    if user_index == total_user_cnt:
+        num_end = 99
+    # 组成班级范围
+    num_start += date_last_num * 100
+    num_end += date_last_num * 100
+    return num_start, num_end
 
-def daka(user_cookie=user_cookie, user_config=user_config, only_yzdd=False):
+
+lock = threading.Lock()
+
+def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
     '''为用户打卡'''
-    
-    
+
     yield yzdd(user_cookie=user_cookie, user_config=user_config)
-    if only_yzdd or user_config.get('only_yzdd', "False") == "True":
+    if user_config.get('only_yzdd', "False") == "True":
         return
 
     unique_id = user_config['unique_id']
@@ -2693,6 +3097,76 @@ def daka(user_cookie=user_cookie, user_config=user_config, only_yzdd=False):
     report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=1)
     time.sleep(react_wait_second)
     report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=1)
+
+    # pk
+    for msg in pkonline(user_cookie=user_cookie, user_config=user_config):
+        message_str += msg
+        yield message_str
+
+    # 公告和排名
+    # https://group.baicizhan.com/group/get_group_rank?rank=7
+    rank_type = user_config.get('rank_type', -1)
+    class_list_7 = []
+    class_list = []
+    conn = sqlite3.connect('./BCZ_wordscheck/bcz_notice.db')
+    cursor = conn.cursor()
+    with lock:
+        if class_list_7 == []:
+            time_long = int(time.time() * 1000)
+            headers = getHeaders("$group", user_cookie, time_long, index=1)
+            response = send_http2_request('GET', f'https://{headers["Host"]}/group/get_group_rank?rank=7', headers, None)
+            class_list_7 = response.json()['data']['list']
+        if rank_type == 7:
+            class_list = class_list_7
+
+    if rank_type != -1:
+        if class_list == []:
+            # 先获取班级列表
+            time_long = int(time.time() * 1000)
+            headers = getHeaders("$group", user_cookie, time_long, index=1)
+            response = send_http2_request('GET', f'https://{headers["Host"]}/group/get_group_rank?rank={rank_type}', headers, None)
+            class_list = response.json()['data']['list']
+        # 将排名储存到数据库中
+        with lock:
+            conn = sqlite3.connect('./BCZ_wordscheck/bcz_notice.db')
+            cursor = conn.cursor()
+            for i, class_item in enumerate(class_list):
+                class_share_key = class_item['shareKey']
+                class_name = class_item['groupName']
+                class_score = class_item['score']
+                cursor.execute(f"INSERT OR IGNORE INTO notice (SHARE_KEY, NAME, RANK_TYPE, RANK, HASH_VALUE, CONTENT, DATE, SCORE) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                                    (class_share_key, class_name, rank_type, i + 1, '', '', time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()), class_score))
+            conn.commit()
+    
+        
+    # https://group.baicizhan.com/group/information?shareKey=
+    class_rank_start, class_rank_end = get_class_range(user_config)
+    for i in range(class_rank_start, class_rank_end + 1):
+        time_long = int(time.time() * 1000)
+        headers = getHeaders("$group", user_cookie, time_long, index=1)
+        share_key = class_list_7[i - 1]['shareKey']
+        response = send_http2_request('GET', f'https://{headers["Host"]}/group/information?shareKey={share_key}', headers, None)
+        data = response.json()['data']
+        class_name = data['groupName']
+        content = data['groupInfo']['notice']
+        print(f'❤️ → 获取到排名{i}的班级{class_name}的通知\n')
+
+        hash_value = hashlib.md5(content.encode('utf-8')).hexdigest()
+        cursor.execute(f"SELECT NAME FROM notice WHERE HASH_VALUE='{hash_value}'")
+        result = cursor.fetchone()
+        if not result or content == '':
+            # 保存通知到数据库
+            cursor.execute("""
+                INSERT INTO notice (SHARE_KEY, NAME,RANK_TYPE, RANK, HASH_VALUE, CONTENT, DATE, SCORE) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (class_share_key, class_name, 7, i, hash_value, content, time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()), class_item['score']))
+        else:
+            print(f'🙈 → 排名{i}的班级{class_name}的通知已存在数据库，跳过')
+        time.sleep(random.randint(2, 4))
+    with lock:
+        conn.commit()
+
+
 
     # 前往个人中心
     result = user_study.user_study_credit_task_center(user_cookie=user_cookie, user_config=user_config)
