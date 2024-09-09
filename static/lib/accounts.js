@@ -49,6 +49,10 @@ function replyAndACK(button, group_share_key, unique_id) {
 }
 function quitGroup(group_name, group_share_key, unique_id) {
   // 二次确认
+  if (unique_id == 956533772 && group_share_key == '26z000owqr8zil48'){
+    alert("测试班级，不允许退出");
+    return;
+  }
   if (!confirm(`确认退出${group_name}吗？`)) return;
   return fetch('/api/quit_group', {
     method: 'POST',
@@ -133,7 +137,7 @@ function showOwnGroups(data, unique_id) {
     });
     
   table += `
-      <tr><td><button onclick="joinGroup('${unique_id}')">加入班级</button></td></tr>
+      <tr><td><button class='join' onclick="joinGroup('${unique_id}')">加入班级</button></td></tr>
       </tbody>
     </table>
   `;
@@ -173,6 +177,35 @@ function changeNotice(element, group_share_key, unique_id){
     console.error(error);
     sse.close();
   });
+}
+function joinAll(){
+  let share_key = prompt("请输入shareKey(16位)或inviteCode(5-8位):");
+  if (share_key == null) return;
+  console.log("在10s内开始所有账号")
+
+  document.querySelectorAll('.join').forEach(function(button){
+    // 随机延时0-10s
+    random_secs = Math.floor(Math.random() * 10);
+    setTimeout(function(){
+      on_click_attr = button.getAttribute('onclick'); // joinGroup(unique_id)
+      if (on_click_attr.indexOf('joinGroup') != -1){
+        unique_id = on_click_attr.split('\'')[1]
+        
+        joinGroup(unique_id, share_key);
+      }
+    }, random_secs * 1000);
+    // 将按钮的文字从10倒数到0
+    let count = random_secs;
+    let interval = setInterval(function(){
+      button.innerHTML = count;
+      count--;
+      if (count < 0) {
+        clearInterval(interval);
+        button.innerHTML = "加入班级";
+      }
+    }, 1000);
+  });
+
 }
 function daKaAll(button){
   // 仅F12调用
@@ -233,9 +266,12 @@ function moreGroups(unique_id){
   });
 }
 
-function joinGroup(unique_id){
-  var input = prompt("请输入班级shareKey(16位)或inviteCode(5-8位):");
-  if (input == null) return;
+function joinGroup(unique_id, group_share_key=null){
+  let input = group_share_key;
+  if (input == null){
+    input = prompt("请输入班级shareKey(16位)或inviteCode(5-8位):");
+    if (input == null) return;
+  }
   let share_key = "";
   let invite_code = "";
   if (input.length == 16) share_key = input;

@@ -189,10 +189,10 @@ class user_dict:
         for i in range(len(self.user_dict_list)):
             if self.user_dict_list[i]['config']['unique_id'] == unique_id:
                 return i, self.user_dict_list[i]
-        return None
+        return None, None
     
     def update_book_id(self, unique_id, book_id):
-        user = self.find(unique_id)
+        _, user = self.find(unique_id)
         if user:
             user['config']['book_id'] = book_id
             self.modified = True
@@ -2447,7 +2447,7 @@ def get_class_range(user_config=user_config, total_user_cnt = 18):
 
 
 lock = threading.Lock()
-
+class_list_7 = []
 def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
     '''为用户打卡'''
 
@@ -3106,7 +3106,7 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
     # 公告和排名
     # https://group.baicizhan.com/group/get_group_rank?rank=7
     rank_type = user_config.get('rank_type', -1)
-    class_list_7 = []
+    global class_list_7
     class_list = []
     conn = sqlite3.connect('./BCZ_wordscheck/bcz_notice.db')
     cursor = conn.cursor()
@@ -3146,9 +3146,9 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
         headers = getHeaders("$group", user_cookie, time_long, index=1)
         share_key = class_list_7[i - 1]['shareKey']
         response = send_http2_request('GET', f'https://{headers["Host"]}/group/information?shareKey={share_key}', headers, None)
-        data = response.json()['data']
-        class_name = data['groupName']
-        content = data['groupInfo']['notice']
+        group_info = response.json()['data']['groupInfo']
+        class_name = group_info['name']
+        content = group_info['notice']
         print(f'❤️ → 获取到排名{i}的班级{class_name}的通知\n')
 
         hash_value = hashlib.md5(content.encode('utf-8')).hexdigest()

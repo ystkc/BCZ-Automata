@@ -61,7 +61,7 @@ def reply_and_ack():
         if not unique_id or not group_share_key or not content:
             print(unique_id, group_share_key, content)
             return restful(400, '调用方法异常Σ(っ °Д °;)っ')
-        user_dict = user_dict_obj.find(unique_id)
+        _, user_dict = user_dict_obj.find(unique_id)
         client = httpx.Client(http2=True, verify=certifi.where())
         time_long = int(time.time() * 1000)
         payload = {
@@ -113,7 +113,7 @@ def quit_group():
 
         if not unique_id or not group_share_key:
             return restful(400, '调用方法异常Σ(っ °Д °;)っ')
-        user_dict = user_dict_obj.find(unique_id)
+        _, user_dict = user_dict_obj.find(unique_id)
         
         time_long = int(time.time() * 1000)
         headers = getHeaders('$group', user_dict['cookie'], time_long, index = 1)
@@ -137,7 +137,7 @@ def join_group():
         if not unique_id or (not group_share_key and not group_invite_key):
             print(unique_id, group_share_key, group_invite_key)
             return restful(400, '调用方法异常Σ(っ °Д °;)っ')
-        user_dict = user_dict_obj.find(unique_id)
+        _, user_dict = user_dict_obj.find(unique_id)
         time_long = int(time.time() * 1000)
         headers = getHeaders('$group', user_dict['cookie'], time_long, index = 1)
         headers['Content-Type'] = 'application/json; charset=UTF-8'
@@ -190,7 +190,8 @@ def accounts_add():
         device_id = hashlib.md5(str(access_token).encode('utf-8')).hexdigest()[:16]
         if not name or not unique_id or not access_token:
             return restful(400, '调用方法异常Σ(っ °Д °;)っ')
-        if user_dict_obj.find(unique_id) is not None:
+        _, item = user_dict_obj.find(unique_id)
+        if item is not None:
             return restful(400, '用户已存在')
         user_dict_obj.add_user(access_token, unique_id, name, device_id)
         return restful(200, '添加用户成功')
@@ -223,7 +224,7 @@ def change_notice_sse_func_(unique_id, group_share_key, content):
     # print(content)
     # yield content
     # return
-    user_dict = user_dict_obj.find(unique_id)
+    _, user_dict = user_dict_obj.find(unique_id)
     time_long = int(time.time() * 1000)
     headers = getHeaders('$group', user_dict['cookie'], time_long, index = 1)
     headers['Content-Type'] = 'application/json; charset=UTF-8'
@@ -342,7 +343,7 @@ def own_groups():
         unique_id = request.args.get('unique_id', '')
         if not unique_id:
             return restful(400, '调用方法异常Σ(っ °Д °;)っ')
-        user_dict = user_dict_obj.find(unique_id)
+        _, user_dict = user_dict_obj.find(unique_id)
         time_long = int(time.time() * 1000)
         response = requests.get('https://group.baicizhan.com/group/own_groups?uniqueId=0', headers=getHeaders('$group', user_dict['cookie'], time_long, index = 1)) # 我的小班
         response_json = response.json()
@@ -444,7 +445,7 @@ def more_groups():
         unique_id = request.json.get('unique_id', '')
         if not unique_id:
             return restful(400, '调用方法异常Σ(っ °Д °;)っ')
-        user_dict = user_dict_obj.find(unique_id)
+        _, user_dict = user_dict_obj.find(unique_id)
         time_long = int(time.time() * 1000)
         headers = getHeaders('$group', user_dict['cookie'], time_long, index = 1)
         headers['Content-Type'] = 'application/json; charset=UTF-8'
