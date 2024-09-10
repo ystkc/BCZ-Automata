@@ -3157,9 +3157,9 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
         if not result or content == '':
             # 保存通知到数据库
             cursor.execute("""
-                INSERT INTO notice (SHARE_KEY, NAME,RANK_TYPE, RANK, HASH_VALUE, CONTENT, DATE, SCORE) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (class_share_key, class_name, 7, i, hash_value, content, time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()), class_item['score']))
+                INSERT INTO notice (SHARE_KEY, NAME,RANK_TYPE, RANK, HASH_VALUE, CONTENT, DATE) 
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (share_key, class_name, 7, i, hash_value, content, time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())))
         else:
             print(f'🙈 → 排名{i}的班级{class_name}的通知已存在数据库，跳过')
         time.sleep(random.randint(2, 4))
