@@ -2453,6 +2453,7 @@ lock = threading.Lock()
 class_list_7 = []
 def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
     '''为用户打卡'''
+    time_start = time.time()
 
     yield yzdd(user_cookie=user_cookie, user_config=user_config)
     if user_config.get('only_yzdd', "False") == "True":
@@ -3117,8 +3118,6 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
     rank_type = user_config.get('rank_type', -1)
     global class_list_7
     class_list = []
-    conn = sqlite3.connect('./BCZ_wordscheck/bcz_notice.db')
-    cursor = conn.cursor()
     with lock:
         if class_list_7 == []:
             time_long = int(time.time() * 1000)
@@ -3146,45 +3145,54 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
                 cursor.execute(f"INSERT OR IGNORE INTO notice (SHARE_KEY, NAME, RANK_TYPE, RANK, HASH_VALUE, CONTENT, DATE, SCORE) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                                     (class_share_key, class_name, rank_type, i + 1, '', '', time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()), class_score))
             conn.commit()
+            conn.close()
     
         
     # https://group.baicizhan.com/group/information?shareKey=
     class_rank_start, class_rank_end = get_class_range(user_config)
+    data_list = []
     for i in range(class_rank_start, class_rank_end + 1):
         time_long = int(time.time() * 1000)
         headers = getHeaders("$group", user_cookie, time_long, index=1)
         share_key = class_list_7[i - 1]['shareKey']
-        response = send_http2_request('GET', f'https://{headers["Host"]}/group/information?shareKey={share_key}', headers, None)
-        group_info = response.json()['data']['groupInfo']
-        class_name = group_info['name']
-        content = group_info['notice']
-        print(f'❤️ → 获取到排名{i}的班级{class_name}的通知\n')
 
-        hash_value = hashlib.md5(content.encode('utf-8')).hexdigest()
-        cursor.execute(f"SELECT NAME FROM notice WHERE HASH_VALUE='{hash_value}'")
-        result = cursor.fetchone()
-        if not result or content == '':
-            # 保存通知到数据库
-            message_str += '.'
-            yield message_str
-            with lock:
+        response = send_http2_request('GET', f'https://{headers["Host"]}/group/information?shareKey={share_key}', headers, None)
+        data_list.append( response.json()['data']['groupInfo'] )
+
+        time.sleep(random.randint(2, 4))
+
+
+    with lock:
+        conn = sqlite3.connect('./BCZ_wordscheck/bcz_notice.db')
+        cursor = conn.cursor()
+        for i, group_info in enumerate(data_list):
+            class_name = group_info['name']
+            content = group_info['notice']
+            print(f'❤️ → 获取到排名{i + class_rank_start}的班级{class_name}的通知\n')
+
+            hash_value = hashlib.md5(content.encode('utf-8')).hexdigest()
+            cursor.execute(f"SELECT NAME FROM notice WHERE HASH_VALUE='{hash_value}'")
+            result = cursor.fetchone()
+            if not result or content == '':
+                # 保存通知到数据库
+                message_str += '.'
+                yield message_str
                 cursor.execute("""
                     INSERT INTO notice (SHARE_KEY, NAME,RANK_TYPE, RANK, HASH_VALUE, CONTENT, DATE) 
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, (share_key, class_name, 7, i, hash_value, content, time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())))
-        else:
-            message_str += '`'
-            yield message_str
-            print(f'🙈 → 排名{i}的班级{class_name}的通知已存在数据库，跳过')
-        time.sleep(random.randint(2, 4))
-    with lock:
+            else:
+                message_str += '`'
+                yield message_str
+                print(f'🙈 → 排名{i + class_rank_start}的班级{class_name}的通知已存在数据库，跳过')
         conn.commit()
+        conn.close()
 
 
 
     # 前往个人中心
     result = user_study.user_study_credit_task_center(user_cookie=user_cookie, user_config=user_config)
-    message_str += f'今日+{result.daily_inc_credit}'
+    message_str += f'今日+{result.daily_inc_credit} '
     yield message_str
 
 
@@ -3195,8 +3203,8 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
             new_daka_list.append(i) 
     daka_list = new_daka_list
 
-    
-
+    message_str += f'耗时{time.time() - time_start:.2f}s'
+    yield message_str
 
 
 if __name__ == '__main__':
