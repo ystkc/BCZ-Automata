@@ -12,6 +12,7 @@ import traceback
 
 from flask import Flask, Response, render_template, jsonify, request
 from werkzeug.serving import WSGIRequestHandler, _log
+import waitress
 
 from src import bcz
 from src.config import Config
@@ -459,8 +460,11 @@ def more_groups():
         raise e
         return restful(400, f'{e}')
 
+# from src.thrift_utils import send_http2_request
 @app.route('/login', methods=['GET'])
 def login():
+    # response = send_http2_request('GET', 'https://www.baidu.com', headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36'}, content=None)
+    # return response.content.decode('utf-8')
     return render_template('login.html')
 
 @app.route('/user', methods=['GET'])
@@ -528,5 +532,27 @@ def restful(code: int, msg: str = '', data: dict = {}) -> Response:
     }), code
 
 if __name__ == '__main__':
+    # logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s %(message)s')
+    
+    for name in logging.Logger.manager.loggerDict.keys():
+        logger = logging.getLogger(name)
+        if 'httpx' in name or 'urllib3' in name:
+            logger.setLevel(logging.DEBUG)
+        print ('name = %s, logger = %s'%(name, logger))
+
+        
+        # # 创建handler，输出到控制台
+        # console_handler = logging.StreamHandler()
+        # console_handler.setLevel(logging.DEBUG)
+        
+        # # 创建formatter，并添加到handler
+        # formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        # console_handler.setFormatter(formatter)
+        
+        # # 将handler添加到root logger
+        # logger.addHandler(console_handler)
+
     logging.info('BCZ-Automata 启动中...')
-    app.run(config.host, config.port, request_handler=MyRequestHandler, debug=True)
+    
+    # serve(application, host='0.0.0.0', port=5000, log_level='info', access_log_file='/path/to/your/logfile.log', error_log_file='/path/to/your/logfile.log')
+    waitress.serve(app, host=config.host, port=config.port, threads=6, expose_tracebacks = True)

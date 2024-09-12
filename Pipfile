@@ -7,8 +7,9 @@ name = "pypi"
 thrift = "*"
 requests = "*"
 flask = "*"
+waitress = "*"
 
 [dev-packages]
 
 [requires]
-python_version = "3.12"
+python_version = "3.11"

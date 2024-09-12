@@ -2117,13 +2117,16 @@ def puzzle_solver(puzzle_dict, puzzle_category):
                 if option == result[0]:
                     answer = i + 1
                     stored = True
+                    puzzle_dict['chnMean'] = 'Stored'
                     break
             if not stored:
+                puzzle_dict['chnMean'] = 'Expired'
                 print('题目过期...更新中')
     else:
         answer_text = option_list[answer - 1]
         option_list.pop(answer - 1)
     if not stored and answer != 0:
+        puzzle_dict['chnMean'] = 'Learnt'
         cursor.execute(f'''INSERT OR REPLACE INTO {puzzle_category} (ID, QUESTION, CHN_MEAN, ANSWER, OPTIONS1, OPTIONS2, OPTIONS3, TOPIC_ID) VALUES (?, ?, ?, ?, ?, ?,?, ?)''', (id, question, chn_mean, answer_text, option_list[0], option_list[1], option_list[2], topic_id))
         conn.commit()
     if answer == 0:
@@ -2801,6 +2804,9 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
         if person['score'] > score:
             level_in_rank += 1
 
+    message_str += f'{win_streak_days}天<br>学习分{score}排{rank}段第{level_in_rank}名'
+    yield message_str
+
     def get_monthly_task_desc():
         # https://social.baicizhan.com/api/task/v2/getOneUnEndTask
         time_long = int(time.time() * 1000)
@@ -2814,6 +2820,9 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
     else:
         progress = monthly_task_data.get('progress', 'null')
         total = monthly_task_data.get('actionCnt', 'null')
+    
+    message_str += f' 月任务{progress}/{total}'
+    yield message_str
 
 
     # 前往任务中心领取奖励
@@ -2833,6 +2842,7 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
         award_str = ''
         for award in award_list:
             award_str += f'{award["type"]}+{award["cnt"]} '
+        return award_str
 
     def get_task_center_reward_desc(user_cookie, user_config):
         # https://social.baicizhan.com/api/task/v2/home
@@ -2841,7 +2851,7 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
         headers = getHeaders("$social", user_cookie, time_long, index=1)
         response = send_http2_request('GET', f'https://{headers["Host"]}/api/task/v2/home', headers, None)
         data = response.json()['data']
-        message = ""
+        message = "任务中心："
         for task in data['taskList']:
             task_id = task['userTaskId']
             task_name = task['taskName']
@@ -2868,11 +2878,10 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
             # 其他还没记录，先返回描述供开发
         return message
     
+    
     if progress != 'null' and total != 'null':
         # 前往任务中心领取奖励
         message_str += get_task_center_reward_desc(user_cookie, user_config)
-
-    message_str += f'{win_streak_days}天<br>学习分{score}排{rank}段第{level_in_rank}名 月任务{progress}/{total}<br>分享中'
     yield message_str
     
     payload=[
@@ -2881,7 +2890,7 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
     report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=1)
 
     time.sleep(react_wait_second)
-    message_str += '.'
+    message_str += ' 分享中.'
     yield message_str
     # 返回首页去打卡
     report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=0)
@@ -3156,11 +3165,16 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
         result = cursor.fetchone()
         if not result or content == '':
             # 保存通知到数据库
-            cursor.execute("""
-                INSERT INTO notice (SHARE_KEY, NAME,RANK_TYPE, RANK, HASH_VALUE, CONTENT, DATE) 
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (share_key, class_name, 7, i, hash_value, content, time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())))
+            message_str += '.'
+            yield message_str
+            with lock:
+                cursor.execute("""
+                    INSERT INTO notice (SHARE_KEY, NAME,RANK_TYPE, RANK, HASH_VALUE, CONTENT, DATE) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (share_key, class_name, 7, i, hash_value, content, time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())))
         else:
+            message_str += '`'
+            yield message_str
             print(f'🙈 → 排名{i}的班级{class_name}的通知已存在数据库，跳过')
         time.sleep(random.randint(2, 4))
     with lock:
