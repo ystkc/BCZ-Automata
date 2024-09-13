@@ -231,7 +231,11 @@ function daKaAll(button){
 }
 function daKa(button, unique_id){
   // 发送请求后，获得一个sse链接，展示在页面上
+  let current_time = new Date().toLocaleString();
+  button.parentNode.appendChild(`<p>${current_time}</p>`)
   let sse = new EventSource('/api/daka?unique_id=' + unique_id);
+  current_time = new Date().toLocaleString();
+  button.parentNode.appendChild(`<p>${current_time}</p>`)
   sse.onmessage = function(event) {
     if (event.data[0] == '$')
       button.parentNode.parentNode.querySelector('#img_frame').innerHTML = event.data;

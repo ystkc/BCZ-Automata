@@ -404,6 +404,22 @@ def own_groups():
     except Exception as e:
         raise e
     #     return restful(400, f'{e}')
+
+
+daka_cnt = 0
+@app.route('/api/mm', methods=['GET'])
+def mm():
+    import pyautogui
+    # 不断以正方形移动鼠标
+    while daka_cnt == 0:
+        time.sleep(1)
+    while daka_cnt > 0:
+        pyautogui.moveTo(100, 100, duration=0.5)
+        pyautogui.moveTo(300, 100, duration=0.5)
+        pyautogui.moveTo(300, 300, duration=0.5)
+        pyautogui.moveTo(100, 300, duration=0.5)
+        time.sleep(3)
+    
     
 
 
@@ -411,11 +427,12 @@ def own_groups():
 def daka():
     '''打卡'''
     try:
+        request_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         unique_id = request.args.get('unique_id', '')
         if not unique_id:
             return restful(400, '调用方法异常Σ(っ °Д °;)っ')
         # sse
-        return Response(daka_sse(unique_id), mimetype='text/event-stream')
+        return Response(daka_sse(unique_id, request_time), mimetype='text/event-stream')
     except Exception as e:
         with open(f'error_{unique_id}_{int(time.time())}.txt', 'w', encoding='utf-8') as f:
             f.write(str(e))
@@ -423,13 +440,16 @@ def daka():
 
 
     
-def daka_sse(unique_id):
+def daka_sse(unique_id, request_time):
     try:
+        global daka_cnt
+        daka_cnt += 1
         index, user_dict = user_dict_obj.find(unique_id)
         user_dict['config']['user_index'] = index
         user_cnt = len(user_dict_list)
         for msg in thrift_utils.daka(user_cookie = user_dict['cookie'], user_config = user_dict['config'], total_user_cnt=user_cnt):
-            yield f'data: {msg}\n\n'
+            yield f'data: {request_time} {msg}\n\n'
+        daka_cnt -= 1
     except Exception as e:
         with open(f'error_{unique_id}_{int(time.time())}.txt', 'w', encoding='utf-8') as f:
             f.write(str(e))

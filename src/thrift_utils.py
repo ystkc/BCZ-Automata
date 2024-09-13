@@ -2099,7 +2099,7 @@ def puzzle_solver(puzzle_dict, puzzle_category):
     # 链接数据库
     conn = sqlite3.connect('puzzle.db')
     cursor = conn.cursor()
-    id = puzzle_dict['id']
+    id = int(puzzle_dict['id'])
     chn_mean = puzzle_dict['chnMean']
     option_list = puzzle_dict['options'].copy()
     answer = puzzle_dict['rightAnswer']
@@ -3124,8 +3124,9 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
             headers = getHeaders("$group", user_cookie, time_long, index=1)
             response = send_http2_request('GET', f'https://{headers["Host"]}/group/get_group_rank?rank=7', headers, None)
             class_list_7 = response.json()['data']['list']
-        if rank_type == 7:
-            class_list = class_list_7
+
+    if rank_type == 7:
+        class_list = class_list_7
 
     if rank_type != -1:
         if class_list == []:
@@ -3134,18 +3135,7 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
             headers = getHeaders("$group", user_cookie, time_long, index=1)
             response = send_http2_request('GET', f'https://{headers["Host"]}/group/get_group_rank?rank={rank_type}', headers, None)
             class_list = response.json()['data']['list']
-        # 将排名储存到数据库中
-        with lock:
-            conn = sqlite3.connect('./BCZ_wordscheck/bcz_notice.db')
-            cursor = conn.cursor()
-            for i, class_item in enumerate(class_list):
-                class_share_key = class_item['shareKey']
-                class_name = class_item['groupName']
-                class_score = class_item['score']
-                cursor.execute(f"INSERT OR IGNORE INTO notice (SHARE_KEY, NAME, RANK_TYPE, RANK, HASH_VALUE, CONTENT, DATE, SCORE) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                                    (class_share_key, class_name, rank_type, i + 1, '', '', time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()), class_score))
-            conn.commit()
-            conn.close()
+        
     
         
     # https://group.baicizhan.com/group/information?shareKey=
@@ -3165,6 +3155,17 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
     with lock:
         conn = sqlite3.connect('./BCZ_wordscheck/bcz_notice.db')
         cursor = conn.cursor()
+        if rank_type != -1:
+            for i, class_item in enumerate(class_list):
+                class_share_key = class_item['shareKey']
+                class_name = class_item['groupName']
+                class_score = class_item['score']
+                cursor.execute(f"INSERT OR IGNORE INTO notice (SHARE_KEY, NAME, RANK_TYPE, RANK, HASH_VALUE, CONTENT, DATE, SCORE) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                                    (class_share_key, class_name, rank_type, i + 1, '', '', time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()), class_score))
+            print(f'★ → 获取到排名{rank_type}的班级列表\n')  
+            message_str += f'★{rank_type}'
+            yield message_str
+
         for i, group_info in enumerate(data_list):
             class_name = group_info['name']
             content = group_info['notice']
