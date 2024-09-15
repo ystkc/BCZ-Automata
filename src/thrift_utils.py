@@ -2101,6 +2101,8 @@ def puzzle_solver(puzzle_dict, puzzle_category):
     cursor = conn.cursor()
     id = int(puzzle_dict['id'])
     chn_mean = puzzle_dict['chnMean']
+    if chn_mean is None:
+        chn_mean = ''
     option_list = puzzle_dict['options'].copy()
     answer = puzzle_dict['rightAnswer']
     question = puzzle_dict['question']
@@ -2117,18 +2119,18 @@ def puzzle_solver(puzzle_dict, puzzle_category):
                 if option == result[0]:
                     answer = i + 1
                     stored = True
-                    puzzle_dict['chnMean'] = 'Stored'
+                    puzzle_dict['chnMean'] += 'Stored'
                     break
             if not stored:
-                puzzle_dict['chnMean'] = 'Expired'
-                print('题目过期...更新中')
+                puzzle_dict['chnMean'] += 'Expired'
+                print(f'id={id} 题目过期...更新中')
     else:
         answer_text = option_list[answer - 1]
         option_list.pop(answer - 1)
     if not stored and answer != 0:
-        puzzle_dict['chnMean'] = 'Learnt'
         cursor.execute(f'''INSERT OR REPLACE INTO {puzzle_category} (ID, QUESTION, CHN_MEAN, ANSWER, OPTIONS1, OPTIONS2, OPTIONS3, TOPIC_ID) VALUES (?, ?, ?, ?, ?, ?,?, ?)''', (id, question, chn_mean, answer_text, option_list[0], option_list[1], option_list[2], topic_id))
         conn.commit()
+        puzzle_dict['chnMean'] += 'Learnt'
     if answer == 0:
         answer = random.randint(0, 4)
         if answer == 0:

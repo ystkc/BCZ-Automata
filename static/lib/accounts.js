@@ -209,10 +209,10 @@ function joinAll(){
 }
 function daKaAll(button){
   // 仅F12调用
-  console.log("在50s内开始所有账号")
+  console.log("在180s内开始所有账号")
   document.querySelectorAll('.daka').forEach(function(button){
-    // 随机延时0-50s
-    random_secs = Math.floor(Math.random() * 50);
+    // 随机延时0-180s
+    random_secs = Math.floor(Math.random() * 180);
     setTimeout(function(){
       button.click();
     }, random_secs * 1000);
@@ -230,21 +230,49 @@ function daKaAll(button){
 
 }
 function daKa(button, unique_id){
-  // 发送请求后，获得一个sse链接，展示在页面上
-  let current_time = new Date().toLocaleString();
-  button.parentNode.appendChild(`<p>${current_time}</p>`)
-  let sse = new EventSource('/api/daka?unique_id=' + unique_id);
-  current_time = new Date().toLocaleString();
-  button.parentNode.appendChild(`<p>${current_time}</p>`)
-  sse.onmessage = function(event) {
-    if (event.data[0] == '$')
-      button.parentNode.parentNode.querySelector('#img_frame').innerHTML = event.data;
-    button.parentNode.parentNode.querySelector('#nickname').innerHTML = event.data;
-  };
-  sse.onerror = function(event) {
-    console.error(event);
-    sse.close();
-  };
+  // websocket链接
+  
+  let socket = io();
+  socket.emit('daka', unique_id);
+  socket.on('msg', function(data) {
+    // console.log(data);
+    msg = data;
+    if (msg[0] == '$'){
+      button.parentNode.parentNode.querySelector('#img_frame').innerHTML = msg;
+    }
+    else{
+      button.parentNode.parentNode.querySelector('#nickname').innerHTML = msg;
+    }
+  });
+  
+  // let socket = new WebSocket('ws://' + location.host + '/api/daka?unique_id=' + unique_id);
+  // socket.onopen = function(event) {
+  //   console.log("WebSocket已连接");
+  // };
+  // socket.onmessage = function(event) {
+  //   console.log(event.data);
+  //   msg = event.data;
+  //   if (msg[0] == '$'){
+  //     button.parentNode.parentNode.querySelector('#img_frame').innerHTML = msg;
+  //   }
+  //   else{
+  //     button.parentNode.parentNode.querySelector('#nickname').innerHTML = msg;
+  //   }
+  // };
+  // socket.onerror = function(event) {
+  //   console.error(event);
+  //   socket.close();
+  // };
+
+  // sse.onmessage = function(event) {
+  //   if (event.data[0] == '$')
+  //     button.parentNode.parentNode.querySelector('#img_frame').innerHTML = event.data;
+  //   button.parentNode.parentNode.querySelector('#nickname').innerHTML = event.data;
+  // };
+  // sse.onerror = function(event) {
+  //   console.error(event);
+  //   sse.close();
+  // };
 }
 
 function moreGroups(unique_id){

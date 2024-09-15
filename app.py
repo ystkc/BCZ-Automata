@@ -1,6 +1,11 @@
 import sys
 import time
 import logging
+
+from gevent import monkey
+monkey.patch_all() # 如果出现gevent导致SSL无限递归，将这两行移到requests前面。
+# 这两行可以让gevent高并发执行，否则跟开发服务器一样
+
 import requests
 import json
 import httpx
@@ -11,8 +16,13 @@ import datetime
 import traceback
 
 from flask import Flask, Response, render_template, jsonify, request
+from flask_socketio import SocketIO, emit
 from werkzeug.serving import WSGIRequestHandler, _log
-import waitress
+# import waitress # waitress 不支持websocket
+
+
+from gevent.pywsgi import WSGIServer
+
 
 from src import bcz
 from src.config import Config
@@ -39,10 +49,53 @@ class MyRequestHandler(WSGIRequestHandler):
 
 app = Flask(__name__, static_folder='static', static_url_path='/')
 app.json.ensure_ascii = False
+socketio = SocketIO(app, async_mode='gevent', logger=True)
+
+
 
 config = Config()
 user_dict_obj = user_dict()
 user_dict_list = user_dict_obj.user_dict_list
+
+
+def daka_sse(unique_id, request_time):
+    global daka_cnt
+    daka_cnt += 1
+    index, user_dict = user_dict_obj.find(unique_id)
+    user_dict['config']['user_index'] = index
+    user_cnt = len(user_dict_list)
+    # yield f' {unique_id} 开始打卡{daka_cnt}<br>\n\n'
+    # time.sleep(1)
+    # yield f' {unique_id} 开始打卡{daka_cnt}<br>.\n\n'
+    # time.sleep(1)
+    # yield f' {unique_id} 开始打卡{daka_cnt}<br>..\n\n'
+    # time.sleep(1)
+    # yield f' {unique_id} 开始打卡{daka_cnt}<br>...\n\n'
+    # time.sleep(1)
+    # yield f' {unique_id} 开始打卡{daka_cnt}<br>....\n\n'
+    for msg in thrift_utils.daka(user_cookie = user_dict['cookie'], user_config = user_dict['config'], total_user_cnt=user_cnt):
+        yield f'{msg}\n{request_time}\n\n'
+    daka_cnt -= 1
+            
+@socketio.on('daka')
+def daka(data):
+    '''打卡'''
+    try:
+        request_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        unique_id = data
+        if not unique_id:
+            return restful(400, '调用方法异常Σ(っ °Д °;)っ')
+        for msg in daka_sse(unique_id, request_time):
+            emit('msg', msg)
+    except Exception as e:
+        err_str = traceback.format_exc()
+        # with open(f'error_{unique_id}_{int(time.time())}.txt', 'w', encoding='utf-8') as f:
+        #     f.write(str(e))
+        #     f.write(err_str)
+        emit('msg', f'$打卡失败{e}{err_str}')
+        print(err_str)
+        
+
 
 @app.route('/')
 def index():
@@ -340,6 +393,7 @@ def change_notice():
     
 @app.route("/own_groups", methods=['GET'])
 def own_groups():
+    # return restful(200, '获取用户群组成功', [{'name': '用户年级组10', 'share_key': '', 'rank': '10已打卡于2022-01-01 00:00:00', 'introduction': '加入上限10', 'notice': '授权上限10', 'group_nickname': ''}])
     try:
         unique_id = request.args.get('unique_id', '')
         if not unique_id:
@@ -423,39 +477,9 @@ def mm():
     
 
 
-@app.route('/api/daka', methods=['GET'])
-def daka():
-    '''打卡'''
-    try:
-        request_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        unique_id = request.args.get('unique_id', '')
-        if not unique_id:
-            return restful(400, '调用方法异常Σ(っ °Д °;)っ')
-        # sse
-        return Response(daka_sse(unique_id, request_time), mimetype='text/event-stream')
-    except Exception as e:
-        with open(f'error_{unique_id}_{int(time.time())}.txt', 'w', encoding='utf-8') as f:
-            f.write(str(e))
-        return restful(400, f'{e}')
 
 
     
-def daka_sse(unique_id, request_time):
-    try:
-        global daka_cnt
-        daka_cnt += 1
-        index, user_dict = user_dict_obj.find(unique_id)
-        user_dict['config']['user_index'] = index
-        user_cnt = len(user_dict_list)
-        for msg in thrift_utils.daka(user_cookie = user_dict['cookie'], user_config = user_dict['config'], total_user_cnt=user_cnt):
-            yield f'data: {request_time} {msg}\n\n'
-        daka_cnt -= 1
-    except Exception as e:
-        with open(f'error_{unique_id}_{int(time.time())}.txt', 'w', encoding='utf-8') as f:
-            f.write(str(e))
-            f.write(traceback.format_exc())
-            raise e 
-            
         
 
 @app.route('/api/more_groups', methods=['POST'])
@@ -558,7 +582,7 @@ if __name__ == '__main__':
         logger = logging.getLogger(name)
         if 'httpx' in name or 'urllib3' in name:
             logger.setLevel(logging.DEBUG)
-        print ('name = %s, logger = %s'%(name, logger))
+        # print ('name = %s, logger = %s'%(name, logger))
 
         
         # # 创建handler，输出到控制台
@@ -574,5 +598,8 @@ if __name__ == '__main__':
 
     logging.info('BCZ-Automata 启动中...')
     
-    # serve(application, host='0.0.0.0', port=5000, log_level='info', access_log_file='/path/to/your/logfile.log', error_log_file='/path/to/your/logfile.log')
-    waitress.serve(app, host=config.host, port=config.port, threads=6, expose_tracebacks = True)
+    # app.run(debug=True, host='127.0.0.1', port=8850, request_handler=MyRequestHandler)
+    # socketio.run(app, debug=True, host='127.0.0.1', port=8850)
+    # waitress.serve(app, host=config.host, port=config.port, threads=6, expose_tracebacks = True)
+    http_server = WSGIServer((config.host, config.port), socketio.run(app, host=config.host, port=config.port), log=logging)
+    http_server.serve_forever()
