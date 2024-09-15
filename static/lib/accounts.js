@@ -244,6 +244,10 @@ function daKa(button, unique_id){
       button.parentNode.parentNode.querySelector('#nickname').innerHTML = msg;
     }
   });
+  socket.on('error', function(error) {
+    button.parentNode.parentNode.querySelector('#img_frame').innerHTML = error;
+    socket.close();
+  });
   
   // let socket = new WebSocket('ws://' + location.host + '/api/daka?unique_id=' + unique_id);
   // socket.onopen = function(event) {

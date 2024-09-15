@@ -2066,21 +2066,12 @@ def get_history_learnt_list(unique_id, delta=1):
     return learnt_list
 
 from src.bcz import getRandomWordIDInBook
-daka_list = []
-def heartbeat_demon(user_cookie=user_cookie, user_config=user_config):
-    unique_id = user_config['unique_id']
-    while unique_id in daka_list:
-        payload=[
-            {"index":0}
-        ]
-        report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=0)
-        for i in range(30):
-            time.sleep(1)
-            if unique_id not in daka_list:
-                break
 
-
+conn = None
 def puzzle_init(puzzle_category):
+    global conn
+    if conn is not None:
+        return
     conn = sqlite3.connect('puzzle.db')
     cursor = conn.cursor()
     cursor.execute(f'''CREATE TABLE IF NOT EXISTS {puzzle_category} (
@@ -2097,45 +2088,72 @@ def puzzle_init(puzzle_category):
 
 def puzzle_solver(puzzle_dict, puzzle_category):
     # 链接数据库
-    conn = sqlite3.connect('puzzle.db')
     cursor = conn.cursor()
     id = int(puzzle_dict['id'])
     chn_mean = puzzle_dict['chnMean']
     if chn_mean is None:
-        chn_mean = ''
+        puzzle_dict['chnMean'] = ''
     option_list = puzzle_dict['options'].copy()
     answer = puzzle_dict['rightAnswer']
     question = puzzle_dict['question']
     topic_id = puzzle_dict['topicId']
     answer_text = ''
+    # 查找答案
+    cursor.execute(f'''SELECT ANSWER FROM {puzzle_category} WHERE ID == ?''', (id, ))
+    result = cursor.fetchone()
     stored = False
-    if answer is None:
-        answer = 0
-        # 查找答案
-        cursor.execute(f'''SELECT ANSWER FROM {puzzle_category} WHERE ID == ?''', (id, ))
-        result = cursor.fetchone()
-        if result is not None:
+    if result is not None:
+        stored = True
+        puzzle_dict['chnMean'] += 'Stored'
+        # print(id ,result, option_list)
+        if answer is None:
             for i, option in enumerate(option_list):
+                # print(i, option, result[0], answer)
                 if option == result[0]:
                     answer = i + 1
-                    stored = True
-                    puzzle_dict['chnMean'] += 'Stored'
                     break
-            if not stored:
+            if answer is None:
+                # print(i, option, result[0], answer, puzzle_dict['chnMean'])
                 puzzle_dict['chnMean'] += 'Expired'
+                stored = False
                 print(f'id={id} 题目过期...更新中')
-    else:
-        answer_text = option_list[answer - 1]
-        option_list.pop(answer - 1)
-    if not stored and answer != 0:
+            
+    
+    # print(stored, answer, puzzle_dict['chnMean'])
+    if not stored and answer is not None:
         cursor.execute(f'''INSERT OR REPLACE INTO {puzzle_category} (ID, QUESTION, CHN_MEAN, ANSWER, OPTIONS1, OPTIONS2, OPTIONS3, TOPIC_ID) VALUES (?, ?, ?, ?, ?, ?,?, ?)''', (id, question, chn_mean, answer_text, option_list[0], option_list[1], option_list[2], topic_id))
         conn.commit()
         puzzle_dict['chnMean'] += 'Learnt'
-    if answer == 0:
+    if answer is None:
         answer = random.randint(0, 4)
         if answer == 0:
             answer = 1 # 干扰概率
     return answer
+
+def puzzle_close():
+    global conn
+    if conn is None:
+        return
+    conn.close()
+    conn = None
+
+
+daka_list = []
+def heartbeat_demon(user_cookie=user_cookie, user_config=user_config):
+    unique_id = user_config['unique_id']
+    while unique_id in daka_list:
+        payload=[
+            {"index":0}
+        ]
+        report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=0)
+        for i in range(30):
+            time.sleep(1)
+            if unique_id not in daka_list:
+                break
+    if len(daka_list) == 0:
+        puzzle_close()
+
+
     
 
 def print_puzzle(puzzle_dict):
@@ -2152,11 +2170,6 @@ def print_puzzle(puzzle_dict):
     result += ')'
     return result
 
-def automated_notice_explorer(user_cookie=user_cookie, user_config=user_config):
-    '''explorer自动化通知'''
-    if user_config.get('no_explorer', False) == True:
-        yield f'{user_config["name"]}不参加explorer'
-        return
 
 def pkonline(user_cookie=user_cookie, user_config=user_config):
     '''pkonline'''

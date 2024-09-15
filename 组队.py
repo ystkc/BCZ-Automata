@@ -15,7 +15,7 @@ for user in cookie:
     name = config['name']
     unique_id = config['unique_id']
     access_token = cookie['access_token']
-    if name == '奶芋' or cookie['no_team']:
+    if name == '奶芋' or cookie.get('no_team', False):
         continue
     print(f'正在为{name}.{unique_id}组队...')
 

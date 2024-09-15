@@ -16,6 +16,8 @@ def run(user, random_delay_thresh = 20):
     config = user['config']
     cookie = user['cookie']
     name = config['name']
+    if '132' not in name:
+        return
     unique_id = config['unique_id']
     access_token = cookie['access_token']
     random_delay = random.randint(0, random_delay_thresh)
@@ -55,10 +57,18 @@ def run(user, random_delay_thresh = 20):
         time.sleep(4)
         response = send_http2_request('POST',f'https://{headers["Host"]}/api/deskmate/game/finish_new_user_guide', headers, '{}')
 
+    finish_all = False
+    if time.localtime().tm_wday in [5,6]:
+        finish_all = True
+    # print(finish_all)
 
     while True:
         cnt = data['mine']['finishCount']
-        if cnt >= 50:
+        deskmate_cnt = data['deskmate']['finishCount']
+        # print(cnt, deskmate_cnt)
+        if finish_all and cnt + deskmate_cnt >= 100:
+            break
+        elif not finish_all and cnt >= 50:
             break
         topic_list = data['needCompletedTopicList']
         deskmate_completed_list = data['deskmate']['completedTopicList']
@@ -66,16 +76,18 @@ def run(user, random_delay_thresh = 20):
         finished_topic_ids = [t['topicId'] for t in deskmate_completed_list]
         finished_topic_ids.extend([t['topicId'] for t in my_completed_list])
         # 找第一个同桌未完成的题目
-        found = 0
+        found = - random.randint(0, 2)
+        topic_id = -1
         
         for topic in topic_list:
             if topic['topicId'] not in finished_topic_ids:
-                found = 1
+                found += 1
                 topic_id = topic['topicId']
                 topic_option = topic['topicOption']
-                break
-        if found == 0:
-            raise '没有找到未完成的题目'
+                if found > 0:
+                    break
+        if topic_id == -1:
+            raise f'{name} 没有找到未完成的题目'
 
         time.sleep(random.randint(3000, 4000) / 1000)
 
@@ -102,8 +114,6 @@ def run(user, random_delay_thresh = 20):
         if response_json['credit'] > 0:
             print(f'铜板+{response_json["credit"]}')
             time.sleep(0.5)
-        if cnt >= 50:
-            break
     print(f'{name} 每周双人战结束')
 
     if data['status'] == 3:# 结束

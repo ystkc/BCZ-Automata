@@ -74,7 +74,7 @@ def daka_sse(unique_id, request_time):
     # time.sleep(1)
     # yield f' {unique_id} 开始打卡{daka_cnt}<br>....\n\n'
     for msg in thrift_utils.daka(user_cookie = user_dict['cookie'], user_config = user_dict['config'], total_user_cnt=user_cnt):
-        yield f'{msg}\n{request_time}\n\n'
+        yield f'{msg}\n\n'
     daka_cnt -= 1
             
 @socketio.on('daka')
@@ -92,7 +92,7 @@ def daka(data):
         # with open(f'error_{unique_id}_{int(time.time())}.txt', 'w', encoding='utf-8') as f:
         #     f.write(str(e))
         #     f.write(err_str)
-        emit('msg', f'$打卡失败{e}{err_str}')
+        emit('error', f'$打卡失败{e}{err_str}')
         print(err_str)
         
 
