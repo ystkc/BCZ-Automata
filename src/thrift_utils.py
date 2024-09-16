@@ -2097,7 +2097,6 @@ def puzzle_solver(puzzle_dict, puzzle_category):
     answer = puzzle_dict['rightAnswer']
     question = puzzle_dict['question']
     topic_id = puzzle_dict['topicId']
-    answer_text = ''
     # 查找答案
     cursor.execute(f'''SELECT ANSWER FROM {puzzle_category} WHERE ID == ?''', (id, ))
     result = cursor.fetchone()
@@ -2121,6 +2120,7 @@ def puzzle_solver(puzzle_dict, puzzle_category):
     
     # print(stored, answer, puzzle_dict['chnMean'])
     if not stored and answer is not None:
+        answer_text = option_list[answer - 1]
         cursor.execute(f'''INSERT OR REPLACE INTO {puzzle_category} (ID, QUESTION, CHN_MEAN, ANSWER, OPTIONS1, OPTIONS2, OPTIONS3, TOPIC_ID) VALUES (?, ?, ?, ?, ?, ?,?, ?)''', (id, question, chn_mean, answer_text, option_list[0], option_list[1], option_list[2], topic_id))
         conn.commit()
         puzzle_dict['chnMean'] += 'Learnt'
@@ -3170,7 +3170,10 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
     with lock:
         conn = sqlite3.connect('./BCZ_wordscheck/bcz_notice.db')
         cursor = conn.cursor()
-        if rank_type != -1:
+        if rank_type == 7 or rank_type == 6:
+            # 对第六段位，只保存前100名
+            if rank_type == 6:
+                class_list = class_list[:100]
             for i, class_item in enumerate(class_list):
                 class_share_key = class_item['shareKey']
                 class_name = class_item['groupName']
@@ -3184,6 +3187,7 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
         for i, group_info in enumerate(data_list):
             class_name = group_info['name']
             content = group_info['notice']
+            share_key = group_info['shareKey']
             print(f'❤️ → 获取到排名{i + class_rank_start}的班级{class_name}的通知\n')
 
             hash_value = hashlib.md5(content.encode('utf-8')).hexdigest()
@@ -3196,7 +3200,7 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
                 cursor.execute("""
                     INSERT INTO notice (SHARE_KEY, NAME,RANK_TYPE, RANK, HASH_VALUE, CONTENT, DATE) 
                     VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (share_key, class_name, 7, i, hash_value, content, time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())))
+                """, (share_key, class_name, 7, i + class_rank_start, hash_value, content, time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())))
             else:
                 message_str += '`'
                 yield message_str

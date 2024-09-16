@@ -421,7 +421,7 @@ def own_groups():
             introduction = group['introduction'].replace('\n', '<br>')
             notice = group['notice'].replace('\n', '<br>')
             groups.append({
-                'name': group['name'],
+                'name': f"{group['name']}(加入{group['joinDays']}天)",
                 'share_key': group['shareKey'],
                 'rank': group['rank'],
                 'introduction': introduction,

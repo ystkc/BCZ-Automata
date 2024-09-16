@@ -16,8 +16,6 @@ def run(user, random_delay_thresh = 20):
     config = user['config']
     cookie = user['cookie']
     name = config['name']
-    if '132' not in name:
-        return
     unique_id = config['unique_id']
     access_token = cookie['access_token']
     random_delay = random.randint(0, random_delay_thresh)
@@ -63,57 +61,60 @@ def run(user, random_delay_thresh = 20):
     # print(finish_all)
 
     while True:
-        cnt = data['mine']['finishCount']
-        deskmate_cnt = data['deskmate']['finishCount']
-        # print(cnt, deskmate_cnt)
-        if finish_all and cnt + deskmate_cnt >= 100:
-            break
-        elif not finish_all and cnt >= 50:
-            break
-        topic_list = data['needCompletedTopicList']
-        deskmate_completed_list = data['deskmate']['completedTopicList']
-        my_completed_list = data['mine']['completedTopicList']
-        finished_topic_ids = [t['topicId'] for t in deskmate_completed_list]
-        finished_topic_ids.extend([t['topicId'] for t in my_completed_list])
-        # 找第一个同桌未完成的题目
-        found = - random.randint(0, 2)
-        topic_id = -1
-        
-        for topic in topic_list:
-            if topic['topicId'] not in finished_topic_ids:
-                found += 1
-                topic_id = topic['topicId']
-                topic_option = topic['topicOption']
-                if found > 0:
-                    break
-        if topic_id == -1:
-            raise f'{name} 没有找到未完成的题目'
+        try:
+            cnt = data['mine']['finishCount']
+            deskmate_cnt = data['deskmate']['finishCount']
+            # print(cnt, deskmate_cnt)
+            if finish_all and cnt + deskmate_cnt >= 100:
+                break
+            elif not finish_all and cnt >= 50:
+                break
+            topic_list = data['needCompletedTopicList']
+            deskmate_completed_list = data['deskmate']['completedTopicList']
+            my_completed_list = data['mine']['completedTopicList']
+            finished_topic_ids = [t['topicId'] for t in deskmate_completed_list]
+            finished_topic_ids.extend([t['topicId'] for t in my_completed_list])
+            # 找第一个同桌未完成的题目
+            found = - random.randint(0, 2)
+            topic_id = -1
+            
+            for topic in topic_list:
+                if topic['topicId'] not in finished_topic_ids:
+                    found += 1
+                    topic_id = topic['topicId']
+                    topic_option = topic['topicOption']
+                    if found > 0:
+                        break
+            if topic_id == -1:
+                raise f'{name} 没有找到未完成的题目'
 
-        time.sleep(random.randint(3000, 4000) / 1000)
+            time.sleep(random.randint(3000, 4000) / 1000)
 
-        # https://social.baicizhan.com/api/deskmate/game/word_match
-        # {"topicId":45,"topicOption":"疼痛"}
-        time_long = int(time.time() * 1000)
-        headers = getHeaders('$social', cookie, time_long, index = 1)
-        headers['Content-Type'] = 'application/json'
-        response = send_http2_request('POST',f'https://{headers["Host"]}/api/deskmate/game/word_match', headers, json.dumps({"topicId":topic_id,"topicOption":topic_option}, ensure_ascii=False))
-        response_json = response.json()['data']
-        # 刷新
-        while True:
-            # https://social.baicizhan.com/api/deskmate/game/get_word_match_info
+            # https://social.baicizhan.com/api/deskmate/game/word_match
+            # {"topicId":45,"topicOption":"疼痛"}
             time_long = int(time.time() * 1000)
             headers = getHeaders('$social', cookie, time_long, index = 1)
-            response = send_http2_request('GET',f'https://{headers["Host"]}/api/deskmate/game/get_word_match_info', headers, None)
-            data = response.json()['data']
-            if data['needCompletedTopicList'] is not None:
-                break
-            time.sleep(1)
-        
-        cnt = data['mine']['finishCount']
-        print(f'{name} 完成第{cnt}次对战{response_json}')
-        if response_json['credit'] > 0:
-            print(f'铜板+{response_json["credit"]}')
-            time.sleep(0.5)
+            headers['Content-Type'] = 'application/json'
+            response = send_http2_request('POST',f'https://{headers["Host"]}/api/deskmate/game/word_match', headers, json.dumps({"topicId":topic_id,"topicOption":topic_option}, ensure_ascii=False))
+            response_json = response.json()['data']
+            # 刷新
+            while True:
+                # https://social.baicizhan.com/api/deskmate/game/get_word_match_info
+                time_long = int(time.time() * 1000)
+                headers = getHeaders('$social', cookie, time_long, index = 1)
+                response = send_http2_request('GET',f'https://{headers["Host"]}/api/deskmate/game/get_word_match_info', headers, None)
+                data = response.json()['data']
+                if data['needCompletedTopicList'] is not None:
+                    break
+                time.sleep(1)
+            
+            cnt = data['mine']['finishCount']
+            print(f'{name} 完成第{cnt}次对战{response_json}')
+            if response_json['credit'] > 0:
+                print(f'铜板+{response_json["credit"]}')
+                time.sleep(0.5)
+        except Exception as e:
+            print(f'{name} {e}')
     print(f'{name} 每周双人战结束')
 
     if data['status'] == 3:# 结束
