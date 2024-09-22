@@ -2,10 +2,28 @@ import sys
 import time
 import logging
 
-from gevent import monkey
-monkey.patch_all() # 如果出现gevent导致SSL无限递归，将这两行移到requests前面。
-# 这两行可以让gevent高并发执行，否则跟开发服务器一样
+debug = True
+if '--debug' in sys.argv:
+    level = logging.DEBUG
+    debug = True
+else:
+    level = logging.INFO
+    debug = False
 
+if debug:
+    from werkzeug.serving import WSGIRequestHandler, _log
+    WSGIRequestHandler.address_string = lambda self: self.headers.get('x-real-ip', self.client_address[0])
+    class MyRequestHandler(WSGIRequestHandler):
+        def log(self, type, message, *args):
+            _log(type, f'{self.address_string()} {message % args}\n')
+else:
+    # import waitress # waitress 不支持websocket
+
+    from gevent import monkey
+    monkey.patch_all() # 如果出现gevent导致SSL无限递归，将这两行移到requests前面。
+    # 这两行可以让gevent高并发执行，否则跟开发服务器一样
+    from gevent.pywsgi import WSGIServer
+    
 import requests
 import json
 import httpx
@@ -17,11 +35,6 @@ import traceback
 
 from flask import Flask, Response, render_template, jsonify, request
 from flask_socketio import SocketIO, emit
-from werkzeug.serving import WSGIRequestHandler, _log
-# import waitress # waitress 不支持websocket
-
-
-from gevent.pywsgi import WSGIServer
 
 
 from src import bcz
@@ -30,21 +43,11 @@ import src.thrift_utils as thrift_utils
 from src.thrift_utils import user_dict
 from src.thrift_utils import getHeaders
 
-# if '--debug' in sys.argv or (hasattr(sys, 'gettrace') and sys.gettrace() is not None):
-if '--debug' in sys.argv:
-    level = logging.DEBUG
-else:
-    level = logging.INFO
 
 logging.basicConfig(
     format='%(asctime)s [%(name)s][%(levelname)s] %(message)s',
     level=level
 )
-
-WSGIRequestHandler.address_string = lambda self: self.headers.get('x-real-ip', self.client_address[0])
-class MyRequestHandler(WSGIRequestHandler):
-    def log(self, type, message, *args):
-        _log(type, f'{self.address_string()} {message % args}\n')
 
 
 app = Flask(__name__, static_folder='static', static_url_path='/')
@@ -576,30 +579,17 @@ def restful(code: int, msg: str = '', data: dict = {}) -> Response:
     }), code
 
 if __name__ == '__main__':
-    # logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s %(message)s')
     
     for name in logging.Logger.manager.loggerDict.keys():
         logger = logging.getLogger(name)
-        if 'httpx' in name or 'urllib3' in name:
+        if 'httpx' in name: # 输出http2多路请求的日志，如需要requests的日志，则加入'urllib3' in name
             logger.setLevel(logging.DEBUG)
-        # print ('name = %s, logger = %s'%(name, logger))
-
-        
-        # # 创建handler，输出到控制台
-        # console_handler = logging.StreamHandler()
-        # console_handler.setLevel(logging.DEBUG)
-        
-        # # 创建formatter，并添加到handler
-        # formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        # console_handler.setFormatter(formatter)
-        
-        # # 将handler添加到root logger
-        # logger.addHandler(console_handler)
 
     logging.info('BCZ-Automata 启动中...')
-    
-    # app.run(debug=True, host='127.0.0.1', port=8850, request_handler=MyRequestHandler)
-    # socketio.run(app, debug=True, host='127.0.0.1', port=8850)
-    # waitress.serve(app, host=config.host, port=config.port, threads=6, expose_tracebacks = True)
-    http_server = WSGIServer((config.host, config.port), socketio.run(app, host=config.host, port=config.port), log=logging)
-    http_server.serve_forever()
+    if debug:
+        # app.run(debug=True, host='127.0.0.1', port=8850, request_handler=MyRequestHandler)
+        socketio.run(app, debug=True, host='127.0.0.1', port=8850)
+    else:
+        # waitress.serve(app, host=config.host, port=config.port, threads=6, expose_tracebacks = True)
+        http_server = WSGIServer((config.host, config.port), socketio.run(app, host=config.host, port=config.port), log=logging)
+        http_server.serve_forever()

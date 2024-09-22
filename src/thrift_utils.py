@@ -2988,7 +2988,7 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
         headers = getHeaders("$social", user_cookie, time_long, index=1)
         response = send_http2_request('GET', f'https://{headers["Host"]}/api/deskmate/home_page', headers, None)
         deskmate_data = response.json()['data']
-        if deskmate_data['deskmate'] is None:
+        if deskmate_data is None:
             deskmate_daka_today = False
         else:
             deskmate_daka_today = deskmate_data['deskmate']['dakaToday']
@@ -3187,6 +3187,8 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
         for i, group_info in enumerate(data_list):
             class_name = group_info['name']
             content = group_info['notice']
+            if content == None:
+                content = ''
             share_key = group_info['shareKey']
             print(f'❤️ → 获取到排名{i + class_rank_start}的班级{class_name}的通知\n')
 
