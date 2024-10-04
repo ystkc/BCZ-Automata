@@ -58,7 +58,7 @@ socketio = SocketIO(app, async_mode='gevent', logger=True)
 
 config = Config()
 user_dict_obj = user_dict()
-user_dict_list = user_dict_obj.user_dict_list
+
 
 
 def daka_sse(unique_id, request_time):
@@ -66,6 +66,7 @@ def daka_sse(unique_id, request_time):
     daka_cnt += 1
     index, user_dict = user_dict_obj.find(unique_id)
     user_dict['config']['user_index'] = index
+    user_dict_list = user_dict_obj.user_dict_list
     user_cnt = len(user_dict_list)
     # yield f' {unique_id} 开始打卡{daka_cnt}<br>\n\n'
     # time.sleep(1)
@@ -222,12 +223,26 @@ def join_group():
         raise e
         return restful(400, f'{e}')
 
+@app.route('/accounts/reload', methods=['GET'])
+def accounts_reload():
+    '''重新加载用户列表'''
+    global user_dict_obj
+    del user_dict_obj
+    user_dict_obj = user_dict()
+    return accounts_list()
+
+
 @app.route('/accounts/list', methods=['GET'])
 def accounts_list():
     '''获取用户列表'''
     try:
         result = []
+        user_dict_list = user_dict_obj.user_dict_list
+        if debug:
+            # 只获取3个用户
+            user_dict_list = user_dict_list[:3]
         for user in user_dict_list:
+            user['cookie']['device_id'] = hashlib.md5(str(user['cookie']['access_token']).encode('utf-8')).hexdigest()[:16]
             result.append({
                 'name': user['config']['name'],
                 'unique_id': user['config']['unique_id'],
@@ -237,50 +252,22 @@ def accounts_list():
         return restful(200, '获取用户列表成功', result)
     except Exception as e:
         return restful(400, f'{e}')
-@app.route('/accounts/add', methods=['POST'])
-def accounts_add():
-    '''添加用户'''
-    try:
-        name = request.json.get('name', '')
-        unique_id = request.json.get('unique_id', '')
-        access_token = request.json.get('access_token', '')
-        device_id = hashlib.md5(str(access_token).encode('utf-8')).hexdigest()[:16]
-        if not name or not unique_id or not access_token:
-            return restful(400, '调用方法异常Σ(っ °Д °;)っ')
-        _, item = user_dict_obj.find(unique_id)
-        if item is not None:
-            return restful(400, '用户已存在')
-        user_dict_obj.add_user(access_token, unique_id, name, device_id)
-        return restful(200, '添加用户成功')
-    except Exception as e:
-        return restful(400, f'{e}')
-
-@app.route('/accounts/delete', methods=['POST'])
-def accounts_delete():
-    '''删除用户'''
-    try:
-        unique_id = request.json.get('unique_id', '')
-        if not unique_id:
-            return restful(400, '调用方法异常Σ(っ °Д °;)っ')
-        user_dict_obj.del_user(unique_id)
-        return restful(200, '删除用户成功')
-    except Exception as e:
-        raise e
-        return restful(400, f'{e}')
     
 notice_list = []
 pace = 6
-def change_notice_sse_func(unique_id, group_share_key, content):
-    for event in change_notice_sse_func_(unique_id, group_share_key, content):
+def change_notice_sse_func(unique_id, group_share_key, content, mentioned_ids, group_id):
+    for event in change_notice_sse_func_(unique_id, group_share_key, content, mentioned_ids, group_id):
         target = event.replace('\n', '<br>')
         target = target.replace('\r', '<br>')
         target = target.replace('<br><br>', '<br>')
         # print(target)
         yield f"data: {target}\n\n"
-def change_notice_sse_func_(unique_id, group_share_key, content):
+def change_notice_sse_func_(unique_id, group_share_key, content, mentioned_ids, group_id):
     # print(content)
-    # yield content
+    # print(mentioned_ids)
+    # yield f'{content}{mentioned_ids}'
     # return
+    message_str = ""
     _, user_dict = user_dict_obj.find(unique_id)
     time_long = int(time.time() * 1000)
     headers = getHeaders('$group', user_dict['cookie'], time_long, index = 1)
@@ -292,7 +279,8 @@ def change_notice_sse_func_(unique_id, group_share_key, content):
     # https://group.baicizhan.com/group/set_notice
     response_json = requests.post(f'https://group.baicizhan.com/group/set_notice', json=(payload), headers=headers).json()
     if response_json['message'] == None:
-        yield '通知发送成功<br><br>' + content
+        message_str = f'通知发送成功<br><br>'
+        yield message_str
     elif response_json['message'] == '小班公告内容涉嫌违规，请修改':
         reversed = False
         if content[0] == '#':
@@ -358,7 +346,24 @@ def change_notice_sse_func_(unique_id, group_share_key, content):
                 # 随机延迟
                 time.sleep(random.randint(750, 1500) / 1000)
     else:
-        yield f'通知发送失败{response_json["message"]}<br>'
+        message_str = f'通知发送失败{response_json["message"]}<br><br>'
+    # 发送mention
+    if len(mentioned_ids) > 0:
+        # https://group.baicizhan.com/group/batch_send_notice_to_mentioned_users
+        # 先去重
+        mentioned_ids = list(set(mentioned_ids))
+        payload = {
+            "groupId": group_id,
+            "uniqueIds": mentioned_ids,
+        }
+        headers = getHeaders('$group', user_dict['cookie'], time_long, index = 1)
+        headers['Content-Type'] = 'application/json; charset=UTF-8'
+        response_json = requests.post(f'https://group.baicizhan.com/group/batch_send_notice_to_mentioned_users', json=(payload), headers=headers).json()
+        if response_json['code'] == 1:
+            message_str += f'@发送成功x{len(mentioned_ids)}<br><br>' + content
+        else:
+            message_str += f'@发送失败x{len(mentioned_ids)}{response_json}<br><br>' + content
+        yield message_str
 
 
 @app.route('/api/change_notice_sse', methods=['GET'])
@@ -367,15 +372,17 @@ def change_notice_sse():
     try:
         unique_id = int(request.args.get('unique_id', ''))
         group_share_key = request.args.get('group_share_key', '')
+        group_id = request.args.get('group_id', '')
         content = ''
         for notice in notice_list:
             if notice['unique_id'] == unique_id and notice['group_share_key'] == group_share_key:
                 content = notice['content']
+                mentioned_ids = notice['mentioned_ids']
                 notice_list.remove(notice)
                 break
         if content == '':
             return restful(400, '通知内容为空')
-        return Response(change_notice_sse_func(unique_id, group_share_key, content), mimetype='text/event-stream')
+        return Response(change_notice_sse_func(unique_id, group_share_key, content, mentioned_ids, group_id), mimetype='text/event-stream')
     except Exception as e:
         return restful(400, f'{e}')
         
@@ -386,10 +393,11 @@ def change_notice():
         unique_id = int(request.json.get('unique_id', ''))
         group_share_key = request.json.get('group_share_key', '')
         content = request.json.get('content', '')
+        mentioned_ids = request.json.get('mentioned_ids', '')
         if not unique_id or not group_share_key or not content:
             print(unique_id, group_share_key, content)
             return restful(400, '调用方法异常Σ(っ °Д °;)っ')
-        notice_list.append({'unique_id': unique_id, 'group_share_key': group_share_key, 'content': content})
+        notice_list.append({'unique_id': unique_id, 'group_share_key': group_share_key, 'content': content, 'mentioned_ids': mentioned_ids})
         return restful(200, '通知已收到')
     except Exception as e:
         return restful(400, f'{e}')
@@ -426,6 +434,7 @@ def own_groups():
             groups.append({
                 'name': f"{group['name']}(加入{group['joinDays']}天)",
                 'share_key': group['shareKey'],
+                'group_id': group['id'],
                 'rank': group['rank'],
                 'introduction': introduction,
                 'notice': notice,
@@ -442,14 +451,17 @@ def own_groups():
         today_daka = '1已打卡' if response_json['data']['todayDaka'] else '0未打卡'
         
         response = requests.get('https://group.baicizhan.com/group/get_group_user_info', headers=getHeaders('$group', user_dict['cookie'], time_long, index = 1)) # 我的小班
-        result = bcz.userBasicInfo(user_dict['cookie']['access_token'])
-        user_dict_obj.update_book_id(unique_id, result.user_info.current_word_level_id)
-        daka_timestamp = result.learn_info.last_sync_done_score_time
-        date = datetime.datetime.fromtimestamp(daka_timestamp).strftime('%Y-%m-%d %H:%M:%S')
-
         data = response.json()['data']
+
+        result = bcz.userBasicInfo(user_dict['cookie']['access_token'])
+        daka_timestamp = result.learn_info.last_sync_done_score_time
+        user_dict['config']['book_id'] = result.user_info.current_word_level_id
+        
+
+        date = datetime.datetime.fromtimestamp(daka_timestamp).strftime('%Y-%m-%d %H:%M:%S')
+        user_dict['config']['grade'] = data['grade']
         groups.append({
-            'name': f'用户年级组{data["grade"]}',
+            'name': f'用户年级组{data["grade"]}书本{user_dict["config"]["book_id"]}',
             'share_key': '',
             'rank': f'{today_daka}于{date}',
             'introduction': f'加入上限{data["groupLimiteNumber"]}',
@@ -484,6 +496,86 @@ def mm():
 
     
         
+@app.route('/api/get_nickname', methods=['GET'])
+def notice():
+    '''（改公告时）获取班内改昵称的列表'''
+    try:
+        last_monday = datetime.datetime.now() - datetime.timedelta(days=datetime.datetime.now().weekday() + 7)
+        unique_id = request.args.get('unique_id', '')
+        group_share_key = request.args.get('group_share_key', '')
+        _, user_dict = user_dict_obj.find(unique_id)
+
+
+        # 1.从https://group.baicizhan.com/group/get_week_rank?shareKey=xxx&week=1/2获取班内昵称，1本周
+        time_long = int(time.time() * 1000)
+        headers = getHeaders('$group', user_dict['cookie'], time_long, index = 1)
+        rank = requests.get(f'https://group.baicizhan.com/group/get_week_rank?shareKey={group_share_key}&week=1', headers=headers)
+        last_week_rank = requests.get(f'https://group.baicizhan.com/group/get_week_rank?shareKey={group_share_key}&week=2', headers=headers)
+        member_list = rank.json()['data']['list']
+        last_week_member_list = last_week_rank.json()['data']['list']
+        group_nickname = {}
+        my_reply = ""
+        for member in member_list:
+            unique_id = member['uniqueId']
+            nickname = member['nickname']
+            duration_days = member['durationDays']
+            week_daka_dates = member['weekDakaDates']
+            # 从本周一遍历
+            if unique_id == user_dict['config']['unique_id']:
+                my_reply = nickname
+            # two_week_daka_dates是14个0、1，表示两周内每天的打卡情况
+            two_week_daka_dates = [0] * 14
+            # 如果duration_days不够两周，后面的标记-2
+            if duration_days < 14:
+                for i in range(14 - duration_days):
+                    two_week_daka_dates[i] = -2
+            # 将本周未到达的日期设置为-1
+            wd = datetime.datetime.now().weekday()
+            for i in range(wd):
+                two_week_daka_dates[-1-i] = -1
+            for date in week_daka_dates:
+                # 计算距离上周一的天数
+                delta = (datetime.datetime.strptime(date, '%Y-%m-%d') - last_monday).days + 1
+                two_week_daka_dates[delta] = 1
+
+            group_nickname[unique_id] = {
+                "group_nickname": nickname,
+                "two_week_daka_dates": two_week_daka_dates
+            }
+
+        # 2.再获取默认昵称https://group.baicizhan.com/group/information?shareKey=xxx
+        main_cookie = user_dict['cookie'].copy()
+        main_cookie['access_token'] = config.main_token
+        headers = getHeaders('$group', main_cookie, time_long, index = 1)
+        response = requests.get(f'https://group.baicizhan.com/group/information?shareKey={group_share_key}', headers=headers)
+        response_json = response.json()
+        group_member_list = response_json['data']['members']
+        # 遍历，如果有人的default_nickname和昵称相同，则是没改过昵称。
+        for member in group_member_list:
+            unique_id = member['uniqueId']
+            if unique_id in group_nickname:
+                if group_nickname[unique_id]['group_nickname'] == member['nickname']:
+                    del group_nickname[unique_id]
+                else:
+                    group_nickname[unique_id]['nickname'] = member['nickname']
+
+
+        # 3.补全上周打卡情况
+        for member in last_week_member_list:
+            unique_id = member['uniqueId']
+            if unique_id in group_nickname:
+                last_week_daka_dates = member['weekDakaDates']
+                two_week_daka_dates = group_nickname[unique_id]['two_week_daka_dates']
+                for date in last_week_daka_dates:
+                    # 计算距离上周一的天数
+                    delta = (datetime.datetime.strptime(date, '%Y-%m-%d') - last_monday).days + 1
+                    two_week_daka_dates[delta] = 1
+
+        return restful(200, '获取班内改昵称的列表成功', {'my_reply': my_reply, 'group_nickname': group_nickname})
+    except Exception as e:
+        traceback.print_exc()
+        return restful(400, f'{e}')
+    
 
 @app.route('/api/more_groups', methods=['POST'])
 def more_groups():

@@ -179,10 +179,11 @@ class user_dict:
 
 
     def close(self):
-        if self.modified:
-            with open("user_cookie.json", 'w', encoding='utf-8') as f:
-                json.dump(self.user_dict_list, f, indent=4)
-            self.modified = False
+        ...
+        # if self.modified:
+            # with open("user_cookie.json", 'w', encoding='utf-8') as f:
+            #     json.dump(self.user_dict_list, f, indent=4, ensure_ascii=False)
+            # self.modified = False
     
     def find(self, unique_id):
         unique_id = int(unique_id)
@@ -2021,6 +2022,13 @@ class cold_launch:
 
         logger.close()
 
+def clear_learnt_list(unique_id):
+    conn = sqlite3.connect('learnt_words.db')
+    learnt_words_db = f'learnt_words_{unique_id}'
+    cursor = conn.cursor()
+    cursor.execute(f'''DROP TABLE IF EXISTS {learnt_words_db}''')
+    conn.commit()
+
 def get_learnt_list(unique_id):
     conn = sqlite3.connect('learnt_words.db')
     learnt_words_db = f'learnt_words_{unique_id}'
@@ -2204,6 +2212,9 @@ def pkonline(user_cookie=user_cookie, user_config=user_config):
     url = f'https://{headers["Host"]}/api/contest/2024/prepare/main?code=mB5AG9fCzo'
     response = send_http2_request('GET', url, headers, None)
     data = response.json()['data']
+    if data is None:
+        yield f'<p style="color:red">请手动登录并报名pk再运行</p>'
+        return
     if data['todayPKFinished'] == True:
         yield f'今日PK已结束'
         return
@@ -2445,6 +2456,135 @@ def yzdd(user_cookie=user_cookie, user_config=user_config):
     conn.close()
     return f'$今日题目:{title}:<img src="{image}" width="100px" height="100px"><br>正确答案:{options[0]}<br>选项1:{options[1]}<br>选项2:{options[2]}<br>选项3:{options[3]}<br>'
 
+def deskmate_pk(cookie=user_cookie, config=user_config):
+    '''同桌PK'''
+    
+    data = {}
+
+    name = config['name']
+    # random_delay = random.randint(0, random_delay_thresh)
+    # while random_delay > 0:
+        # yield (f'{name} 等待{random_delay}秒')
+        # time.sleep(1)
+        # random_delay -= 1
+
+    # https://social.baicizhan.com/api/deskmate/game/start_word_match_game
+    time_long = int(time.time() * 1000)
+    headers = getHeaders('$social', cookie, time_long, index = 1)
+    headers['Content-Type'] = 'application/json'
+    response = send_http2_request('POST',f'https://{headers["Host"]}/api/deskmate/game/start_word_match_game', headers, '{}')
+    yield (f'{name} 开始每周双人战{response.json()}<br>')
+    if response.json()['code'] == 100:
+        yield f'出现问题，请检查<br>'
+        return
+    
+    
+    
+    while True:
+        # https://social.baicizhan.com/api/deskmate/game/get_word_match_info
+        time_long = int(time.time() * 1000)
+        headers = getHeaders('$social', cookie, time_long, index = 1)
+        headers['Content-Type'] = 'application/json'
+        response = send_http2_request('GET',f'https://{headers["Host"]}/api/deskmate/game/get_word_match_info', headers, None)
+        data = response.json()['data']
+        if data.get('needCompletedTopicList', None) is not None:
+            break
+        time.sleep(1)
+
+    if data['newUserGuide']['status'] == 0:
+        yield ('播放新手指南4s')
+        # https://social.baicizhan.com/api/deskmate/game/finish_new_user_guide
+        time_long = int(time.time() * 1000)
+        headers = getHeaders('$social', cookie, time_long, index = 1)
+        headers['Content-Type'] = 'application/json'
+        time.sleep(4)
+        response = send_http2_request('POST',f'https://{headers["Host"]}/api/deskmate/game/finish_new_user_guide', headers, '{}')
+
+    finish_all = False
+    if time.localtime().tm_wday in [5,6]:
+        finish_all = True
+
+    while True:
+        try:
+            cnt = data['mine']['finishCount']
+            deskmate_cnt = data['deskmate']['finishCount']
+            # yield (cnt, deskmate_cnt)
+            if finish_all and cnt + deskmate_cnt >= 100:
+                break
+            elif not finish_all and cnt >= 50:
+                break
+            topic_list = data['needCompletedTopicList']
+            deskmate_completed_list = data['deskmate']['completedTopicList']
+            my_completed_list = data['mine']['completedTopicList']
+            finished_topic_ids = [t['topicId'] for t in deskmate_completed_list]
+            finished_topic_ids.extend([t['topicId'] for t in my_completed_list])
+            # 找第一个同桌未完成的题目
+            found = - random.randint(0, 2)
+            topic_id = -1
+            
+            for topic in topic_list:
+                if topic['topicId'] not in finished_topic_ids:
+                    found += 1
+                    topic_id = topic['topicId']
+                    topic_option = topic['topicOption']
+                    if found > 0:
+                        break
+            if topic_id == -1:
+                raise f'{name} 没有找到未完成的题目'
+
+            time.sleep(random.randint(3000, 4000) / 1000)
+
+            # https://social.baicizhan.com/api/deskmate/game/word_match
+            # {"topicId":45,"topicOption":"疼痛"}
+            time_long = int(time.time() * 1000)
+            headers = getHeaders('$social', cookie, time_long, index = 1)
+            headers['Content-Type'] = 'application/json'
+            response = send_http2_request('POST',f'https://{headers["Host"]}/api/deskmate/game/word_match', headers, json.dumps({"topicId":topic_id,"topicOption":topic_option}, ensure_ascii=False))
+            response_json = response.json()['data']
+            # 刷新
+            while True:
+                # https://social.baicizhan.com/api/deskmate/game/get_word_match_info
+                time_long = int(time.time() * 1000)
+                headers = getHeaders('$social', cookie, time_long, index = 1)
+                response = send_http2_request('GET',f'https://{headers["Host"]}/api/deskmate/game/get_word_match_info', headers, None)
+                data = response.json()['data']
+                if data['needCompletedTopicList'] is not None:
+                    break
+                time.sleep(1)
+            
+            cnt = data['mine']['finishCount']
+            yield (f'完成第{cnt}次{response_json} <br>')
+            if response_json['credit'] > 0:
+                yield (f'铜板+{response_json["credit"]} <br>')
+                time.sleep(0.5)
+        except Exception as e:
+            yield (f'{name} {e}')
+    yield (f'{name} 每周双人战结束 <br>')
+
+    if data['status'] == 3:# 结束
+        if data['wordMatchReward']['status'] == 0:
+            # https://social.baicizhan.com/api/deskmate/game/send_word_match_reward
+            time_long = int(time.time() * 1000)
+            headers = getHeaders('$social', cookie, time_long, index = 1)
+            headers['Content-Type'] = 'application/json'
+            response = send_http2_request('POST',f'https://{headers["Host"]}/api/deskmate/game/send_word_match_reward', headers, '{}')
+
+            # 检验是否领取成功
+            # https://social.baicizhan.com/api/deskmate/game/get_word_match_info
+            time_long = int(time.time() * 1000)
+            headers = getHeaders('$social', cookie, time_long, index = 1)
+            response = send_http2_request('GET',f'https://{headers["Host"]}/api/deskmate/game/get_word_match_info', headers, None)
+            data = response.json()['data']
+            if data['wordMatchReward']['status'] == 1:
+                yield ('00 每周双人战奖励领取成功 <br>')
+            else:
+                yield ('01 领取失败 <br>')
+        else:
+            yield ('02 奖励已领取 <br>')
+    else:
+        yield ('03 等待同桌完成 <br>')
+
+
 def get_class_range(user_config=user_config, total_user_cnt = 18):
     user_index = int(user_config['user_index'])
     total_user_cnt = total_user_cnt
@@ -2468,24 +2608,32 @@ lock = threading.Lock()
 class_list_7 = []
 def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
     '''为用户打卡'''
+    response_wait_second = 0.3
+    react_wait_second = 0.9
     time_start = time.time()
+    global daka_list
+    unique_id = user_config['unique_id']
+    daka_list.append(unique_id)
+    threading.Thread(target=heartbeat_demon, args=(user_cookie, user_config)).start()
+
+    message_str = '#'
+    for msg in deskmate_pk(cookie=user_cookie, config=user_config):
+        message_str += msg
+        yield message_str
+    time.sleep(react_wait_second)
+
 
     yield yzdd(user_cookie=user_cookie, user_config=user_config)
     if user_config.get('only_yzdd', "False") == "True":
         return
+    time.sleep(react_wait_second)
 
-    unique_id = user_config['unique_id']
     word_count = user_config.get('word_count', 5)
     
-    response_wait_second = 0.3
-    react_wait_second = 0.9
-    message_str = f'#{user_config["book_id"]}书'
+    message_str += f'{user_config["book_id"]}书'
     yield message_str
     client_date = int(datetime.datetime.now().strftime('%Y%m%d'))
 
-    global daka_list
-    daka_list.append(unique_id)
-    threading.Thread(target=heartbeat_demon, args=(user_cookie, user_config)).start()
 
     # 打卡状态检查链接：https://group.baicizhan.com/group/study_words_together_home_page
     def get_credit_status_desc(client_date):
@@ -2502,17 +2650,23 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
     if not iE:
         message_str += '没有拼写奖励 '
         yield message_str
-    message_str += f'本次{word_count}个词<br>'
-    yield message_str
+    
     # 开始新学5个单词
     book_finished = False
     learn_list = getRandomWordIDInBook('lookup.db', user_config['book_id'], word_count, get_learnt_list(unique_id))
     if (len(learn_list) < word_count):
-        message_str += '新词不足 '
+        message_str += '<p style="color:red;background-color:yellow">新词不足 重新学习本书或更换书本</p>'
         yield message_str
         book_finished = True
         word_count = len(learn_list)
+    message_str += f'本次{word_count}个词<br>'
+    yield message_str
+    if book_finished:
+        clear_learnt_list(unique_id)
+        message_str += '已完成本书学习<br>'
+        yield message_str
 
+    time.sleep(react_wait_second)
     add_learnt_list(unique_id, learn_list)
     
     learnt_count = 0
@@ -2988,7 +3142,7 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
         headers = getHeaders("$social", user_cookie, time_long, index=1)
         response = send_http2_request('GET', f'https://{headers["Host"]}/api/deskmate/home_page', headers, None)
         deskmate_data = response.json()['data']
-        if deskmate_data is None:
+        if deskmate_data is None or deskmate_data['deskmate'] is None:
             deskmate_daka_today = False
         else:
             deskmate_daka_today = deskmate_data['deskmate']['dakaToday']
@@ -3163,6 +3317,9 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
 
         response = send_http2_request('GET', f'https://{headers["Host"]}/group/information?shareKey={share_key}', headers, None)
         data_list.append( response.json()['data']['groupInfo'] )
+
+        message_str += f'{i}.{data_list[-1]["name"]}<br>'
+        yield message_str
 
         time.sleep(random.randint(2, 4))
 

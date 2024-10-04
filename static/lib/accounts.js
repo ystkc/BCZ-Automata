@@ -1,7 +1,30 @@
 // 页面加载后，请求账号列表
 let daka = 0, not_daka = 0;
+String.prototype.replaceAll = function(s1, s2) {
+  return this.replace(new RegExp(s1, "gm"), s2);
+}
 function refresh(btn){
   btn.textContent = `已打卡${daka}，未打卡${not_daka}`;
+}
+function reloadAll(){
+  // 清空打卡计数
+  daka = 0;
+  not_daka = 0;
+  return fetch('/accounts/reload', {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json'
+    }
+  })
+ .then(function(response) {
+    return response.json();
+  })
+ .then(function(data) {
+    showAccountList(data, init=1);
+  })
+ .catch(function(error) {
+    console.error(error);
+  });
 }
 
 function loadAccountList() {
@@ -49,10 +72,6 @@ function replyAndACK(button, group_share_key, unique_id) {
 }
 function quitGroup(group_name, group_share_key, unique_id) {
   // 二次确认
-  if (unique_id == 956533772 && group_share_key == '26z000owqr8zil48'){
-    alert("测试班级，不允许退出");
-    return;
-  }
   if (!confirm(`确认退出${group_name}吗？`)) return;
   return fetch('/api/quit_group', {
     method: 'POST',
@@ -116,18 +135,18 @@ function showOwnGroups(data, unique_id) {
         quit_button = '';
         background = '';
         if (group.leader == true){
-          quit_button = `<td><button onclick="changeNotice(this, '${group.share_key}', ${unique_id})">改公告</button></td>`
+          quit_button = `<td><button id='op1' onclick="changeNotice(this.parentNode, '${group.share_key}', ${unique_id}, '${group.group_id}')">改公告</button></td>`
           background = 'background-color: #00ffff88;';
         }
         else{
-          quit_button = `<td><button onclick="quitGroup('${group.name}', '${group.share_key}', ${unique_id})">退出</button></td>`
+          quit_button = `<td><button id='op1'onclick="quitGroup('${group.name}', '${group.share_key}', ${unique_id})">退出</button></td>`
         }
         table += `
           <tr style='${background}'>
             <td>${group.name}</td>
             <td>${group.rank}</td>
             <td>${group.introduction}</td>
-            <td id='notice'>${group.notice}</td>
+            <td id='notice' onclick='changeNotice(this, "${group.share_key}", ${unique_id})'>${group.notice}</td>
             <td id='nickname'>${group.group_nickname}</td>
             <td><button onclick="replyAndACK(this, '${group.share_key}', ${unique_id})">回复收到</button></td>
             ${quit_button}
@@ -146,37 +165,125 @@ function showOwnGroups(data, unique_id) {
   table_element.innerHTML = table;
   document.querySelector(`#group${unique_id}`).appendChild(table_element);
 }
-function changeNotice(element, group_share_key, unique_id){
-  let notice_span = element.parentNode.parentNode.querySelector('#notice');
-  var content = prompt("请输入新的公告内容:");
-  if (content == null) return;
-  // post_notice
-  return fetch('/api/change_notice', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      group_share_key: group_share_key,
-      unique_id: unique_id,
-      content: content
+function changeNotice(element, group_share_key, unique_id, group_id=''){
+  let op1_button = element.parentNode.querySelector('#op1');
+  if (op1_button.textContent == "改公告" ) // 是班长，进入编辑公告模式
+  {
+    let notice_span = element.parentNode.querySelector('#notice');
+    // 将notice_span改成输入框（保留当前公告）
+    let original_content = notice_span.innerText;
+    let original_html_content = notice_span.innerHTML;
+    // 使textarea的宽度和高度与notice_span一致
+    let width = notice_span.offsetWidth;
+    let height = notice_span.offsetHeight;
+    let input_span = `<textarea type="text" id="editor" style="width:${width}px;height:${height}px;">${original_content}</textarea>`;
+    element.innerHTML = input_span;
+    element.querySelector('#editor').focus();
+    op1_button.textContent = "发送";
+    // 设置ESC键退出编辑模式
+    document.addEventListener('keydown', function(event){
+      if (event.key == 'Escape'){
+        notice_span.innerHTML = original_html_content;
+        op1_button.textContent = "改公告";
+      }
+    });
+  }
+  else if (element.textContent != "发送" && op1_button.textContent == "发送")
+    return;
+  else if (element.textContent == "发送") // 是班长，发送公告
+  {// 此处不使用op1.textContent是因为编辑公告时点击编辑器不应该触发
+    content = element.parentNode.querySelector('#editor').value;
+    //换回td
+    let notice_span = element.parentNode.querySelector('#notice');
+    
+    // 查找content中所有`到空格之间的字符串，提取成列表
+    let nickname_list = []
+    let nickname_regex = /`(\d+)/g; // 匹配`到空格之间的字符串
+    let numbers = content.match(nickname_regex);
+    // 将content中复合上述正则的字符串删掉
+    content = content.replaceAll(nickname_regex, '');
+    numbers = numbers.map(num => num.slice(1));
+    console.log(numbers);
+    console.log(content);
+    notice_span.innerHTML = content;
+    original_html_content = content;
+    op1_button.textContent = "今日已改公告";
+    // 发送请求
+    return fetch('/api/change_notice', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        group_share_key: group_share_key,
+        unique_id: unique_id,
+        mentioned_ids: numbers,
+        content: content
+      })
     })
-  })
- .then(function(response) {
-    return response.json();
-  })
- .then(function(data) {
-    // sse
-    let sse = new EventSource(`/api/change_notice_sse?group_share_key=${group_share_key}&unique_id=${unique_id}`);
-    sse.onmessage = function(event) {
-        notice_span.innerHTML = event.data;
-        // console.log(event.data);
-    };
-  })
- .catch(function(error) {
-    console.error(error);
-    sse.close();
-  });
+  .then(function(response) {
+      return response.json();
+    })
+  .then(function(data) {
+      // sse
+      let sse = new EventSource(`/api/change_notice_sse?group_share_key=${group_share_key}&unique_id=${unique_id}&group_id=${group_id}`);
+      sse.onmessage = function(event) {
+          notice_span.innerHTML = event.data;
+          // console.log(event.data);
+      };
+    })
+  .catch(function(error) {
+      console.error(error);
+      sse.close();
+    });
+  }
+  if (op1_button.textContent == "退出" || op1_button.textContent == "发送") // 因为改公告点击后会立刻变为发送
+  {
+     // 显示昵称框
+     fetch (`/api/get_nickname?unique_id=${unique_id}&group_share_key=${group_share_key}`)
+     .then(response => response.json())
+     .then(data => {
+        data = data.data;
+        // 先将my_reply写入#nickname中
+        let my_reply = data.my_reply;
+        if (my_reply != null){
+          let nickname_span = element.parentNode.querySelector('#nickname');
+          nickname_span.innerHTML = my_reply;
+        }
+        var old = element.parentNode.querySelector('#nickname_list');
+        if (old) old.remove();
+        // 在公告输入区下面加一个列表，点击昵称可以插入到公告中
+        let nickname_list = document.createElement('ul');
+        nickname_list.id = 'nickname_list';
+        element.parentNode.querySelector('#notice').appendChild(nickname_list);
+        // data是{uniqueId:{nickname:nickname, group_nickname:group_nickname, two_week_daka_dates:two_week_daka_dates[14]}}
+        data = data.group_nickname;
+        for (let unique_id in data){
+          // console.log(data[unique_id]);
+          // console.log(data[unique_id].two_week_daka_dates);
+          let nickname_li = document.createElement('li');
+          // 第一行显示昵称+(uniqueId)，第二行显示组内昵称，第三行显示两周打卡天数的前7位，第四行显示两周打卡天数的后7位
+          if (op1_button.textContent == "发送")
+            nickname_li.innerHTML = `<span onclick="insertNickname(this, '${unique_id}', '${data[unique_id].group_nickname}')">
+${data[unique_id].nickname}(${unique_id}):<br>
+${data[unique_id].group_nickname}<br>
+${data[unique_id].two_week_daka_dates.slice(0,7)}<br>
+${data[unique_id].two_week_daka_dates.slice(7)}</span>`;
+          else
+            nickname_li.innerHTML = `<span>
+${data[unique_id].nickname}(${unique_id}):<br>
+${data[unique_id].group_nickname}<br>
+${data[unique_id].two_week_daka_dates.slice(0,7)}<br>
+${data[unique_id].two_week_daka_dates.slice(7)}</span>`;
+          nickname_list.appendChild(nickname_li);
+        }
+     })
+     .catch(error => console.error(error));
+  }
+}
+function insertNickname(element, unique_id, nickname){
+  let editor = element.parentNode.parentNode.parentNode.querySelector('#editor');
+  editor.value += `@${nickname}\`${unique_id} `;
 }
 function joinAll(){
   let share_key = prompt("请输入shareKey(16位)或inviteCode(5-8位):");
@@ -374,7 +481,7 @@ function showAccountList(data, init=0) {
       // 给予0-4s的随机延时
       setTimeout(function(){
         loadOwnGroups(account.unique_id);
-      }, Math.floor(Math.random() * 4000));
+      }, Math.floor(Math.random() * 5000));
     }
     else{
       loadOwnGroups(account.unique_id);

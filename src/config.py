@@ -15,6 +15,7 @@ class Config:
             'port': 8850,
             'database_path': 'data.db',
             'dict_db_path': 'lookup.db',
+            'main_token': ''
         }
         self.initConfig()
         self.raw = self.read()
@@ -22,6 +23,7 @@ class Config:
         self.port = self.raw.get('port', '')
         self.database_path = self.raw.get('database_path', '')
         self.dict_db_path = self.raw.get('dict_db_path', '')
+        self.main_token = self.raw.get('main_token', '')
         self.verify()
 
     def initConfig(self):
@@ -80,3 +82,8 @@ class Config:
             value = self.default_config_dict[key]
             self.save(key, value)
             self.dict_db_path = value
+        if self.main_token == '':
+            key ='main_token'
+            value = self.default_config_dict[key]
+            self.save(key, value)
+            self.main_token = value
