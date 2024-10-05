@@ -15,14 +15,12 @@
 
 ## 运行参数
  - **`--debug`使用调试模式运行，使用修改重载、只加载前三个账号，不使用gevent服务器，只使用flask自带服务器，并发数较少**
-## 配置说明
- - **`host` `port`(config.json)服务器运行的端口**
- - **`database_path`(config.json)未使用字段**
- - **`dict_db_path`(config.py)词典结构数据库路径（需要提供）**
- - **`db_path`(thrift_utils.py)用户已学单词数据库路径（自动生成）**
- - **`puzzle.db`(thrift_utils.py)一站到底题库数据库路径（自动生成）**
- - **`user_cookie.json`储存用户凭证的文件，格式如下，其中有中文的3个字段需要自行填写
- ```
+
+## 使用方法
+1.获取自己账号的accesstoken、uniqueid（就是bczid），name可自定义方便自己看
+2.按如下格式填写user_cookie.json 其中有中文的3个字段分别是name、bczid和accesstoken
+```
+[
     {
         "config": {
             "book_id": 410,
@@ -48,7 +46,20 @@
             "bcz_dmid": "2a16dfbb"
         }
     },
+]
  ```
+3.启动app.py，浏览器访问127.0.0.1：8850，一般操作到此即可
+4.如果需要使用魔法令牌，请自行在移动端或移动端模拟器安装mitmproxy的CA证书并代理到8080端口；
+5.如果需要配合fiddler使用魔法令牌，请安装fiddler的CA证书，并配置fiddler代理到本地8080端口+忽略服务器证书错误，且移动端或移动端模拟器代理到本地8888端口
+
+## 配置说明
+ - **`host` `port`(config.json)服务器运行的端口**
+ - **`database_path`(config.json)未使用字段**
+ - **`dict_db_path`(config.py)词典结构数据库路径（需要提供）**
+ - **`db_path`(thrift_utils.py)用户已学单词数据库路径（自动生成）**
+ - **`puzzle.db`(thrift_utils.py)一站到底题库数据库路径（自动生成）**
+ - **`user_cookie.json`储存用户凭证的文件
+ 
  
 
 ## 部分活动的API，使用频率较低，不提供自动化
