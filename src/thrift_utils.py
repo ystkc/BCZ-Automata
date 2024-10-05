@@ -3021,7 +3021,7 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
         headers = getHeaders("$social", user_cookie, time_long, index=1)
         response = send_http2_request('GET', f'https://{headers["Host"]}/api/task/v2/home', headers, None)
         data = response.json()['data']
-        message = "任务中心："
+        message = "任务中心：<br>"
         for task in data['taskList']:
             task_id = task['userTaskId']
             task_name = task['taskName']
@@ -3036,13 +3036,17 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
             
             if task['status'] == 1:
                 message += f"领取{get_award(task['userTaskId'], task['awardList'])}<br>"
-            if task_name == '加量学5个单词':
+            if task_name == '加量学5个单词' or task_name == '新学5个单词':
                 time.sleep(1.5)
                 user_study.user_study_upload_task_action(user_cookie=user_cookie, user_config=user_config, task_upload_req_list=[['learnMore', 5]])
                 time.sleep(3)
                 message += f"领取{get_award(task['userTaskId'], task['awardList'])}<br>"
+            elif task_name == '单词速听复习10个单词':
+                time.sleep(1.5)
             # elif task_name == '完成今日学习计划':
+
             # elif taskname == '完成1局单词消消练':
+            # 因为要花费50铜板，因此不做处理
             else:
                 message += '<br>'
             # 其他还没记录，先返回描述供开发

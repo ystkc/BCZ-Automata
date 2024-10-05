@@ -200,11 +200,17 @@ function changeNotice(element, group_share_key, unique_id, group_id=''){
     let nickname_list = []
     let nickname_regex = /`(\d+)/g; // 匹配`到空格之间的字符串
     let numbers = content.match(nickname_regex);
+    if (numbers == null) numbers = [];
     // 将content中复合上述正则的字符串删掉
     content = content.replaceAll(nickname_regex, '');
     numbers = numbers.map(num => num.slice(1));
     console.log(numbers);
     console.log(content);
+    length = content.length;
+    if (length > 1000) {
+      prompt(`公告内容长度${length} > 1000`);
+      return;
+    }
     notice_span.innerHTML = content;
     original_html_content = content;
     op1_button.textContent = "今日已改公告";
@@ -265,13 +271,13 @@ function changeNotice(element, group_share_key, unique_id, group_id=''){
           // 第一行显示昵称+(uniqueId)，第二行显示组内昵称，第三行显示两周打卡天数的前7位，第四行显示两周打卡天数的后7位
           if (op1_button.textContent == "发送")
             nickname_li.innerHTML = `<span onclick="insertNickname(this, '${unique_id}', '${data[unique_id].group_nickname}')">
-${data[unique_id].nickname}(${unique_id}):<br>
+${data[unique_id].nickname}(${unique_id})[${data[unique_id].completed_times}/${data[unique_id].duration_days}]:<br>
 ${data[unique_id].group_nickname}<br>
 ${data[unique_id].two_week_daka_dates.slice(0,7)}<br>
 ${data[unique_id].two_week_daka_dates.slice(7)}</span>`;
           else
             nickname_li.innerHTML = `<span>
-${data[unique_id].nickname}(${unique_id}):<br>
+${data[unique_id].nickname}(${unique_id})[${data[unique_id].completed_times}/${data[unique_id].duration_days}]:<br>
 ${data[unique_id].group_nickname}<br>
 ${data[unique_id].two_week_daka_dates.slice(0,7)}<br>
 ${data[unique_id].two_week_daka_dates.slice(7)}</span>`;
@@ -467,9 +473,10 @@ function showAccountList(data, init=0) {
   data = data.data;
   data.forEach(function(account) {
     str += `<div id="group${account.unique_id}">
-      <li class="account-item">${account.name}(${account.unique_id}), ${account.access_token} - ${account.device_id}
+      <li class="account-item">${account.name}(${account.unique_id})
         <button class="delete-btn" onclick="deleteAccount(${account.unique_id})">删除</button>
         <button class="edit-btn" onclick="loadOwnGroups(${account.unique_id})">刷新</button>
+        <button class="join-btn" onclick="changeToken('${account.access_token}', ${account.unique_id})">魔法账号</button>
       </li>
     </div>`;
     
@@ -487,9 +494,26 @@ function showAccountList(data, init=0) {
       loadOwnGroups(account.unique_id);
     }
   });
-
-
 }
+function changeToken(access_token, unique_id){
+  // no-cors
+  return fetch(`change_token`, {
+    method: 'POST', // 根据需要选择请求方法
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      access_token: access_token,
+      unique_id: unique_id
+    })
+  })
+  .then(response => response.json())
+  .then(data => {
+    alert(data.msg);
+  })
+  .catch(error => console.error(error));
+}
+
 function addAccount() {
   var name = prompt("请输入账号名称:");
   if (name == null) return;

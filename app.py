@@ -1,5 +1,7 @@
 import sys
 import time
+import ssl
+import socket
 import logging
 
 debug = True
@@ -41,7 +43,7 @@ from src import bcz
 from src.config import Config
 import src.thrift_utils as thrift_utils
 from src.thrift_utils import user_dict
-from src.thrift_utils import getHeaders
+from src.thrift_utils import getHeaders, send_http2_request
 
 
 logging.basicConfig(
@@ -105,6 +107,53 @@ def daka(data):
 def index():
     return render_template('index.html')
 
+proxy_token = ''
+@app.route('/proxy_token', methods=['POST'])
+def proxy_token():
+    global proxy_token
+    try:
+        token = request.json.get('token', '')
+        if not token:
+            return restful(400, '调用方法异常Σ(っ °Д °;)っ')
+        proxy_token = token
+        return restful(200, '设置成功')
+    except Exception as e:
+        return restful(400, f'{e}')
+    
+
+@app.route('/proxy', methods=['CONNECT', 'GET', 'POST', 'OPTIONS'])
+def proxy():
+    try:
+        print('p')
+        print(request.url)
+        if request.method == 'CONNECT':  # 处理https请求
+            # 发送connection established
+            return Response(status=200)
+        elif request.method == 'OPTIONS':  # 直接发送options请求，不做处理
+            return send_http2_request(request.method, request.url, headers=request.headers, data=request.data)
+        elif request.method == 'GET':
+            if proxy_token != '':
+                print('a')
+                cookie = request.headers['Cookie'].split('; ')
+                cookie['access_token'] = proxy_token
+                headers = request.headers.copy()
+                headers['Cookie']= '; '.join(cookie),
+                return send_http2_request(request.method, request.url, headers=headers, data=request.data)
+            return send_http2_request(request.method, request.url, headers=request.headers, data=request.data)
+        elif request.method == 'POST':
+            if proxy_token != '':
+                print('b')
+                cookie = request.headers['Cookie'].split('; ')
+                cookie['access_token'] = proxy_token
+                headers = request.headers.copy()
+                headers['Cookie']= '; '.join(cookie),
+                return send_http2_request(request.method, request.url, headers=headers, data=request.data)
+            return send_http2_request(request.method, request.url, headers=request.headers, data=request.data)
+        else:
+            return restful(400, '调用方法异常Σ(っ °Д °;)っ')
+    except Exception as e:
+        return restful(400, f'{e}')
+        
 @app.route('/accounts', methods=['GET'])
 def accounts():
     return render_template('accounts.html')
@@ -558,6 +607,8 @@ def notice():
                     del group_nickname[unique_id]
                 else:
                     group_nickname[unique_id]['nickname'] = member['nickname']
+                    group_nickname[unique_id]['completed_times'] = member['completedTimes']
+                    group_nickname[unique_id]['duration_days'] = member['durationDays']
 
 
         # 3.补全上周打卡情况
@@ -576,7 +627,22 @@ def notice():
         traceback.print_exc()
         return restful(400, f'{e}')
     
-
+@app.route('/change_token', methods=['POST'])
+def change_token():
+    '''修改魔法token'''
+    try:
+        access_token = request.json.get('access_token', '')
+        unique_id = request.json.get('unique_id', '')
+        if not access_token:
+            return restful(400, '调用方法异常Σ(っ °Д °;)っ')
+        response = requests.get(f'http://mitm.it')
+        if 'traffic is not passing through mitmproxy' in response.text:
+            return restful(400, '请先启动BCZ-Automata的mitmproxy脚本，并正确设置代理')
+        response = requests.get(f'http://www.baicizhan.com/change_token/{access_token}/{unique_id}')
+        return restful(200, response.text)
+    except Exception as e:
+        return restful(400, f'{e}')
+    
 @app.route('/api/more_groups', methods=['POST'])
 def more_groups():
     '''开班位'''
@@ -669,7 +735,7 @@ def restful(code: int, msg: str = '', data: dict = {}) -> Response:
             'msg': msg,
             'data': data
     }), code
-
+    
 if __name__ == '__main__':
     
     for name in logging.Logger.manager.loggerDict.keys():

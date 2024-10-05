@@ -8,6 +8,7 @@ thrift = "*"
 requests = "*"
 flask = "*"
 waitress = "*"
+mitmproxy = {version = "*", index = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"}
 
 [dev-packages]
 
