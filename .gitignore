@@ -3,6 +3,9 @@
 *.json
 *.txt
 *.jpg
+*.jpeg
+*.apkg
+*.png
 *.zip
 
 *.cer
