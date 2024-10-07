@@ -13,23 +13,40 @@ proxy_id = 0
 
 def cookie_parser(cookie_str: str):
     cookie_dict = {}
+    is_comma = False
     if cookie_str:
         # 将逗号替换成分号
         # cookie_str = cookie_str.replace(',', ';')
         for cookie in cookie_str.split(';'):
             try:
+                if cookie == '':
+                    continue
                 key, value = cookie.strip().split('=')
                 # print(key, value)
             except :
-                print("Invalid cookie:", cookie)
+                print("Invalid cookie(semicolon):", cookie)
+                is_comma = True
+                break
             cookie_dict[key] = value
-    return cookie_dict
+        if is_comma:
+            for cookie in cookie_str.split(','):
+                try:
+                    key, value = cookie.strip().split('=')
+                    # print(key, value)
+                except :
+                    print("\033[31mInvalid cookie(comma):\033[0m", cookie)
+                cookie_dict[key] = value
+    return cookie_dict, is_comma
 
-def cookie_encoder(cookie_dict):
+def cookie_encoder(cookie_dict, is_comma=False):
     cookie_str = ''
-    for key, value in cookie_dict.items():
-        cookie_str += key + '=' + value + '; '
-    return cookie_str.strip()
+    if is_comma:
+        for key, value in cookie_dict.items():
+            cookie_str += key + '=' + value + ', '
+    else:
+        for key, value in cookie_dict.items():
+            cookie_str += key + '=' + value + '; '
+    return cookie_str[:-2]
 
 def request(flow: http.HTTPFlow) -> None:
     global proxy_token
@@ -53,7 +70,8 @@ def request(flow: http.HTTPFlow) -> None:
     if 'baicizhan.com' in flow.request.url:
         
         # print('original cookie:', flow.request.headers.get('Cookie'))
-        cookie = cookie_parser(flow.request.headers.get('Cookie'))
+        cookie, is_comma = cookie_parser(flow.request.headers.get('Cookie'))
+        is_comma = False
         register = False
         try:
             if 'register' in flow.request.url:
@@ -74,39 +92,82 @@ def request(flow: http.HTTPFlow) -> None:
 
         o = 0
         if 'access-token' in cookie:
-            if cookie['access-token'] != proxy_token:
+            if is_comma:
+                if cookie['access-token'][1:-1] != proxy_token:
+                    cookie['access-token'] = f'"{proxy_token}"'
+                    o = 1
+            elif cookie['access-token'] != proxy_token:
                 cookie['access-token'] = proxy_token
                 o = 1
         
         if 'access_token' in cookie:
-            if cookie['access_token'] != proxy_token:
+            if is_comma:
+                if cookie['access_token'][1:-1] != proxy_token:
+                    cookie['access_token'] = f'"{proxy_token}"'
+                    o = 1
+            elif cookie['access_token'] != proxy_token:
                 cookie['access_token'] = proxy_token
                 o = 1
         
         if 'device_id' in cookie:
-            if cookie['device_id'] != proxy_device_id:
+            if is_comma:
+                if cookie['device_id'][1:-1] != proxy_device_id:
+                    cookie['device_id'] = f'"{proxy_device_id}"'
+                    o = 1
+            elif cookie['device_id'] != proxy_device_id:
                 cookie['device_id'] = proxy_device_id
                 o = 1
 
         if 'serial' in cookie:
             # 将前5位替换成proxy_device_id前五位，第6-10位替换成proxy_device_id后五位，其余不变
-            cookie['serial'] = proxy_device_id[:5] + proxy_device_id[-5:] + cookie['serial'][10:]
+            serial = proxy_device_id[:5] + proxy_device_id[-5:] + cookie['serial'][10:]
+            if is_comma:
+                cookie['serial'] = f'"{serial}"'
+            else:
+                cookie['serial'] = serial
             # print(f" modified serial:\033[31m{proxy_device_id[:5] }\033[32m{proxy_device_id[-5:]}\033[31m{cookie['serial'][10:]}\033[0m")
             o = 1
         
-        # if 'tfstk' in cookie:
-        #     del cookie['tfstk']
-        #     o = 1
+        if 'tfstk' in cookie:
+            del cookie['tfstk']
+            o = 1
             
         if o == 1:
-            flow.request.headers['Cookie'] = cookie_encoder(cookie)
+            flow.request.headers['Cookie'] = cookie_encoder(cookie, is_comma)
             # print(" modified cookie:", flow.request.headers.get('Cookie'))
         
         return
+
+filtered_num = 0
+def response(flow: http.HTTPFlow) -> None:
     
+    global filtered_num
+    if 'notify/v2/home' in flow.request.url:
+        filtered_num = 0
+        return
+    if 'notify_list' in flow.request.url:
+        # 加载请求中的json
+        content = json.loads(flow.response.content.decode(encoding='utf-8'))
+        notify_list = content['data']
+        filtered_num += len(notify_list)
+        filtered_list = []
+        for notice in notify_list:
+            if '授权' in notice['content']:
+                filtered_list.append(notice)
+
+
+        notify_list[-1]['title'] += f' 已省略{filtered_num}'
+        print(notify_list[-1]['title'])
+        filtered_list.append(notify_list[-1])
+        content['data'] = filtered_list
+        # 重新编码json
+        flow.response.content = json.dumps(content).encode(encoding='utf-8')
+        # print(" modified content:", flow.response.content)
+        return
 
 addons = [  
     (request, 'test_addon'),
+    (response, 'test_addon')
 ]
 
 def set_proxy(enable=True, proxy_server="http://127.0.0.1:8080"):

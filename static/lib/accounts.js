@@ -440,9 +440,11 @@ function joinGroup(unique_id, group_share_key=null){
     return response.json();
   })
  .then(function(data) {
+    alert(data.msg);
     loadOwnGroups(unique_id);
   })
  .catch(function(error) {
+    alert(error.msg);
     console.error(error);
     loadOwnGroups(unique_id);
   });

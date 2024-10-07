@@ -574,12 +574,12 @@ def notice():
                 my_reply = nickname
             # two_week_daka_dates是14个0、1，表示两周内每天的打卡情况
             two_week_daka_dates = [0] * 14
+            wd = datetime.datetime.now().weekday()
             # 如果duration_days不够两周，后面的标记-2
-            if duration_days < 14:
-                for i in range(14 - duration_days):
+            if duration_days < 7 + wd:
+                for i in range(7 + wd - duration_days):
                     two_week_daka_dates[i] = -2
             # 将本周未到达的日期设置为-1
-            wd = datetime.datetime.now().weekday()
             for i in range(wd):
                 two_week_daka_dates[-1-i] = -1
             for date in week_daka_dates:

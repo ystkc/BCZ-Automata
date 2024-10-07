@@ -2401,6 +2401,7 @@ def yzdd(user_cookie=user_cookie, user_config=user_config):
     conn = sqlite3.connect('yzdd.db')
     cursor = conn.cursor()
     cursor.execute('''CREATE TABLE IF NOT EXISTS yzdd (
+        INDEX_ID INTEGER PRIMARY KEY AUTOINCREMENT,
         QID INTEGER,
         IMAGE TEXT,
         TITLE TEXT,
