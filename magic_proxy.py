@@ -139,9 +139,11 @@ def request(flow: http.HTTPFlow) -> None:
         return
 
 filtered_num = 0
+temp_period = 0
 def response(flow: http.HTTPFlow) -> None:
     
     global filtered_num
+    global temp_period
     if 'notify/v2/home' in flow.request.url:
         filtered_num = 0
         return
@@ -163,6 +165,29 @@ def response(flow: http.HTTPFlow) -> None:
         # 重新编码json
         flow.response.content = json.dumps(content).encode(encoding='utf-8')
         # print(" modified content:", flow.response.content)
+        return
+    if 'apply' in flow.request.url:
+        # 加载请求中的json
+        # content = json.loads(flow.response.content.decode(encoding='utf-8'))
+        # data = content['data']
+        # data['type'] = temp_period
+        # temp_period += 1
+        # content['data'] = data
+        # # 重新编码json
+        # flow.response.content = json.dumps(content).encode(encoding='utf-8')
+        # print(" modified content:", flow.request.content)
+        return
+    if 'team-up-recite/home' in flow.request.url:
+        # 加载请求中的json
+        ...
+        # content = json.loads(flow.response.content.decode(encoding='utf-8'))
+        # data = content['data']
+        # data['count'] = 0
+        # data['phase'] = 0
+        # data['expireAt'] = 10388961
+        # content['data'] = data
+        # # 重新编码json
+        # flow.response.content = json.dumps(content).encode(encoding='utf-8')
         return
 
 addons = [  

@@ -43,7 +43,7 @@ from src import bcz
 from src.config import Config
 import src.thrift_utils as thrift_utils
 from src.thrift_utils import user_dict
-from src.thrift_utils import getHeaders, send_http2_request
+from src.thrift_utils import getHeaders, send_http2_request, get_http2_client
 
 
 logging.basicConfig(
@@ -460,7 +460,8 @@ def own_groups():
             return restful(400, '调用方法异常Σ(っ °Д °;)っ')
         _, user_dict = user_dict_obj.find(unique_id)
         time_long = int(time.time() * 1000)
-        response = requests.get('https://group.baicizhan.com/group/own_groups?uniqueId=0', headers=getHeaders('$group', user_dict['cookie'], time_long, index = 1)) # 我的小班
+        headers=getHeaders('$group', user_dict['cookie'], time_long, index = 1)
+        response = send_http2_request('GET', 'https://group.baicizhan.com/group/own_groups?uniqueId=0', headers=headers, content=None) # 我的小班
         response_json = response.json()
 
         
@@ -494,15 +495,15 @@ def own_groups():
         #  https://group.baicizhan.com/group/study_words_together_home_page
         time_long = int(time.time() * 1000)
         headers = getHeaders('$group', user_dict['cookie'], time_long, index = 1)
-        response = requests.get('https://group.baicizhan.com/group/study_words_together_home_page', headers=headers)
+        response = send_http2_request('GET', 'https://group.baicizhan.com/group/study_words_together_home_page', headers=headers, content=None)
         response_json = response.json()
-        # print(response_json['data']['todayDaka'])
         today_daka = '1已打卡' if response_json['data']['todayDaka'] else '0未打卡'
-        
-        response = requests.get('https://group.baicizhan.com/group/get_group_user_info', headers=getHeaders('$group', user_dict['cookie'], time_long, index = 1)) # 我的小班
+
+        # 'https://group.baicizhan.com/group/get_group_user_info'
+        response = send_http2_request('GET', 'https://group.baicizhan.com/group/get_group_user_info', headers=headers, content=None)
         data = response.json()['data']
 
-        result = bcz.userBasicInfo(user_dict['cookie']['access_token'])
+        result = bcz.userBasicInfo(user_dict['cookie']['access_token'], get_http2_client())
         daka_timestamp = result.learn_info.last_sync_done_score_time
         user_dict['config']['book_id'] = result.user_info.current_word_level_id
         

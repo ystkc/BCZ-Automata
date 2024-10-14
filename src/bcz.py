@@ -5,6 +5,7 @@ import struct
 import sqlite3
 import hashlib
 import requests
+import httpx
 import random
 from thrift.transport import TTransport
 from thrift.protocol import TCompactProtocol
@@ -289,7 +290,7 @@ def loginWithPhone(phone_number: str, code: str) -> UserLoginResult:
         chs_result = re.findall('[\u4e00-\u9fa5]', content)
         raise ProcessError(''.join(chs_result))
 
-def userBasicInfo(token: str) -> UserBasicInfoPlusV2:
+def userBasicInfo(token: str, httpx_client: httpx.Client = None) -> UserBasicInfoPlusV2:
     """获取用户基本信息
 
     Args:
@@ -321,7 +322,10 @@ def userBasicInfo(token: str) -> UserBasicInfoPlusV2:
     length_data = struct.pack("!i", len(thrift_data))
     thrift_data = length_data + thrift_data
     compressed_data = gzip.compress(thrift_data)
-    response = requests.post(url, headers=headers, data=compressed_data)
+    if httpx_client is None:
+        response = requests.post(url, headers=headers, data=compressed_data)
+    else:
+        response = httpx_client.post(url, headers=headers, data=compressed_data)
     content = response.content.decode(errors='ignore')
     if response.status_code != 200:
         raise ProcessError(f'{response.status_code} {content}')

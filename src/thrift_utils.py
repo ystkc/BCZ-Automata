@@ -12,6 +12,7 @@ from thrift.protocol import TCompactProtocol
 # 第一阶段：初始化
 from src.thriftAPI.ttypes import *
 from src.thriftAPI import *
+from src.get_headers import getHeaders, bcz_info, get_device_str
 import requests
 import ssl
 import socket
@@ -28,107 +29,6 @@ import threading
 import hashlib
 import traceback
 
-
-default_headers = [
-    {# thrift请求头
-        "Accept": "application/x-thrift",
-        "User-Agent": "bcz_app/android/7.6.1",
-        "Cookie": {
-            "access_token": "",
-            "app_name": "7060100",
-            "device_name": "android%2FDCO-AL00-HUAWEI",
-            "client_time": "",
-            "device_id": "",
-            "serial": "",
-            "channel": "qq",
-            "version": "12"
-        },
-        "Compress-Type": "gzip",
-        "content-encoding": "gzip",
-        "Content-Type": "application/x-thrift",
-        # "Transfer-Encoding": "chunked",
-        "Host": "system.baicizhan.com",
-        "Connection": "Keep-Alive",
-        "Accept-Encoding": "gzip"
-    },{# json请求头
-        "Host": "group.baicizhan.com",
-        "Connection": "keep-alive",
-        "User-Agent": "bcz_app_android/7060100 android_version/12 device_name/DCO-AL00 - HUAWEI",
-        # "Content-Type": "application/json; charset=UTF-8",
-        "Accept": "*/*",
-        "X-Requested-With": "com.jiongji.andriod.card",
-        "Sec-Fetch-Site": "same-origin",
-        "Sec-Fetch-Mode": "cors",
-        "Sec-Fetch-Dest": "empty",
-        # "Referer": "https://group.baicizhan.com/study_together",
-        "Accept-Encoding": "gzip, deflate",
-        "Accept-Language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
-        "Cookie": {
-            "access_token": "",
-            "Pay-Support-H5": "alipay_mob_client:weixin_app:qq_app",
-            "device_name": "android/DCO-AL00-HUAWEI",
-            "bcz_dmid": "2a16dfbb",
-            "device_version": "12",
-            "device_id": "",
-            "app_name": "7060100",
-            "channel": "qq",
-            "client_time": "",
-            "serial": ""
-        }
-    },{# options请求头
-        "Host": "",
-        "Connection": "keep-alive",
-        "Accept": "*/*",
-        "Access-Control-Request-Method": "POST",
-        "Access-Control-Request-Headers": "content-type",
-        "Origin": "https://pk.baicizhan.com",
-        "User-Agent": "bcz_app_android/7060901 android_version/12 device_name/DCO-AL00 - HUAWEI",
-        "Sec-Fetch-Mode": "cors",
-        "X-Requested-With": "com.jiongji.andriod.card",
-        "Sec-Fetch-Site": "same-site",
-        "Sec-Fetch-Dest": "empty",
-        "Referer": "https://pk.baicizhan.com/",
-        "Accept-Encoding": "gzip, deflate",
-        "Accept-Language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7"
-    },{# pk请求头
-        "Host": "pkonline1.baicizhan.com",
-        "Connection": "keep-alive",
-        "User-Agent": "bcz_app_android/7060901 android_version/12 device_name/DCO-AL00 - HUAWEI",
-        "Accept": "*/*",
-        "Origin": "https://pk.baicizhan.com",
-        "X-Requested-With": "com.jiongji.andriod.card",
-        "Sec-Fetch-Site": "same-site",
-        "Sec-Fetch-Mode": "cors",
-        "Sec-Fetch-Dest": "empty",
-        "Referer": "https://pk.baicizhan.com/",
-        "Accept-Encoding": "gzip, deflate",
-        "Accept-Language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
-        "Cookie": {
-            "access_token": "",
-            "Pay-Support-H5": "alipay_mob_client:weixin_app:qq_app",
-            "device_name": "android/DCO-AL00-HUAWEI",
-            "bcz_dmid": "2a16dfbb",
-            "device_version": "12",
-            "device_id": "",
-            "app_name": "7060100",
-            "channel": "qq",
-            "client_time": ""
-        }
-    }
-]
-
-bcz_info = {
-    'short_version': '7.6.1',
-    'long_version': 7060100,
-    "device_model": "DCO-AL00",
-    "device_manufacturer": "HUAWEI",
-    "os_name": "android",
-    "os_sdk": '32',
-    "app_name": "baicizhan",
-    "oaid": "unknown"
-}
-def get_device_str(device_id):
-    return f"{bcz_info['device_model']}-{bcz_info['device_manufacturer']}-{device_id}"
 
 class user_dict:
     def __init__(self):
@@ -482,31 +382,6 @@ report_json = [
 
 
 
-# 实际上，host_dict是有初始值的，只是在启动时会和服务器更新
-host_dict = {
-    'RES': ['https://vol-v6.bczcdn.com', 'https://7n-backup.bczcdn.com'],
-    'DATA': ['https://www.baicizhan.com', 'https://www.bczeducation.cn', 'http://www.baicizhan.com', 'http://www.bczeducation.cn'],
-    'activity': ['https://activity.baicizhan.com', 'https://activity.bczeducation.cn', 'http://activity.baicizhan.com', 'http://activity.bczeducation.cn'],
-    'learn': ['https://learn.baicizhan.com', 'https://learn.bczeducation.cn', 'http://learn.baicizhan.com', 'http://learn.bczeducation.cn'],
-    'resource': ['https://resource.baicizhan.com', 'https://resource.bczeducation.cn', 'http://resource.baicizhan.com', 'http://resource.bczeducation.cn'],
-    'mall': ['https://mall.baicizhan.com', 'http://mall.baicizhan.com'],
-    'assistant': ['https://assistant.baicizhan.com', 'https://assistant.bczeducation.cn', 'http://assistant.baicizhan.com', 'http://assistant.bczeducation.cn'],
-    'conan': ['https://conan.baicizhan.com', 'http://conan.baicizhan.com'],
-    'avatar': ['https://avatar.baicizhan.com', 'http://avatar.baicizhan.com'],
-    'notify': ['https://notify.baicizhan.com', 'https://notify.bczeducation.cn', 'http://notify.baicizhan.com', 'http://notify.bczeducation.cn'],
-    'mywordfavorites': ['https://booklist.baicizhan.com', 'https://booklist.bczeducation.cn', 'http://booklist.baicizhan.com', 'http://booklist.bczeducation.cn'],
-    'system': ['https://system.baicizhan.com', 'https://system.bczeducation.cn', 'http://system.baicizhan.com', 'http://system.bczeducation.cn'],
-    'passport': ['https://passport.baicizhan.com', 'https://passport.bczeducation.cn', 'http://passport.baicizhan.com', 'http://passport.bczeducation.cn'],
-    'report': ['https://events.baicizhan.com', 'https://events.bczeducation.cn', 'http://events.baicizhan.com', 'http://events.bczeducation.cn'],
-    'course': ['https://learn.baicizhan.com', 'https://learn.bczeducation.cn', 'http://learn.baicizhan.com', 'http://learn.bczeducation.cn'],
-    'pk': ['https://pk.baicizhan.com', 'https://pk.bczeducation.cn', 'http://pk.baicizhan.com', 'http://pk.bczeducation.cn'],
-    'advertise': ['https://advertise.baicizhan.com', 'https://advertise.bczeducation.cn', 'http://advertise.baicizhan.com', 'http://advertise.bczeducation.cn'],
-    'group': ['https://group.baicizhan.com', 'https://group.bczeducation.cn', 'http://group.baicizhan.com', 'http://group.bczeducation.cn'],
-    'social': ['https://social.baicizhan.com', 'https://social.bczeducation.cn', 'http://social.baicizhan.com', 'http://social.bczeducation.cn'],
-    "pkonline2":['https://pkonline2.baicizhan.com'],
-    "pkonline1":['https://pkonline1.baicizhan.com']
-}
-
 def generator(content):
     # 压缩数据
     content = gzip.compress(struct.pack("!i", len(content)) + content)
@@ -550,45 +425,6 @@ def db_init(db_path):
 def connect():
     conn = sqlite3.connect(db_path)
     return conn
-
-def getHeaders(host: str, user_cookie: dict, time_long: int, wrap_url: str = '', index = 0):
-    '''path的前后都不加左斜杠
-    返回headers(非wrap_url)，返回headers_str(wrap_url)'''
-    headers = default_headers[index].copy()
-    # 将cookie中的时间戳更新
-    if headers.get('Cookie') is not None:
-        for k, _ in headers['Cookie'].items():
-            if k == 'client_time':
-                headers['Cookie'][k] = str(time_long)
-            elif k =='serial':
-                device_id = headers['Cookie']['device_id']
-                headers['Cookie'][k] = f"{device_id[:6]}{device_id[13:]}{str(time_long & 67108863)}"
-            else:
-                # 由于user_cookie并不是所有接口都需要的，所以需要判断一下
-                headers['Cookie'][k] = user_cookie[k]
-        # 将cookie转换为字符串
-        headers['Cookie'] = '; '.join([f'{k}={v}' for k, v in headers['Cookie'].items()])
-    if host[0] == '$':
-        # 需要将目标中的https://或http://去掉
-        parsed = host_dict[host[1:]][0].split('://')
-    else:
-        parsed = host.split('://')
-    if len(parsed) == 1:
-        protocol = 'http'
-    else:
-        protocol = parsed[0]
-    headers['Host'] = parsed[-1]
-    
-    if wrap_url == '':
-        return headers
-    
-    # 生成用于socket的请求头
-    # 将headers连接成字符串
-    result = '\r\n'.join([f'{k}: {v}' for k, v in headers.items()])
-    # 还差第一行的请求行
-    return f'{result}\r\n\r\n'
-    
-
 
 def print_thrift_object(obj, indent=0, index=-1, f=None):  
     """  
@@ -668,6 +504,13 @@ def send_http2_request(method, url, headers, content):
         return client.options(url)
     else:
         return Exception('method not support')
+
+def get_http2_client():
+    global client
+    if client is None or client.is_closed:
+        client = httpx.Client(http2=True, verify=certifi.where())
+    return client
+
     
 class bcz_system:
     
@@ -2083,6 +1926,7 @@ def puzzle_init(puzzle_category):
     conn = sqlite3.connect('puzzle.db')
     cursor = conn.cursor()
     cursor.execute(f'''CREATE TABLE IF NOT EXISTS {puzzle_category} (
+        INDEX_ID INTEGER PRIMARY KEY AUTOINCREMENT,
         ID INTEGER UNIQUE,
         QUESTION TEXT,
         CHN_MEAN TEXT,
@@ -2179,8 +2023,8 @@ def print_puzzle(puzzle_dict):
     return result
 
 
-def pkonline(user_cookie=user_cookie, user_config=user_config):
-    '''pkonline'''
+def pkonline(user_cookie=user_cookie, user_config=user_config, max_round=3):
+    '''pkonline'''# max_round用来随机轮数，用来调用2次分散打卡时间
     if user_config.get('no_pk', False) == True:
         yield f'{user_config["name"]}不参加pk'
         return
@@ -2228,6 +2072,9 @@ def pkonline(user_cookie=user_cookie, user_config=user_config):
     response = send_http2_request('GET', url, headers, None)
     data = response.json()['data']
     daily_round = data['dailyRound']
+    current_round = 0
+    if max_round == 0:
+        return
     yield f' 今已完成{daily_round}/3 '
     time.sleep(1)
     if daily_round < 3:
@@ -2371,6 +2218,9 @@ def pkonline(user_cookie=user_cookie, user_config=user_config):
                 break
             else:
                 yield f'完成第{current_round}轮<br>'
+                current_round += 1
+                if current_round >= max_round:
+                    return
                 random_wait_second = random.randint(1,4)
                 time.sleep(random_wait_second)
 
@@ -2623,6 +2473,11 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
         yield message_str
     time.sleep(react_wait_second)
 
+    # pk # 1
+    for msg in pkonline(user_cookie=user_cookie, user_config=user_config, max_round=random.randint(0, 3)):
+        message_str += msg
+        yield message_str
+    time.sleep(react_wait_second)
 
     yield yzdd(user_cookie=user_cookie, user_config=user_config)
     if user_config.get('only_yzdd', "False") == "True":
@@ -2637,6 +2492,19 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
 
 
     # 打卡状态检查链接：https://group.baicizhan.com/group/study_words_together_home_page
+    def check_if_daka():
+        time_long = int(time.time() * 1000)
+        headers = getHeaders('$group', user_cookie, time_long, index = 1)
+        url = 'https://group.baicizhan.com/group/study_words_together_home_page'
+        response = send_http2_request('GET', url, headers=headers, content=None)
+        response_json = response.json()
+        return response_json['data']['todayDaka']
+    
+    today_daka = check_if_daka()
+    if today_daka:
+        message_str += '今天已经打卡过了<br>'
+        yield message_str
+
     def get_credit_status_desc(client_date):
         time_long = int(time.time() * 1000)
         headers = getHeaders("$learn", user_cookie, time_long, index=1)
@@ -2651,7 +2519,11 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
     if not iE:
         message_str += '没有拼写奖励 '
         yield message_str
-    
+    elif sCO and rCO:
+        message_str += '所有拼写奖励已领取 '
+        yield message_str
+        
+    # if (iE and (not sCO or not rCO)) or not today_daka:
     # 开始新学5个单词
     book_finished = False
     learn_list = getRandomWordIDInBook('lookup.db', user_config['book_id'], word_count, get_learnt_list(unique_id))
@@ -3282,8 +3154,8 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
     time.sleep(react_wait_second)
     report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=1)
 
-    # pk
-    for msg in pkonline(user_cookie=user_cookie, user_config=user_config):
+    # pk # 2
+    for msg in pkonline(user_cookie=user_cookie, user_config=user_config, max_round=3):
         message_str += msg
         yield message_str
 
@@ -3318,7 +3190,15 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
     for i in range(class_rank_start, class_rank_end + 1):
         time_long = int(time.time() * 1000)
         headers = getHeaders("$group", user_cookie, time_long, index=1)
-        share_key = class_list_7[i - 1]['shareKey']
+        try:
+            share_key = class_list_7[i - 1]['shareKey']
+        except :
+            print(f'❌ → 获取到排名{rank_type}的班级列表失败，请检查网络或排名是否存在')
+            print(class_rank_start, class_rank_end)
+            print(len(class_list_7))
+            yield message_str
+            raise
+            break
 
         response = send_http2_request('GET', f'https://{headers["Host"]}/group/information?shareKey={share_key}', headers, None)
         data_list.append( response.json()['data']['groupInfo'] )
@@ -3352,12 +3232,12 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
             if content == None:
                 content = ''
             share_key = group_info['shareKey']
-            print(f'❤️ → 获取到排名{i + class_rank_start}的班级{class_name}的通知\n')
 
             hash_value = hashlib.md5(content.encode('utf-8')).hexdigest()
             cursor.execute(f"SELECT NAME FROM notice WHERE HASH_VALUE='{hash_value}'")
             result = cursor.fetchone()
             if not result or content == '':
+                print(f'❤️ → 获取到排名{i + class_rank_start}的班级{class_name}的通知\n')
                 # 保存通知到数据库
                 message_str += '.'
                 yield message_str
