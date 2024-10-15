@@ -2219,23 +2219,18 @@ def pkonline(user_cookie=user_cookie, user_config=user_config, max_round=3):
             else:
                 yield f'完成第{current_round}轮<br>'
                 current_round += 1
-                if current_round >= max_round:
+                if current_round > max_round:
                     return
                 random_wait_second = random.randint(1,4)
-                time.sleep(random_wait_second)
-
             
-
-
-        
-
-
-        
-
-
-
+def pkonline2(user_cookie=user_cookie, user_config=user_config, max_round=3):
+    '''单词对战''' # max_round无论输赢，但是体力值不足时，会自动退出
+    if user_config.get('no_pk', False) == True:
+        yield f'{user_config["name"]}不参加pk'
+        return
     
-    
+    return
+
 def yzdd(user_cookie=user_cookie, user_config=user_config):
     '''一站到底'''
     # 如果是星期日，跳过
@@ -2444,9 +2439,9 @@ def get_class_range(user_config=user_config, total_user_cnt = 18):
     # 获取日期最后一位
     date_last_num = int(today[-1])
     # 将这100个班级分成total_user_cnt份
-    cnt = 100 // total_user_cnt
-    num_start = cnt * (user_index - 1) + 1
-    num_end = cnt * user_index
+    cnt = 100.00 / total_user_cnt
+    num_start = int(cnt * (user_index - 1) + 1)
+    num_end = int(cnt * user_index)
     if user_index == total_user_cnt:
         num_end = 99
     # 组成班级范围
@@ -2455,39 +2450,11 @@ def get_class_range(user_config=user_config, total_user_cnt = 18):
     return num_start, num_end
 
 
-lock = threading.Lock()
-class_list_7 = []
-def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
-    '''为用户打卡'''
-    response_wait_second = 0.3
-    react_wait_second = 0.9
-    time_start = time.time()
-    global daka_list
-    unique_id = user_config['unique_id']
-    daka_list.append(unique_id)
-    threading.Thread(target=heartbeat_demon, args=(user_cookie, user_config)).start()
-
-    message_str = '#'
-    for msg in deskmate_pk(cookie=user_cookie, config=user_config):
-        message_str += msg
-        yield message_str
-    time.sleep(react_wait_second)
-
-    # pk # 1
-    for msg in pkonline(user_cookie=user_cookie, user_config=user_config, max_round=random.randint(0, 3)):
-        message_str += msg
-        yield message_str
-    time.sleep(react_wait_second)
-
-    yield yzdd(user_cookie=user_cookie, user_config=user_config)
-    if user_config.get('only_yzdd', "False") == "True":
-        return
-    time.sleep(react_wait_second)
-
+def learn_words(user_cookie=user_cookie, user_config=user_config, react_wait_seconds=1):
     word_count = user_config.get('word_count', 5)
+    unique_id = user_config['unique_id']
     
-    message_str += f'{user_config["book_id"]}书'
-    yield message_str
+    yield f'{user_config["book_id"]}书'
     client_date = int(datetime.datetime.now().strftime('%Y%m%d'))
 
 
@@ -2500,10 +2467,8 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
         response_json = response.json()
         return response_json['data']['todayDaka']
     
-    today_daka = check_if_daka()
-    if today_daka:
-        message_str += '今天已经打卡过了<br>'
-        yield message_str
+    if check_if_daka():
+        yield '今天已经打卡过了<br>'
 
     def get_credit_status_desc(client_date):
         time_long = int(time.time() * 1000)
@@ -2517,34 +2482,27 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
     
     iE, sCO, rCO = get_credit_status_desc(client_date)
     if not iE:
-        message_str += '没有拼写奖励 '
-        yield message_str
+        yield '没有拼写奖励 '
     elif sCO and rCO:
-        message_str += '所有拼写奖励已领取 '
-        yield message_str
+        yield '所有拼写奖励已领取 '
         
     # if (iE and (not sCO or not rCO)) or not today_daka:
     # 开始新学5个单词
     book_finished = False
     learn_list = getRandomWordIDInBook('lookup.db', user_config['book_id'], word_count, get_learnt_list(unique_id))
     if (len(learn_list) < word_count):
-        message_str += '<p style="color:red;background-color:yellow">新词不足 重新学习本书或更换书本</p>'
-        yield message_str
+        yield '<p style="color:red;background-color:yellow">新词不足 重新学习本书或更换书本</p>'
         book_finished = True
         word_count = len(learn_list)
-    message_str += f'本次{word_count}个词<br>'
-    yield message_str
+    yield f'本次{word_count}个词<br>'
     if book_finished:
         clear_learnt_list(unique_id)
-        message_str += '已完成本书学习<br>'
-        yield message_str
+        yield '已完成本书学习<br>'
 
-    time.sleep(react_wait_second)
     add_learnt_list(unique_id, learn_list)
     
     learnt_count = 0
-    message_str += f'完成新学轮数：'
-    yield message_str
+    yield f'完成新学轮数：'
     for strategy_id in range(1, 4): # 图选、英选中、中选英
         for i in range(word_count):
             
@@ -2564,7 +2522,7 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
             if not sCO and learnt_count == 5:
                 # 上传win_streak_status
                 user_study.user_study_submit_win_streak_records(user_cookie=user_cookie, user_config=user_config)
-            time.sleep(response_wait_second)
+            time.sleep(react_wait_seconds)
             if strategy_id == 1:
                 payload = [
                     {"index": 9, "extra_info": "{\"topic_id\":%d,\"book_id\":%d,\"channel\":\"study_mainstream\",\"plan_type\":\"XModelNewStudy\"}" % (learn_list[i], user_config['book_id'])}
@@ -2572,10 +2530,8 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
                 report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=0)
                 # 学习单词
                 time.sleep(random.randint(1000, 2000) / 1000)
-            message_str += '.'
-            yield message_str
-        message_str += f'{strategy_id}'
-        yield message_str
+            yield '.'
+        yield f'{strategy_id}'
 
     def daka_desc(word_count: int, unique_id: str, client_date: str):
         # 根据用户unique_id计算一个固定的timedelta，范围-1000s到0
@@ -2600,9 +2556,8 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
             {"index": 8, "extra_info": "{\"topic_id\":%d,\"strategy_id\":\"q%d\",\"choice_topic_id\":null,\"is_right\":1,\"plan_type\":\"XModelNewStudy\"}" % (learn_list[i], 4)},
         ]
         report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=0)
-        time.sleep(response_wait_second)
-        message_str += '.'
-        yield message_str
+        time.sleep(react_wait_seconds)
+        yield '.'
         
     def receive_credit_desc(type: int, client_date: str):# 1 新学，2 复习
         type_str = 'study' if type == 1 else 'review'
@@ -2613,10 +2568,9 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
         return result['data']
     
     if iE and not sCO:
-        message_str += f'拼写铜板x{receive_credit_desc(1, client_date)}<br>'
+        yield f'拼写铜板x{receive_credit_desc(1, client_date)}<br>'
     else:
-        message_str += '拼写完成<br>'
-    yield message_str
+        yield '拼写完成<br>'
 
     payload=[
         {"index": 11}# 拼写完成标志
@@ -2626,21 +2580,19 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
         {"index": 12}# 复习过渡页
     ]
     report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=0)   
-    time.sleep(response_wait_second)
+    time.sleep(react_wait_seconds)
     payload=[
         {"index": 13}# 复习过渡页点击
     ]
     report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=0)
 
     # 复习列表是今天学过的+昨天的单词，昨天的复习时斩掉
-
-    message_str += '开始复习 '
-    yield message_str
+    yield '开始复习 '
 
     yesterday_list = get_history_learnt_list(unique_id, delta=1)
     the_day_before_list = get_history_learnt_list(unique_id, delta=2)
     review_count = len(yesterday_list)+len(the_day_before_list)
-    message_str += f'共{review_count}个单词<br>'
+    yield f'共{review_count}个单词<br>'
 
     review_wrong_cnt = 0
     if review_count > 0:
@@ -2650,8 +2602,7 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
         report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=0)
         
         # 复习选择题
-        message_str += '复习选择'
-        yield message_str
+        yield '复习选择'
         for word in yesterday_list:
             # 昨天的单词：复习
             payload = [
@@ -2663,12 +2614,10 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
                 {"index": 8, "extra_info": "{\"topic_id\":%d,\"strategy_id\":\"q%d\",\"choice_topic_id\":%d,\"is_right\":1,\"plan_type\":\"XModelNewStudy\"}" % (word, 2, word)},
             ]
             report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=0)
-            time.sleep(response_wait_second)
-            message_str += '.'
-            yield message_str
+            time.sleep(react_wait_seconds)
+            yield '.'
         
-        message_str += ' 前天'
-        yield message_str
+        yield ' 前天'
         for word in the_day_before_list:
             # 前天的单词：斩掉
             payload = [
@@ -2680,9 +2629,8 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
                 {"index": 8, "extra_info": "{\"topic_id\":%d,\"strategy_id\":\"q%d\",\"choice_topic_id\":-1,\"is_right\":1,\"plan_type\":\"XModelNewStudy\"}" % (word, 2)},
             ]
             report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=0)
-            time.sleep(response_wait_second)
-            message_str += '.'
-            yield message_str
+            time.sleep(react_wait_seconds)
+            yield '.'
 
         # 复习拼写
         def save_study_record_desc(topic_id: int, book_id: int, sleep_time_ms: int, wrong=False):
@@ -2704,8 +2652,7 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
                 }
             response = send_http2_request('POST', f'https://{headers["Host"]}/api/study/xMode/saveStudyRecord', headers, content=json.dumps(payload))
             
-        message_str += ' 复习拼写'
-        yield message_str
+        yield ' 复习拼写'
         for word in yesterday_list:
             # 昨天的单词：拼写
             payload = [
@@ -2718,8 +2665,7 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
                 review_wrong_cnt += 1
                 time.sleep(sleep_time)
                 save_study_record_desc(word, user_config['book_id'], sleep_time * 1000, wrong=True)
-                message_str += '`'
-                yield message_str
+                yield '`'
                 extra_sleep_time = random.randint(3000, 5000) / 1000
                 time.sleep(extra_sleep_time)
                 save_study_record_desc(word, user_config['book_id'], (extra_sleep_time + sleep_time) * 1000)
@@ -2730,17 +2676,15 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
                 {"index": 8, "extra_info": "{\"topic_id\":%d,\"strategy_id\":\"q%d\",\"choice_topic_id\":null,\"is_right\":1,\"plan_type\":\"XModelNewStudy\"}" % (word, 4)},
             ]
             report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=0)
-            time.sleep(response_wait_second)
-            message_str += '.'
-            yield message_str
+            time.sleep(react_wait_seconds)
+            yield '.'
 
         # 复习完成
         daka_desc(word_count + review_count, unique_id, client_date)
         if iE and not rCO:
-            message_str += f' 复习铜板x{receive_credit_desc(2, client_date)} '
+            yield f' 复习铜板x{receive_credit_desc(2, client_date)} '
         else:
-            message_str += ' 复习完成 '
-        yield message_str
+            yield ' 复习完成 '
         payload=[
             {"index": 15}# 复习完成标志
         ]
@@ -2755,11 +2699,9 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
     
 
     if win_streak_status_desc():
-        message_str += '连胜'
-        yield message_str
+        yield  '连胜'
     else:
-        message_str += '连胜上传失败'
-        yield message_str
+        yield '连胜上传失败'
     
     def report_finish_daily_plan_desc(book_id, new_words_count, total_words_count, book_finished):
         # https://learn.baicizhan.com/api/study/reportFinishDailyPlan
@@ -2847,8 +2789,7 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
         if person['score'] > score:
             level_in_rank += 1
 
-    message_str += f'{win_streak_days}天<br>学习分{score}排{rank}段第{level_in_rank}名'
-    yield message_str
+    yield f'{win_streak_days}天<br>学习分{score}排{rank}段第{level_in_rank}名'
 
     def get_monthly_task_desc():
         # https://social.baicizhan.com/api/task/v2/getOneUnEndTask
@@ -2864,8 +2805,7 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
         progress = monthly_task_data.get('progress', 'null')
         total = monthly_task_data.get('actionCnt', 'null')
     
-    message_str += f' 月任务{progress}/{total}'
-    yield message_str
+    yield f' 月任务{progress}/{total}'
 
 
     # 前往任务中心领取奖励
@@ -2928,17 +2868,15 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
     
     if progress != 'null' and total != 'null':
         # 前往任务中心领取奖励
-        message_str += get_task_center_reward_desc(user_cookie, user_config)
-    yield message_str
+        yield get_task_center_reward_desc(user_cookie, user_config)
     
     payload=[
         {"index": 16, "extra_info": "{\"word_num\":%d,\"experience\":%d}" % (word_count + review_count, score)} # 数据上传完成标志
     ]
     report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=1)
 
-    time.sleep(react_wait_second)
-    message_str += ' 分享中.'
-    yield message_str
+    time.sleep(react_wait_seconds)
+    yield ' 分享中.'
     # 返回首页去打卡
     report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=0)
     # 获取打卡背景图
@@ -2952,31 +2890,66 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
         {"index": 0}# heartbeat
     ]
     report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=0)
-    time.sleep(react_wait_second)
-    message_str += '.'
-    yield message_str
+    time.sleep(react_wait_seconds)
+    yield '.'
     
     payload=[
         {"index": 19},# 点击分享到微信
         {"index": 20, 'extra_info': "{\"daka_type\":\"poster\",\"daka_poster_id\":\"%d\", \"share_channel\":\"weixin\"}" % poster_id}# 点击打卡
     ]
     report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=0)
-    time.sleep(react_wait_second)
-    message_str += '.'
-    yield message_str
+    time.sleep(react_wait_seconds)
+    yield '.'
     if social_send_share_success(user_cookie=user_cookie, user_config=user_config, channel=1):
-        message_str += '分享成功'
-        yield message_str
+        yield '分享成功'
     result = user_study.user_study_share_bonus(user_cookie=user_cookie, user_config=user_config)
-    time.sleep(react_wait_second)
-    message_str += f'奖励+{result.coinCount}<br>'
-    yield message_str
+    yield f'奖励+{result.coinCount}'
+    time.sleep(react_wait_seconds)
 
     # 返回主页
     payload=[
         {"index": 21, "extra_info": "{\"daka_type\":\"poster\",\"daka_poster_id\":\"%d\",\"share_channel\":\"weixin\"}" % poster_id}# 返回首页
     ]
     report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=0)
+    yield ' 学习结束<br>'
+
+
+lock = threading.Lock()
+target_class_list = []
+target_rank = 7
+def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
+    '''为用户打卡'''
+    response_wait_second = 0.3
+    react_wait_second = 0.9
+    time_start = time.time()
+    global daka_list
+    unique_id = user_config['unique_id']
+    daka_list.append(unique_id)
+    client_date = int(datetime.datetime.now().strftime('%Y%m%d'))
+    threading.Thread(target=heartbeat_demon, args=(user_cookie, user_config)).start()
+
+    message_str = '#'
+    for msg in deskmate_pk(cookie=user_cookie, config=user_config):
+        message_str += msg
+        yield message_str
+    time.sleep(react_wait_second)
+
+    # pk # 1
+    for msg in pkonline(user_cookie=user_cookie, user_config=user_config, max_round=random.randint(0, 3)):
+        message_str += msg
+        yield message_str
+    time.sleep(react_wait_second)
+
+    yield yzdd(user_cookie=user_cookie, user_config=user_config)
+    if user_config.get('only_yzdd', "False") == "True":
+        return
+    
+    message_str += '<br>开始背单词<br>'
+    yield message_str
+    for msg in learn_words(user_cookie, user_config, react_wait_second):
+        message_str += msg
+        yield message_str
+    time.sleep(react_wait_second)
 
     
 
@@ -3162,17 +3135,17 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
     # 公告和排名
     # https://group.baicizhan.com/group/get_group_rank?rank=7
     rank_type = user_config.get('rank_type', -1)
-    global class_list_7
+    global target_class_list
     class_list = []
     with lock:
-        if class_list_7 == []:
+        if target_class_list == []:
             time_long = int(time.time() * 1000)
             headers = getHeaders("$group", user_cookie, time_long, index=1)
-            response = send_http2_request('GET', f'https://{headers["Host"]}/group/get_group_rank?rank=7', headers, None)
-            class_list_7 = response.json()['data']['list']
+            response = send_http2_request('GET', f'https://{headers["Host"]}/group/get_group_rank?rank={target_rank}', headers, None)
+            target_class_list = response.json()['data']['list']
 
-    if rank_type == 7:
-        class_list = class_list_7
+    if rank_type == target_rank:
+        class_list = target_class_list
 
     if rank_type != -1:
         if class_list == []:
@@ -3185,17 +3158,16 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
     
         
     # https://group.baicizhan.com/group/information?shareKey=
-    class_rank_start, class_rank_end = get_class_range(user_config)
+    class_rank_start, class_rank_end = get_class_range(user_config, total_user_cnt)
     data_list = []
     for i in range(class_rank_start, class_rank_end + 1):
         time_long = int(time.time() * 1000)
         headers = getHeaders("$group", user_cookie, time_long, index=1)
         try:
-            share_key = class_list_7[i - 1]['shareKey']
+            share_key = target_class_list[i - 1]['shareKey']
         except :
-            print(f'❌ → 获取到排名{rank_type}的班级列表失败，请检查网络或排名是否存在')
-            print(class_rank_start, class_rank_end)
-            print(len(class_list_7))
+            message_str += (f'❌ → 获取到排名{rank_type}的班级列表失败，请检查网络或排名是否存在')
+            message_str += f'({class_rank_start}, {class_rank_end}, {len(target_class_list)})'
             yield message_str
             raise
             break
@@ -3203,34 +3175,35 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
         response = send_http2_request('GET', f'https://{headers["Host"]}/group/information?shareKey={share_key}', headers, None)
         data_list.append( response.json()['data']['groupInfo'] )
 
-        message_str += f'{i}.{data_list[-1]["name"]}<br>'
+        message_str += f'{target_rank}.{i}.{data_list[-1]["name"]}<br>'
         yield message_str
 
-        time.sleep(random.randint(2, 4))
+        time.sleep(random.randint(1, 4))
 
 
     with lock:
         conn = sqlite3.connect('./BCZ_wordscheck/bcz_notice.db')
         cursor = conn.cursor()
-        if rank_type == 7 or rank_type == 6:
-            # 对第六段位，只保存前100名
-            if rank_type == 6:
-                class_list = class_list[:100]
-            for i, class_item in enumerate(class_list):
-                class_share_key = class_item['shareKey']
-                class_name = class_item['groupName']
-                class_score = class_item['score']
-                cursor.execute(f"INSERT OR IGNORE INTO notice (SHARE_KEY, NAME, RANK_TYPE, RANK, HASH_VALUE, CONTENT, DATE, SCORE) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                                    (class_share_key, class_name, rank_type, i + 1, '', '', time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()), class_score))
-            print(f'★ → 获取到排名{rank_type}的班级列表\n')  
-            message_str += f'★{rank_type}'
-            yield message_str
+        # 暂不再保存班级排名信息
+        # if rank_type == 7 or rank_type == 6:
+        #     # 对第六段位，只保存前100名
+        #     if rank_type == 6:
+        #         class_list = class_list[:100]
+        #     for i, class_item in enumerate(class_list):
+        #         class_share_key = class_item['shareKey']
+        #         class_name = class_item['groupName']
+        #         class_score = class_item['score']
+        #         cursor.execute(f"INSERT OR IGNORE INTO notice (SHARE_KEY, NAME, RANK_TYPE, RANK, HASH_VALUE, CONTENT, DATE, SCORE) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        #                             (class_share_key, class_name, rank_type, i + 1, '', '', time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()), class_score))
+        #     print(f'★ → 获取到排名{rank_type}的班级列表\n')  
+        #     message_str += f'★{rank_type}'
+        #     yield message_str
 
         for i, group_info in enumerate(data_list):
             class_name = group_info['name']
             content = group_info['notice']
             if content == None:
-                content = ''
+                content = '(空)'
             share_key = group_info['shareKey']
 
             hash_value = hashlib.md5(content.encode('utf-8')).hexdigest()
@@ -3244,7 +3217,7 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
                 cursor.execute("""
                     INSERT INTO notice (SHARE_KEY, NAME,RANK_TYPE, RANK, HASH_VALUE, CONTENT, DATE) 
                     VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (share_key, class_name, 7, i + class_rank_start, hash_value, content, time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())))
+                """, (share_key, class_name, target_rank, i + class_rank_start, hash_value, content, time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())))
             else:
                 message_str += '`'
                 yield message_str
