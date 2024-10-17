@@ -322,10 +322,12 @@ function joinAll(){
 }
 function daKaAll(button){
   // 仅F12调用
-  console.log("在180s内开始所有账号")
-  document.querySelectorAll('.daka').forEach(function(button){
+  
+  buttons = document.querySelectorAll('.daka')
+  if (!confirm(`在${buttons.length*5}s内开始所有账号`)) return;
+  buttons.forEach(function(button){
     // 随机延时0-180s
-    random_secs = Math.floor(Math.random() * 180);
+    random_secs = Math.floor(Math.random() * buttons.length * 5);
     setTimeout(function(){
       button.click();
     }, random_secs * 1000);
@@ -485,12 +487,13 @@ function showAccountList(data, init=0) {
   });
   str += `<div><button class="add-btn" onclick="addAccount()">新增</button></div>`;
   accountList.innerHTML = str;
+  data_length = data.length;
   data.forEach(function(account) {
     if(init == 1){
-      // 给予0-4s的随机延时
+      // 给予0-6s的随机延时
       setTimeout(function(){
         loadOwnGroups(account.unique_id);
-      }, Math.floor(Math.random() * 5000));
+      }, Math.floor(Math.random() * data_length * 100));
     }
     else{
       loadOwnGroups(account.unique_id);
