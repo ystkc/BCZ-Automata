@@ -158,7 +158,7 @@ host_dict = {
 #     }
 # },
 
-def getHeaders(host: str, user_cookie: dict, time_long: int, index = 0):
+def getHeaders(host: str, user_cookie: dict, time_long: int, index = 0, quote = False):
     '''根据host和user_cookie生成请求头'''
     headers = default_headers[index].copy()
     # 将cookie中的时间戳更新
@@ -173,6 +173,9 @@ def getHeaders(host: str, user_cookie: dict, time_long: int, index = 0):
                 # 由于user_cookie并不是所有接口都需要的，所以需要判断一下
                 headers['Cookie'][k] = user_cookie[k]
         # 将cookie转换为字符串
+        if quote:
+            for k, v in headers['Cookie'].items():
+                headers['Cookie'][k] = f'"{v}"'
         headers['Cookie'] = '; '.join([f'{k.replace(";","%3B").replace("=","%3D")}={v.replace(";","%3B").replace("=","%3D")}'
                                         for k, v in headers['Cookie'].items()])
     if host[0] == '$':

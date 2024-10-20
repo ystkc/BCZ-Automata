@@ -13,6 +13,7 @@ from thrift.protocol import TCompactProtocol
 from src.thriftAPI.ttypes import *
 from src.thriftAPI import *
 from src.get_headers import getHeaders, bcz_info, get_device_str
+from src.avatar import find_unique_id
 import requests
 import ssl
 import socket
@@ -384,14 +385,49 @@ report_json = [
         "log_time": "1728962243878",
         "event_id": "begin-rank-pk",
         "extra_info": ""
+    },
+    {# 40 单词对战匹配开始
+        "product_id": "bcz_app_h5",
+        "stat_group": "pk-common",
+        "log_time": "1728962247178",
+        "event_id": "pk_matched_enter",
+        "extra_info": "{\"trace\":\"together_tab\",\"session_id\":\"40\",\"pk_rank\":\"1\",\"challenge_type\":\"排位赛\",\"challenge_id\":421585,\"cost_time\":3}"
+    },
+    {# 41 单词对战匹配完成
+        "product_id": "bcz_app_h5",
+        "stat_group": "pk-common",
+        "log_time": "1729302070692",
+        "event_id": "pk_matched_done",
+        "extra_info": "{\"trace\":\"together_tab\",\"session_id\":\"40\",\"pk_rank\":\"1\",\"challenge_type\":\"排位赛\",\"challenge_id\":421585,\"cost_time\":4}"
+    },
+    {# 42 匹配成功
+        "product_id": "bcz_app_h5",
+        "stat_group": "pk-common",
+        "log_time": "1729302071448",
+        "event_id": "pk_success",
+        "extra_info": "{\"trace\":\"together_tab\",\"session_id\":\"40\",\"pk_rank\":\"1\",\"challenge_type\":\"排位赛\",\"challenge_id\":421585,\"cost_time\":5}"
+    },
+    {# 43 作答完毕
+        "product_id": "bcz_app_h5",
+        "stat_group": "pk-common",
+        "log_time": "1728962255353",
+        "event_id": "click_pk_detail_score",
+        "extra_info": "{\"trace\":\"together_tab\",\"session_id\":\"40\",\"pk_rank\":\"1\",\"topic_id\":19480,\"challenge_id\":421585,\"puzzle_order\":1,\"score\":\"\",\"challenge_type\":\"排位赛\",\"cost_time\":5}"
+    },
+    {# 44 单词对战结束
+        "product_id": "bcz_app_h5",
+        "stat_group": "pk-common",
+        "log_time": "1728962285330",
+        "event_id": "pk_over",
+        "extra_info": "{\"trace\":\"together_tab\",\"session_id\":\"40\",\"pk_rank\":\"1\",\"challenge_type\":\"排位赛\",\"challenge_id\":421585}"
+    },
+    {# 45 查看单词对战结果
+        "product_id": "bcz_app_h5",
+        "stat_group": "pk-common",
+        "log_time": "1728962287866",
+        "event_id": "enter_result",
+        "extra_info": "{\"trace\":\"together_tab\",\"session_id\":\"40\",\"pk_rank\":\"1\"}"
     }
-
-
-
-
-
-
-
 ]
 
 
@@ -537,7 +573,7 @@ class bcz_system:
         client.send_check_infos()
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$system", user_cookie, time_long)
+        headers = getHeaders("$system", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/bcz_system/check_infos/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -562,7 +598,7 @@ class bcz_system:
         client.send_get_switches()
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$system", user_cookie, time_long)
+        headers = getHeaders("$system", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/bcz_system/get_switches/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -587,7 +623,7 @@ class bcz_system:
         client.send_get_static_config()
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$system", user_cookie, time_long)
+        headers = getHeaders("$system", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/bcz_system/get_static_config/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -612,7 +648,7 @@ class bcz_system:
         client.send_get_domain_whitelist()
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$system", user_cookie, time_long)
+        headers = getHeaders("$system", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/bcz_system/get_domain_whitelist/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -637,7 +673,7 @@ class bcz_system:
         client.send_get_privacy_agreement_version()
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$system", user_cookie, time_long)
+        headers = getHeaders("$system", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/bcz_system/get_privacy_agreement_version/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -673,7 +709,7 @@ class bcz_system:
         client.send_get_app_beta_update_info(args)
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$system", user_cookie, time_long)
+        headers = getHeaders("$system", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/bcz_system/get_app_beta_update_info/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -702,7 +738,7 @@ class advertise:
         client.send_get_startup_ad(args)
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$advertise", user_cookie, time_long)
+        headers = getHeaders("$advertise", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/advertise/get_startup_ad/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -726,7 +762,7 @@ class advertise:
         client.send_get_mall_tab_icon_info()
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$advertise", user_cookie, time_long)
+        headers = getHeaders("$advertise", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/advertise/get_mall_tab_icon_info/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -750,7 +786,7 @@ class advertise:
         client.send_get_practice_popup_adv()
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$advertise", user_cookie, time_long)
+        headers = getHeaders("$advertise", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/advertise/get_practice_popup_adv/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -774,7 +810,7 @@ class advertise:
         client.send_get_explore_popup_adv()
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$advertise", user_cookie, time_long)
+        headers = getHeaders("$advertise", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/advertise/get_explore_popup_adv/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -798,7 +834,7 @@ class advertise:
         client.send_get_loading_ad_items()
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$advertise", user_cookie, time_long)
+        headers = getHeaders("$advertise", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/advertise/get_loading_ad_items/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -822,7 +858,7 @@ class advertise:
         client.send_get_loading_ad_info()
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$advertise", user_cookie, time_long)
+        headers = getHeaders("$advertise", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/advertise/get_loading_ad_info/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -846,7 +882,7 @@ class advertise:
         client.send_get_live_streaming_info()
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$advertise", user_cookie, time_long)
+        headers = getHeaders("$advertise", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/advertise/get_live_streaming_info/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -870,7 +906,7 @@ class advertise:
         client.send_get_main_view_bottom_advs_v2()
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$advertise", user_cookie, time_long)
+        headers = getHeaders("$advertise", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/advertise/get_main_view_bottom_advs_v2/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -894,7 +930,7 @@ class advertise:
         client.send_get_main_view_top_banner_advs()
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$advertise", user_cookie, time_long)
+        headers = getHeaders("$advertise", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/advertise/get_main_view_top_banner_advs/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -918,7 +954,7 @@ class advertise:
         client.send_get_practice_popup_adv()
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$advertise", user_cookie, time_long)
+        headers = getHeaders("$advertise", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/advertise/get_practice_popup_adv/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -942,7 +978,7 @@ class advertise:
         client.send_get_practice_banner_adv()
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$advertise", user_cookie, time_long)
+        headers = getHeaders("$advertise", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/advertise/get_practice_banner_adv/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -966,7 +1002,7 @@ class user_study:
         client.send_user_basic_info_v2()
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$learn", user_cookie, time_long)
+        headers = getHeaders("$learn", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/user_study/user_basic_info_v2/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -990,7 +1026,7 @@ class user_study:
         client.send_get_user_study_config()
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$learn", user_cookie, time_long)
+        headers = getHeaders("$learn", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/user_study/get_user_study_config/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -1014,7 +1050,7 @@ class user_study:
         client.send_get_user_study_mode()
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$learn", user_cookie, time_long)
+        headers = getHeaders("$learn", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/user_study/get_user_study_mode/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -1040,7 +1076,7 @@ class user_study:
         client.send_user_limit_info_v2()    
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$learn", user_cookie, time_long)
+        headers = getHeaders("$learn", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/user_study/user_limit_info_v2/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -1064,7 +1100,7 @@ class user_study:
         client.send_win_streak_status(date)
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$learn", user_cookie, time_long)
+        headers = getHeaders("$learn", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/user_study/win_streak_status/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -1087,7 +1123,7 @@ class user_study:
         client.send_submit_win_streak_records(client_date=client_date, win_streak_dates=[client_date])
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$learn", user_cookie, time_long)
+        headers = getHeaders("$learn", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/user_study/submit_win_streak_records/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -1111,7 +1147,7 @@ class user_study:
         client.send_get_books_replace_info()
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$learn", user_cookie, time_long)
+        headers = getHeaders("$learn", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/user_study/get_books_replace_info/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -1135,7 +1171,7 @@ class user_study:
         client.send_get_main_page_js()
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$learn", user_cookie, time_long)
+        headers = getHeaders("$learn", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/user_study/get_main_page_js/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -1186,7 +1222,7 @@ class user_study:
         ))
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$learn", user_cookie, time_long)
+        headers = getHeaders("$learn", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/user_study/user_daka_v2/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -1210,7 +1246,7 @@ class user_study:
         client.send_get_train_page_resource()
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$learn", user_cookie, time_long)
+        headers = getHeaders("$learn", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/user_study/get_train_page_resource/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -1256,7 +1292,7 @@ class user_study:
         )
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$learn", user_cookie, time_long)
+        headers = getHeaders("$learn", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/user_study/update_done_data/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -1350,7 +1386,7 @@ class user_study:
             
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$learn", user_cookie, time_long)
+        headers = getHeaders("$learn", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/user_study/submit_experience_record/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -1373,7 +1409,7 @@ class user_study:
         client.send_get_daka_background_datas(learn_list)
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$learn", user_cookie, time_long)
+        headers = getHeaders("$learn", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/user_study/get_daka_background_datas/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -1396,7 +1432,7 @@ class user_study:
         time_long = int(time.time() * 1000)
         client.send_share_bonus(client_timestamp_ms = time_long)
         content = transport.getvalue()
-        headers = getHeaders("$learn", user_cookie, time_long)
+        headers = getHeaders("$learn", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/user_study/share_bonus/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -1419,7 +1455,7 @@ class user_study:
         client.send_credit_task_center()
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$learn", user_cookie, time_long)
+        headers = getHeaders("$learn", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/user_study/credit_task_center/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -1445,7 +1481,7 @@ class user_study:
         client.send_upload_task_action(task_upload_req_list)
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$learn", user_cookie, time_long)
+        headers = getHeaders("$learn", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/user_study/upload_task_action/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -1471,7 +1507,7 @@ class unified_user:
         client.send_get_bind_info()
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$passport", user_cookie, time_long)
+        headers = getHeaders("$passport", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/unified_user_service/get_bind_info/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -1495,7 +1531,7 @@ class unified_user:
         client.send_check_access_token(get_device_str(user_cookie['device_id']))
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$passport", user_cookie, time_long)
+        headers = getHeaders("$passport", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/unified_user_service/check_access_token/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -1519,7 +1555,7 @@ class assistant:
         client.send_check_feedback_msg(get_device_str(user_cookie['device_id']))
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$assistant", user_cookie, time_long)
+        headers = getHeaders("$assistant", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/assistant/check_feedback_msg/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -1542,7 +1578,7 @@ class assistant:
         client.send_get_activity_updated_time()
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$assistant", user_cookie, time_long)
+        headers = getHeaders("$assistant", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/assistant/get_activity_updated_time/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -1566,7 +1602,7 @@ class assistant:
         client.send_get_beta_user_types_v2()
         content = transport.getvalue()
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$assistant", user_cookie, time_long)
+        headers = getHeaders("$assistant", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/assistant/get_beta_user_types_v2/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -1591,7 +1627,7 @@ def get_report_event_jsons(args: list, thrift=True) -> list[str]:
         if 'extra_info' in arg:
             json_dict['extra_info'] = arg['extra_info']
         if thrift:
-            jsons.append(json.dumps(json_dict))
+            jsons.append(json.dumps(json_dict, ensure_ascii=False))
         else:
             jsons.append(json_dict)
     return jsons
@@ -1608,7 +1644,7 @@ def report_event(user_cookie=user_cookie, user_config=user_config, jsons=[], typ
         client = bcz_report_service.Client(protocol)
         client.send_report_event(get_report_event_jsons(jsons))
         content = transport.getvalue()
-        headers = getHeaders("$report", user_cookie, time_long)
+        headers = getHeaders("$report", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/bcz_report/report_event/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
         response = send_http2_request('POST', url, headers, content)
@@ -1623,15 +1659,19 @@ def report_event(user_cookie=user_cookie, user_config=user_config, jsons=[], typ
         return result
     else:
         if host == 0:
-            headers = getHeaders('$report', user_cookie, time_long, index=1)
+            headers = getHeaders('$report', user_cookie, int(time.time()), index=1, quote=True)
             # https://events.baicizhan.com/api/system/report_event
         else:
-            headers = getHeaders('$system', user_cookie, time_long, index=1)
+            headers = getHeaders('$system', user_cookie, int(time.time()), index=1, quote=True)
         headers['Content-Type'] = 'text/plain'
 
-            # https://system.baicizhan.com/api/system/report_event
-        url = f'https://{headers["Host"]}/api/system/report_event'
-        result = send_http2_request('POST', url, headers, json.dumps(get_report_event_jsons(jsons, False)))
+        # https://system.baicizhan.com/api/system/report_event
+        # https://events.baicizhan.com/api/system/report_event_without_login
+        if jsons[0].get('without_login', False) == True:
+            url = f'https://{headers["Host"]}/api/system/report_event_without_login'
+        else:
+            url = f'https://{headers["Host"]}/api/system/report_event'
+        result = send_http2_request('POST', url, headers, json.dumps(get_report_event_jsons(jsons, False), ensure_ascii=False))
 
         return result
 
@@ -1647,7 +1687,7 @@ def notify_get_remind_info(user_cookie=user_cookie, user_config=user_config):
     client.send_get_remind_info()
     content = transport.getvalue()
     time_long = int(time.time() * 1000)
-    headers = getHeaders("$notify", user_cookie, time_long)
+    headers = getHeaders("$notify", user_cookie, int(time.time()))
     url = f'https://{headers["Host"]}/rpc/notify/get_remind_info/{time_long}'
     content = gzip.compress(struct.pack("!i", len(content)) + content)
     response = send_http2_request('POST', url, headers, content)
@@ -1670,7 +1710,7 @@ def notify_get_latest_notify(user_cookie=user_cookie, user_config=user_config):
     client.send_get_latest_notify()
     content = transport.getvalue()
     time_long = int(time.time() * 1000)
-    headers = getHeaders("$notify", user_cookie, time_long)
+    headers = getHeaders("$notify", user_cookie, int(time.time()))
     url = f'https://{headers["Host"]}/rpc/notify/get_latest_notify/{time_long}'
     content = gzip.compress(struct.pack("!i", len(content)) + content)
     response = send_http2_request('POST', url, headers, content)
@@ -1695,7 +1735,7 @@ def resource_get_book_resource_update_info(user_cookie=user_cookie, user_config=
     client.send_get_book_resource_update_info(book_id)
     content = transport.getvalue()
     time_long = int(time.time() * 1000)
-    headers = getHeaders("$resource", user_cookie, time_long)
+    headers = getHeaders("$resource", user_cookie, int(time.time()))
     url = f'https://{headers["Host"]}/rpc/resource_api/get_book_resource_update_info/{time_long}'
     content = gzip.compress(struct.pack("!i", len(content)) + content)
     response = send_http2_request('POST', url, headers, content)
@@ -1718,7 +1758,7 @@ def social_send_share_success(user_cookie=user_cookie, user_config=user_config, 
     time_long = int(time.time() * 1000)
     client.send_send_share_success(module_name=0, timestamp=time_long, channel=channel)
     content = transport.getvalue()
-    headers = getHeaders("$DATA", user_cookie, time_long)
+    headers = getHeaders("$DATA", user_cookie, int(time.time()))
     # https://www.baicizhan.com/rpc/socials/send_share_success/1723850883199
     url = f'https://{headers["Host"]}/rpc/socials/send_share_success/{time_long}'
     content = gzip.compress(struct.pack("!i", len(content)) + content)
@@ -2065,19 +2105,33 @@ def word_lookup_close():
     wl_conn.close()
     wl_conn = None
 
+def standardize_chn_mean(chn_mean):
+    return chn_mean.replace('（','').replace('）','').replace('…', '').replace('/', '').replace('；','，')# 统一成中文逗号
+
 def word_lookup_puzzle_solver(puzzle_dict):
-    word = puzzle_dict['word']
-    chn_mean = word_lookup(word)
+    word = puzzle_dict['title']
+    msg = word
+    chn_mean = standardize_chn_mean(word_lookup(word))
     if chn_mean is None:
         chn_mean = ''
         Warning(f'word_lookup_puzzle_solver: word not found: {word}')
+        msg += '<font color="red">未找到</font>'
     options = puzzle_dict['options']
-    options_text = [option['text'] for option in options]
-    result = process.extractOne(chn_mean, options_text)
+    options_text = [option['text'].replace(', ', '，').replace('…','').replace('.', '') for option in options] # 统一成中文逗号
+    result = None
+    for text in options_text:
+        if text in chn_mean:
+            result = (text, 100)
+            msg += '&ltIN&gt'
+            break
+    else:
+        result = process.extractOne(chn_mean, options_text)
+        msg += '&ltFUZZ&gt'
+    msg += f'{options_text}match={result}<br>释义：{chn_mean}'
     if result is None:
         return random.randint(0, 3)
-    index = options_text.index(result[0]) + 1
-    return index
+    index = options[options_text.index(result[0])]['id']
+    return index, msg
 
 daka_list = []
 def heartbeat_demon(user_cookie=user_cookie, user_config=user_config):
@@ -2122,13 +2176,13 @@ def pkonline(user_cookie=user_cookie, user_config=user_config, max_round=3):
     # https://pk.baicizhan.com/contest2024/preparation/index.html?code=mB5AG9fCzo
     # https://pkonline1.baicizhan.com/api/contest/2024/tournament/status?code=mB5AG9fCzo
     time_long = int(time.time() * 1000)
-    headers = getHeaders("$pk", user_cookie, time_long, index=1)
+    headers = getHeaders("$pk", user_cookie, int(time.time()), index=1)
     url = f'https://{headers["Host"]}/contest2024/sign/?code=mB5AG9fCzo'
     response = send_http2_request('GET', url, headers, None)
     url = f'https://{headers["Host"]}/contest2024/preparation/index.html?code=mB5AG9fCzo'
     response = send_http2_request('GET', url, headers, None)
 
-    headers = getHeaders("$pkonline1", user_cookie, time_long, index=3)
+    headers = getHeaders("$pkonline1", user_cookie, int(time.time()), index=3)
     url = f'https://{headers["Host"]}/api/contest/2024/tournament/status?code=mB5AG9fCzo'
     response = send_http2_request('GET', url, headers, None)
     data = response.json()['data']
@@ -2174,7 +2228,7 @@ def pkonline(user_cookie=user_cookie, user_config=user_config, max_round=3):
         
         # https://pkonline1.baicizhan.com/api/contest/2024/tournament/failed_puzzle?lastId=
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$pkonline1", user_cookie, time_long, index=3)
+        headers = getHeaders("$pkonline1", user_cookie, int(time.time()), index=3)
         url = f'https://{headers["Host"]}/api/contest/2024/tournament/failed_puzzle?lastId='
         response = send_http2_request('GET', url, headers, None)
         data = response.json()['data']
@@ -2190,7 +2244,7 @@ def pkonline(user_cookie=user_cookie, user_config=user_config, max_round=3):
         report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=1)
         # https://pk.baicizhan.com/contest2024/contest/index.html?code=mB5AG9fCzo&mode=practice
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$pk", user_cookie, time_long, index=3)
+        headers = getHeaders("$pk", user_cookie, int(time.time()), index=3)
         url = f'https://{headers["Host"]}/contest2024/contest/index.html?code=mB5AG9fCzo&mode=practice'
         response = send_http2_request('GET', url, headers, None)
 
@@ -2203,7 +2257,7 @@ def pkonline(user_cookie=user_cookie, user_config=user_config, max_round=3):
             # https://pkonline1.baicizhan.com/api/contest/practice/match?code=mB5AG9fCzo&contestId=null
             
             time_long = int(time.time() * 1000)
-            headers = getHeaders("$pkonline1", user_cookie, time_long, index=3)
+            headers = getHeaders("$pkonline1", user_cookie, int(time.time()), index=3)
             url = f'https://{headers["Host"]}/api/contest/practice/match?code=mB5AG9fCzo&contestId=null'
             response = send_http2_request('GET', url, headers, None)
             data = response.json()['data']
@@ -2215,9 +2269,9 @@ def pkonline(user_cookie=user_cookie, user_config=user_config, max_round=3):
             ]
             report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=1)
 
-            post_headers = getHeaders("$pkonline1", user_cookie, time_long, index=3)
+            post_headers = getHeaders("$pkonline1", user_cookie, int(time.time()), index=3)
             post_headers['content-type'] = 'application/json'
-            options_headers = getHeaders("$pkonline1", user_cookie, time_long, index=2)# 这两个请求头一直使用到结束
+            options_headers = getHeaders("$pkonline1", user_cookie, int(time.time()), index=2)# 这两个请求头一直使用到结束
             time.sleep(3)
 
             prev_order = 0
@@ -2297,7 +2351,7 @@ def pkonline(user_cookie=user_cookie, user_config=user_config, max_round=3):
             report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=1)
             # https://pkonline1.baicizhan.com/api/contest/practice/result?contestId=null&challengeId=15133142&code=mB5AG9fCzo
             time_long = int(time.time() * 1000)
-            headers = getHeaders("$pkonline1", user_cookie, time_long, index=3)
+            headers = getHeaders("$pkonline1", user_cookie, int(time.time()), index=3)
             url = f'https://{headers["Host"]}/api/contest/practice/result?contestId=null&challengeId={challenge_id}&code=mB5AG9fCzo'
             response = send_http2_request('GET', url, headers, None)
             data = response.json()['data']
@@ -2314,239 +2368,291 @@ def pkonline(user_cookie=user_cookie, user_config=user_config, max_round=3):
             
 def pkonline2(user_cookie=user_cookie, user_config=user_config, max_round=3):
     '''单词对战''' # max_round无论输赢，但是体力值不足时，会自动退出
-    a = True
-    if a:
-        return
     if user_config.get('no_pk', False) == True:
         yield f'{user_config["name"]}不参加pk'
         return
     word_lookup_init()
+    time_short = int(time.time())
     time_long = int(time.time() * 1000) # 只有report_event的cookie和url需要更新time_long，其余均不需要
     # https://pk.baicizhan.com/api/rankpk/v2/current_session?time=1728962138173
-    pk_get_headers = getHeaders("$pk", user_cookie, time_long, index=1)
-    pk_post_headers = getHeaders("$pk", user_cookie, time_long, index=1)
+    pk_get_headers = getHeaders("$pk", user_cookie, time_short, index=1, quote=True)
+    pk_post_headers = getHeaders("$pk", user_cookie, time_short, index=1, quote=True)
     pk_post_headers['content-type'] = 'application/json'
 
-    url = f'https://{pk_get_headers["Host"]}/api/rankpk/v2/current_session?time={time_long}'
-    response = send_http2_request('GET', url, pk_get_headers, None)
-    data = response.json()['data']
-    current_user_info = data['currentRankUserInfo']
-    end_time_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(data['session']['endTime'] // 1000))# auditEndTime=1731772799000
-    session_id = current_user_info["session"]["sessionId"]
-    current_level = current_user_info["currentLevel"]
-    current_star = current_user_info["currentStar"]
-    current_energy = current_user_info["energy"]
-    yield f'单词pk{session_id}赛季{current_level}段{current_star}星{current_energy}体力 {end_time_str}结束<br>'
-    state = data['session']['state']
-    if state != 2:
-        yield f'<p style="color:red">单词pk赛季状态{state}，请检查</p>'
-        return
-    # https://pk.baicizhan.com/api/rankpk/main?time=1728962138249&activity_id=0&session_id=40
-    url = f'https://{pk_get_headers["Host"]}/api/rankpk/main?time={time_long}&activity_id=0&session_id={session_id}'
-    response = send_http2_request('GET', url, pk_get_headers, None)
-    data = response.json()['data']
-    current_level = data['current_level']
-    current_star = data['current_star']
-    current_energy = data['energy']
-    reward_available = data['reward_available']
+    total_round = 0
+    while True:
+        total_round += 1
+        if total_round > max_round:
+            return
+        url = f'https://{pk_get_headers["Host"]}/api/rankpk/v2/current_session?time={time_long}'
+        response = send_http2_request('GET', url, pk_get_headers, None)
+        data = response.json()['data']
+        current_user_info = data['currentRankUserInfo']
+        end_time_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(data['session']['endTime'] // 1000))# auditEndTime=1731772799000
+        session_id = data["session"]["sessionId"]
+        current_level = current_user_info["currentLevel"]
+        current_star = current_user_info["currentStar"]
+        current_energy = current_user_info["energy"]
+        yield f'单词pk第{total_round}轮 {session_id}赛季{current_level}段{current_star}星{current_energy}体力<br>'
+        state = data['session']['state']
+        if state != 2:
+            yield f'<p style="color:red">单词pk赛季状态{state}，请检查</p>'
+            return
+        # https://pk.baicizhan.com/api/rankpk/main?time=1728962138249&activity_id=0&session_id=40
+        url = f'https://{pk_get_headers["Host"]}/api/rankpk/main?time={time_long}&activity_id=0&session_id={session_id}'
+        response = send_http2_request('GET', url, pk_get_headers, None)
+        data = response.json()['data']
+        current_level = data['current_level']
+        current_star = data['current_star']
+        current_energy = data['energy']
+        reward_available = data['reward_avalible']
 
-    current_level_dict = data['levels'][0]
-    energy_cost = current_level_dict['energy_cost']
-    rank_name_en = current_level_dict['name_en']
+        for level in data['levels']:
+            if level['level'] == current_level:
+                current_level_dict = level
+                break
+        energy_cost = current_level_dict['energy_cost']
+        if current_energy < energy_cost:
+            yield f'体力{current_energy}不足{energy_cost}，结束<br>'
+            return
+        rank_name_en = current_level_dict['name_en']
 
-    if reward_available:
-        yield f'正在领取'
-        payload = [
-            {"index": 38}
+        if reward_available:
+            yield f'正在领取'
+            payload = [
+                {"index": 38}
+            ]
+            report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=0)
+            # https://pk.baicizhan.com/api/rankpk/get_reward?time=1728962144814&session_id=40
+            url = f'https://{pk_get_headers["Host"]}/api/rankpk/get_reward?time={time_long}&session_id={session_id}'
+            response = send_http2_request('GET', url, pk_get_headers, None)
+            data = response.json()['data']
+            pre_session_id = data['sessionId']
+            money = data['money']
+            yield f'{pre_session_id}赛季+{money}铜板'
+        payload = [ # 进入页面
+            {"index": 38, "extra_info": '{"trace":"together_tab","session_id":"%d","pk_rank":"%d"}'% (session_id, current_level)}
         ]
         report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=0)
-        # https://pk.baicizhan.com/api/rankpk/get_reward?time=1728962144814&session_id=40
-        url = f'https://{pk_get_headers["Host"]}/api/rankpk/get_reward?time={time_long}&session_id={session_id}'
-        response = send_http2_request('GET', url, pk_get_headers, None)
-        data = response.json()['data']
-        pre_session_id = data['sessionId']
-        money = data['money']
-        yield f'{pre_session_id}赛季+{money}铜板'
-    payload = [ # 进入页面
-        {"index": 38, "extra_info": 'extra_info={"trace":"together_tab","session_id":"%d","pk_rank":"%d"}'% (session_id, current_level)}
-    ]
-    report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=0)
-    payload = [ # 开始匹配
-        {"index": 39, "extra_info": 'extra_info={"trace":"together_tab","session_id":"%d","pk_rank":"%d"}'% (session_id, current_level)}
-    ]
-    report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=0)
-
-    challenge_id = 0
-    puzzle_count = 0
-    rival_name = ''
-    while True:
-        # https://pk.baicizhan.com/api/rankpk/challenge/match?challenge_type=word&challenge_level=wood&time=1728962245954&activity_id=0&session_id=40
-        url = f'https://{pk_get_headers["Host"]}/api/rankpk/challenge/match?challenge_type=word&challenge_level={rank_name_en}&time={time_long}&activity_id=0&session_id={session_id}'
-        response = send_http2_request('GET', url, pk_get_headers, None)
-        data = response.json()['data']
-        if not data.get('again', False): # 匹配成功
-            challenge_id = data['challenge_id']
-            puzzle_count = data['puzzle_count']
-            rival_name = data['rival']['nickname']
-            break
-        time.sleep(1)
-
-    return # requests #91
-
-    url = f'https://{headers["Host"]}/api/contest/2024/prepare/pkMain?code=mB5AG9fCzo'
-    response = send_http2_request('GET', url, headers, None)
-    data = response.json()['data']
-    daily_round = data['dailyRound']
-    current_round = 0
-    if max_round == 0:
-        return
-    yield f' 今已完成{daily_round}/3 '
-    time.sleep(1)
-    if daily_round < 3:
-        payload = [
-            {"index": 31} # 进入pk
-        ]
-        report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=1)
         
-        # https://pkonline1.baicizhan.com/api/contest/2024/tournament/failed_puzzle?lastId=
-        time_long = int(time.time() * 1000)
-        headers = getHeaders("$pkonline1", user_cookie, time_long, index=3)
-        url = f'https://{headers["Host"]}/api/contest/2024/tournament/failed_puzzle?lastId='
-        response = send_http2_request('GET', url, headers, None)
-        data = response.json()['data']
-
-        payload = [
-            {"index": 32} # pk练习页面
-        ]
-        report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=1)
         time.sleep(1)
-        payload = [
-            {"index": 33} # 点击开始按钮
+
+        payload = [ # 开始匹配
+            {"index": 39, "without_login": True, "extra_info": '{"trace":"together_tab","session_id":"%d","pk_rank":"%d"}'% (session_id, current_level)}
         ]
-        report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=1)
-        # https://pk.baicizhan.com/contest2024/contest/index.html?code=mB5AG9fCzo&mode=practice
-        time_long = int(time.time() * 1000)
-        headers = getHeaders("$pk", user_cookie, time_long, index=3)
-        url = f'https://{headers["Host"]}/contest2024/contest/index.html?code=mB5AG9fCzo&mode=practice'
-        response = send_http2_request('GET', url, headers, None)
+        report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=0)
 
+        challenge_id = 0
+        puzzle_count = 0
+        side = ''
+        rival_name = ''
+        rival_avatar = ''
+        time_start = time.time()
         while True:
-            payload = [
-                {"index": 34, "extra_info": "{\"CurrentRound\":%d}" % 0} # pk开始（CurrentRound是摆设）
-            ]
-            report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=1)
-            # 匹配
-            # https://pkonline1.baicizhan.com/api/contest/practice/match?code=mB5AG9fCzo&contestId=null
-            
-            time_long = int(time.time() * 1000)
-            headers = getHeaders("$pkonline1", user_cookie, time_long, index=3)
-            url = f'https://{headers["Host"]}/api/contest/practice/match?code=mB5AG9fCzo&contestId=null'
-            response = send_http2_request('GET', url, headers, None)
+            # https://pk.baicizhan.com/api/rankpk/challenge/match?challenge_type=word&challenge_level=wood&time=1728962245954&activity_id=0&session_id=40
+            url = f'https://{pk_get_headers["Host"]}/api/rankpk/challenge/match?challenge_type=word&challenge_level={rank_name_en}&time={time_long}&activity_id=0&session_id={session_id}'
+            response = send_http2_request('GET', url, pk_get_headers, None)
             data = response.json()['data']
-            challenge_id = data['challengeId']
-            current_round = data['currentRound']
-            yield f'第{current_round}轮<br>'
-            payload = [
-                {"index": 35, "extra_info": "{\"MatchTime\":%d}" % (int(time.time() * 1000) - time_long)} # pk匹配成功
-            ]
-            report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=1)
-
-            post_headers = getHeaders("$pkonline1", user_cookie, time_long, index=3)
-            post_headers['content-type'] = 'application/json'
-            options_headers = getHeaders("$pkonline1", user_cookie, time_long, index=2)# 这两个请求头一直使用到结束
-            time.sleep(3)
-
-            prev_order = 0
-            while True:
-                # 开始答题
-                # https://pkonline1.baicizhan.com/api/contest/practice/heartbeat
-                url = f'https://{options_headers["Host"]}/api/contest/practice/heartbeat'
-                response = send_http2_request('OPTIONS', url, options_headers, None)
-                content = {
-                    "challengeId": challenge_id
-                }
-                content_str = json.dumps(content)
-                response = send_http2_request('POST', url, post_headers, content_str)
-                data = response.json()['data']
-                order = data['order']
-                while order == 0 or order == prev_order:
-                    response = send_http2_request('POST', url, post_headers, content_str)
-                    data = response.json()['data']
-                    order = data['order']
-                    time.sleep(1)
-                yield f'第{order}题'
-                rival_escaped = data['rivalEscaped']
-                ans = puzzle_solver(data['puzzle'], 'BCZ_NCSVC')
-                response_thresh = 4000
-                response_delay = random.randint(2000, response_thresh)
-                start_timestamp = int(time.time() * 1000)
-                session_cnt = int(response_delay / 1000)
-                session_delay = response_delay % 1000
-                for i in range(session_cnt):
-                    time.sleep(1)
-                    response = send_http2_request('POST', url, post_headers, content_str)
-                    rival_escaped = response.json()['data']['rivalEscaped']
-                    if rival_escaped:
-                        break
-                time.sleep(session_delay / 1000)
-                ans_content = {
-                    "challengeId": challenge_id,
-                    "order": order,
-                    "answer": ans
-                }
-                ans_content_str = json.dumps(ans_content)
-                response = send_http2_request('POST', url, post_headers, ans_content_str)
-                data = response.json()['data']
-                rival_escaped = data['rivalEscaped']
-                payload = [
-                    {"index": 36, "extra_info": "{\"ContestId\":null,\"ChallengeId\":%d,\"QuesOrder\":%d,\"PuzzleId\":%d,\"ChoiceOrder\":%d,\"CostTime\":%d,\"IsRight\":false}" % (challenge_id, order, data['puzzle']['id'], ans, int(time.time() * 1000 - start_timestamp))} # pk答题成功
-                ]
-                report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=1)
-                if data['rivalAnswer'] is None and not rival_escaped:
-                # 等待对手作答
-                    while True:
-                        response = send_http2_request('POST', url, post_headers, content_str)
-                        data = response.json()['data']
-                        if data['rivalAnswer'] is not None or data['rivalEscaped']:
-                            break
-                        time.sleep(1)
-                # 检查答案
-                puzzle_solver(data['puzzle'], 'BCZ_NCSVC')
-                right_answer = data['puzzle']['rightAnswer']
-                my_answer = '√' if data['meAnswer'] == right_answer else '×'
-                rival_answer = '已逃跑'
-                if not rival_escaped:
-                    rival_answer = '√' if data['rivalAnswer'] == right_answer else '×'
-                puzzle_str = print_puzzle(data['puzzle'])
-                yield f'{puzzle_str} {my_answer}/{rival_answer}<br>'
-
-                time.sleep(3)
-                if order == 7:
-                    break
-                prev_order = order # 防止刷新不及时导致重复答题
-
-            # 结束本轮pk
-            payload = [
-                # "{\"CurrentRound\":1}"
-                {"index": 37, "extra_info": "{\"CurrentRound\":%d}" % current_round} # pk结束
-            ]
-            report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=1)
-            # https://pkonline1.baicizhan.com/api/contest/practice/result?contestId=null&challengeId=15133142&code=mB5AG9fCzo
-            time_long = int(time.time() * 1000)
-            headers = getHeaders("$pkonline1", user_cookie, time_long, index=3)
-            url = f'https://{headers["Host"]}/api/contest/practice/result?contestId=null&challengeId={challenge_id}&code=mB5AG9fCzo'
-            response = send_http2_request('GET', url, headers, None)
-            data = response.json()['data']
-            daily_finished = data['dailyFinished']
-            if daily_finished:
-                yield f'完成3轮 +50铜板<br>'
+            if not data.get('again', False): # 匹配成功
+                challenge_id = data['challenge_id']
+                puzzle_count = data['puzzle_count']
+                side = data['side']
+                rival_name = data['rival']['nickname']
+                rival_avatar = data['rival']['avatar']
                 break
-            else:
-                yield f'完成第{current_round}轮<br>'
-                current_round += 1
-                if current_round > max_round:
+            time.sleep(1)
+        yield f'匹配对手:{rival_name}<br>'
+        unique_id = find_unique_id(rival_avatar, nickname=rival_name)
+        if unique_id != 'None':
+            yield f'对手bczId:<font color="lemonchiffon">{unique_id}</font><br>'
+        else:
+            yield f'未找到对手bczId<br>'
+        # yield f'共{puzzle_count}题'
+        payload = [ # 匹配成功
+            {"index": 40, "extra_info": "{\"trace\":\"together_tab\",\"session_id\":\"%d\",\"pk_rank\":\"%d\",\"challenge_type\":\"排位赛\",\"challenge_id\":%d,\"cost_time\":%d}"% (session_id, current_level, challenge_id, int(time.time() - time_start))}
+        ]
+        report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=0)
+        time.sleep(0.5)
+        payload = [ # 初始化（重复发送3次等待）
+            {"index": 41, "extra_info": "{\"trace\":\"together_tab\",\"session_id\":\"%d\",\"pk_rank\":\"%d\",\"challenge_type\":\"排位赛\",\"challenge_id\":%d,\"cost_time\":%d}"% (session_id, current_level, challenge_id, int(time.time() - time_start))}
+        ]
+        report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=0)
+        time.sleep(0.25)
+        payload = [ # 初始化（重复发送3次等待）
+            {"index": 42, "extra_info": "{\"trace\":\"together_tab\",\"session_id\":\"%d\",\"pk_rank\":\"%d\",\"challenge_type\":\"排位赛\",\"challenge_id\":%d,\"cost_time\":%d}"% (session_id, current_level, challenge_id, int(time.time() - time_start))}
+        ]
+        report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=0)
+        
+        order = 0
+        chosen_id = 0
+        rival_answer = None
+        rival_escaped = False
+        my_answer = None
+        right_answer = None
+        current_time = 10000
+        my_score = 0
+        score_delta = 0
+        rival_score = 10
+        topic_id = 0
+        time_start = time.time()
+        while order < puzzle_count: # 最后一题作答完毕之后，退出
+            # https://pk.baicizhan.com/api/rankpk/challenge/heartbeat?activity_id=0
+            # {"challenge_id":421585,"submit":null,"session_id":40}
+            url = f'https://{pk_get_headers["Host"]}/api/rankpk/challenge/heartbeat?activity_id=0'
+            content = {
+                "challenge_id": challenge_id,
+                "submit": None,
+                "session_id": session_id
+            }
+            content_str = json.dumps(content)
+            while True:
+                response = send_http2_request('POST', url, pk_post_headers, content_str)
+                time.sleep(0.5)
+                data = response.json()['data']
+                if data['order'] != order:
+                    break
+            # 报告上一题
+            if order > 0: # 第一题时，order还未赋值
+                score_str = f'{my_score}' if order > 1 else ''
+                payload = [
+                    {"index": 43, "extra_info": "{\"trace\":\"together_tab\",\"session_id\":\"%d\",\"pk_rank\":\"%d\",\"topic_id\":%d,\"challenge_id\":%d,\"puzzle_order\":%d,\"score\":\"%s\",\"challenge_type\":\"排位赛\",\"cost_time\":%d}"% (session_id, current_level, topic_id, challenge_id, order, score_str, int(time.time() - time_start))}
+                ]
+                report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=0)
+                time_start = time.time()
+            order = data['order']
+            chosen_id, msg = word_lookup_puzzle_solver(data['puzzle'])
+            topic_id = data['puzzle']['topicId']
+            rival_escaped = data['rivalEscaped']
+            rival_answer = data['rival']['answer']
+
+            yield f'第{order}题 {msg}<br>'
+            lb = 6100 + min(1400, max(0, rival_score - my_score) * 100)
+            ub = 9100 - chosen_id * 500
+            target_time = random.randint(lb, ub) # 分数就是剩余时间后两位
+            current_time = data['puzzle']['cd']
+            
+            # {"challenge_id":421585,"nvcVal":"","submit":{"order":1,"answer":3},"session_id":40}
+            content = {
+                "challenge_id": challenge_id,
+                "nvcVal": "",
+                "submit": {
+                    "order": order,
+                    "answer": chosen_id
+                },
+                "session_id": session_id
+            }
+            content_ans_str = json.dumps(content)
+            modem_simulate = (random.randint(1, 5) == 1)
+
+            while True:
+                response = send_http2_request('POST', url, pk_post_headers, content_str)
+                data = response.json()['data']
+                current_time = data['puzzle']['cd']
+                rival_answer = data['rival']['answer']
+                rival_escaped = data['rivalEscaped']
+                
+                if current_time < target_time or (rival_answer is not None and rival_answer == chosen_id):
+                    if modem_simulate:
+                        time.sleep(0.5) # 模拟网络意外延时
+                    break
+                if current_time - 500 < target_time:
+                    time.sleep((current_time - target_time) / 1000)
+                    break
+                time.sleep(0.5)
+            
+
+            response = send_http2_request('POST', url, pk_post_headers, content_ans_str)
+            time.sleep(0.2)
+            response = send_http2_request('POST', url, pk_post_headers, content_ans_str)
+            time.sleep(0.2)
+            data = response.json()['data']
+            my_answer = data['me']['answer']
+            while my_answer is None:
+                response = send_http2_request('POST', url, pk_post_headers, content_ans_str)
+                time.sleep(0.2)
+                data = response.json()['data']
+                my_answer = data['me']['answer']
+                me_escaped = data['meEscaped']
+                if me_escaped:
+                    yield f'<font color="red">掉线，本轮结束</font><br>'
                     return
-                random_wait_second = random.randint(1,4)
+            score_delta = data['me']['score'] - my_score
+            my_score = data['me']['score']
+            right_answer = data['puzzle']['right_answer']
+            if my_answer == right_answer:
+                yield f'✓{my_score}(+{score_delta})/'
+            else:
+                yield f'×{my_score}(+{score_delta})/'
+            rival_answer = data['rival']['answer']
+            rival_escaped = data['rivalEscaped']
+            content = {
+                "challenge_id": challenge_id,
+                "submit": None,
+                "session_id": session_id
+            }
+            content_str = json.dumps(content)
+            while rival_answer is None and not rival_escaped and current_time > 0:
+                response = send_http2_request('POST', url, pk_post_headers, content_str)
+                time.sleep(0.5)
+                data = response.json()['data']
+                rival_answer = data['rival']['answer']
+                rival_escaped = data['rivalEscaped']
+                current_time = data['puzzle']['cd']
+            score_delta = data['rival']['score'] - rival_score
+            rival_score = data['rival']['score']
+            if rival_escaped:
+                yield f'对手逃跑<br>'
+            elif rival_answer is None:
+                yield f'未作答<br>'
+            else:
+                if rival_answer == right_answer:
+                    yield f'✓{rival_score}(+{score_delta})<br>'
+                else:
+                    yield f'×{rival_score}(+{score_delta})<br>'
+            # 等待直到current_time为0
+            while True:
+                response = send_http2_request('POST', url, pk_post_headers, content_str)
+                time.sleep(0.5)
+                data = response.json()['data']
+                current_time = data['puzzle']['cd']
+                rival_escaped = data['rivalEscaped']
+                if current_time == 0 or order != data['order']:
+                    break
+        # 最后一题作答完毕
+        score_str = f'{my_score}' if order > 1 else ''
+        payload = [
+            {"index": 43, "extra_info": "{\"trace\":\"together_tab\",\"session_id\":\"%d\",\"pk_rank\":\"%d\",\"topic_id\":%d,\"challenge_id\":%d,\"puzzle_order\":%d,\"score\":\"%s\",\"challenge_type\":\"排位赛\",\"cost_time\":%d}"% (session_id, current_level, topic_id, challenge_id, order, score_str, int(time.time() - time_start))}
+        ]
+        report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=0)
+        payload = [
+            {"index": 44, "extra_info": "{\"trace\":\"together_tab\",\"session_id\":\"%d\",\"pk_rank\":\"%d\",\"challenge_type\":\"排位赛\",\"challenge_id\":%d}" % (session_id, current_level, challenge_id)}
+        ]
+        report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=0)
+        # https://pk.baicizhan.com/api/rankpk/challenge/result?challenge_id=421585&side=left&time=1728962287864&activity_id=0&session_id=40
+        url = f'https://{pk_get_headers["Host"]}/api/rankpk/challenge/result?challenge_id={challenge_id}&side={side}&time={time_long}&activity_id=0&session_id={session_id}'
+        response = send_http2_request('GET', url, pk_get_headers, None)
+        data = response.json()['data']
+        incr_score = data['incrScore']
+        limited = data['limited']
+        yield f'学习得分+{incr_score}'
+        if limited:
+            yield f' 达上限 '
+        my_score = data['me']['score']
+        rival_score = data['rival']['score']
+        yield f' {my_score} - {rival_score} - '
+        if my_score > rival_score:
+            yield f'<font color="green">WIN</font><br>'
+        elif my_score < rival_score:
+            yield f'<font color="red">LOSE</font><br>'
+        else:
+            yield f'<font color="yellow">DRAW</font><br>'
+        payload = [
+            {"index": 45, "without_login": True, "extra_info": "{\"trace\":\"together_tab\",\"session_id\":\"%d\",\"pk_rank\":\"%d\"}" % (session_id, current_level)} # pk结束
+        ]
+        report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=0)
+        yield "<br><br>"
+        time.sleep(random.randint(2,3))
+
     return
 
 def yzdd(user_cookie=user_cookie, user_config=user_config):
@@ -2556,7 +2662,7 @@ def yzdd(user_cookie=user_cookie, user_config=user_config):
         return "$星期日，跳过"
     # https://pkonline2.baicizhan.com/api/contest/2024/one_fight/get_exam_question?bczId=0&day=
     time_long = int(time.time() * 1000)
-    headers = getHeaders("$pkonline2", user_cookie, time_long, index=1)
+    headers = getHeaders("$pkonline2", user_cookie, int(time.time()), index=1)
     url = f'https://{headers["Host"]}/api/contest/2024/one_fight/get_exam_question?bczId=0&day='
     response = send_http2_request('GET', url, headers, None)
     data = response.json()['data']
@@ -2584,7 +2690,7 @@ def yzdd(user_cookie=user_cookie, user_config=user_config):
         # https://pkonline2.baicizhan.com/api/contest/2024/one_fight/submit_exam
         # Content-Type: application/json; charset=UTF-8
         time.sleep(random.randint(2000, 4000) / 1000)
-        headers = getHeaders("$pkonline2", user_cookie, time_long, index=1)
+        headers = getHeaders("$pkonline2", user_cookie, int(time.time()), index=1)
         headers['Content-Type'] = 'application/json; charset=UTF-8'
         url = f'https://{headers["Host"]}/api/contest/2024/one_fight/submit_exam'
         payload = {
@@ -2596,7 +2702,7 @@ def yzdd(user_cookie=user_cookie, user_config=user_config):
 
         # 重新请求题目
         # https://pkonline2.baicizhan.com/api/contest/2024/one_fight/get_exam_question?bczId=0&day=
-        headers = getHeaders("$pkonline2", user_cookie, time_long, index=1)
+        headers = getHeaders("$pkonline2", user_cookie, int(time.time()), index=1)
         url = f'https://{headers["Host"]}/api/contest/2024/one_fight/get_exam_question?bczId=0&day='
         response = send_http2_request('GET', url, headers, None)
         data = response.json()['data']
@@ -2783,7 +2889,7 @@ def learn_words(user_cookie=user_cookie, user_config=user_config, react_wait_sec
     # 打卡状态检查链接：https://group.baicizhan.com/group/study_words_together_home_page
     def check_if_daka():
         time_long = int(time.time() * 1000)
-        headers = getHeaders('$group', user_cookie, time_long, index = 1)
+        headers = getHeaders('$group', user_cookie, int(time.time()), index = 1)
         url = 'https://group.baicizhan.com/group/study_words_together_home_page'
         response = send_http2_request('GET', url, headers=headers, content=None)
         response_json = response.json()
@@ -2794,7 +2900,7 @@ def learn_words(user_cookie=user_cookie, user_config=user_config, react_wait_sec
 
     def get_credit_status_desc(client_date):
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$learn", user_cookie, time_long, index=1)
+        headers = getHeaders("$learn", user_cookie, int(time.time()), index=1)
         url = f'https://{headers["Host"]}/api/study/xMode/getCreditStatus?date={client_date}'
         response = send_http2_request('GET', url, headers, None)
         result = response.json()
@@ -2858,7 +2964,7 @@ def learn_words(user_cookie=user_cookie, user_config=user_config, react_wait_sec
     def daka_desc(word_count: int, unique_id: str, client_date: str):
         # 根据用户unique_id计算一个固定的timedelta，范围-1000s到0
         time_long = int(time.time() * 1000) - (int(hashlib.md5(str(unique_id).encode('utf-8')).hexdigest(), 16) % 1000000)
-        headers = getHeaders("$learn", user_cookie, time_long, index=1)
+        headers = getHeaders("$learn", user_cookie, int(time.time()), index=1)
         headers['Content-Type']= 'application/x-www-form-urlencoded'
         send_http2_request('POST', f'https://{headers["Host"]}/api/study/xMode/daka', headers, f'date={client_date}&count={word_count}')
         
@@ -2884,7 +2990,7 @@ def learn_words(user_cookie=user_cookie, user_config=user_config, react_wait_sec
     def receive_credit_desc(type: int, client_date: str):# 1 新学，2 复习
         type_str = 'study' if type == 1 else 'review'
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$learn", user_cookie, time_long, index=1)
+        headers = getHeaders("$learn", user_cookie, int(time.time()), index=1)
         response = send_http2_request('POST', f'https://{headers["Host"]}/api/study/xMode/receiveCredit?date={client_date}&type={type_str}', headers, None)
         result = response.json()
         return result['data']
@@ -2957,7 +3063,7 @@ def learn_words(user_cookie=user_cookie, user_config=user_config, react_wait_sec
         # 复习拼写
         def save_study_record_desc(topic_id: int, book_id: int, sleep_time_ms: int, wrong=False):
             time_long = int(time.time() * 1000)
-            headers = getHeaders("$learn", user_cookie, time_long, index=1)
+            headers = getHeaders("$learn", user_cookie, int(time.time()), index=1)
             headers['Content-Type']= 'application/json'
             payload = {}
             if wrong:
@@ -3015,7 +3121,7 @@ def learn_words(user_cookie=user_cookie, user_config=user_config, react_wait_sec
     def win_streak_status_desc() -> bool:
         # https://learn.baicizhan.com/api/study/win-streak/status
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$learn", user_cookie, time_long, index=1)
+        headers = getHeaders("$learn", user_cookie, int(time.time()), index=1)
         response = send_http2_request('GET', f'https://{headers["Host"]}/api/study/win-streak/status', headers, None)
         return response.json()['data']
     
@@ -3034,7 +3140,7 @@ def learn_words(user_cookie=user_cookie, user_config=user_config, react_wait_sec
             "newWordsCount": int(new_words_count),
             "bookFinished": 'true' if (book_finished) else 'false'
         }
-        headers = getHeaders("$learn", user_cookie, time_long, index=1)
+        headers = getHeaders("$learn", user_cookie, int(time.time()), index=1)
         headers['Content-Type']= 'application/json'
         response = send_http2_request('POST', f'https://{headers["Host"]}/api/study/reportFinishDailyPlan', headers, content = json.dumps(payload))
         return response.json()
@@ -3094,7 +3200,7 @@ def learn_words(user_cookie=user_cookie, user_config=user_config, react_wait_sec
     def daily_summary_desc(client_date):
         # https://learn.baicizhan.com/api/study/win-streak/dailySummary?clientDate=20240817
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$learn", user_cookie, time_long, index=1)
+        headers = getHeaders("$learn", user_cookie, int(time.time()), index=1)
         response = send_http2_request('GET', f'https://{headers["Host"]}/api/study/win-streak/dailySummary?clientDate={client_date}', headers, None)
         return response.json()
     
@@ -3116,7 +3222,7 @@ def learn_words(user_cookie=user_cookie, user_config=user_config, react_wait_sec
     def get_monthly_task_desc():
         # https://social.baicizhan.com/api/task/v2/getOneUnEndTask
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$social", user_cookie, time_long, index=1)
+        headers = getHeaders("$social", user_cookie, int(time.time()), index=1)
         response = send_http2_request('GET', f'https://{headers["Host"]}/api/task/v2/getOneUnEndTask', headers, None)
         return response.json()
     
@@ -3134,7 +3240,7 @@ def learn_words(user_cookie=user_cookie, user_config=user_config, react_wait_sec
     def get_award(user_task_id, task_award_list):
             # https://social.baicizhan.com/api/task/v2/getAward?userTaskId=1631594
             time_long = int(time.time() * 1000)
-            headers = getHeaders("$social", user_cookie, time_long, index=1)
+            headers = getHeaders("$social", user_cookie, int(time.time()), index=1)
             headers['Content-Type']= 'application/json'
             response = send_http2_request('POST', f'https://{headers["Host"]}/api/task/v2/getAward?userTaskId={user_task_id}', headers, content = '{}')
             data = response.json()
@@ -3153,7 +3259,7 @@ def learn_words(user_cookie=user_cookie, user_config=user_config, react_wait_sec
         # https://social.baicizhan.com/api/task/v2/home
 
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$social", user_cookie, time_long, index=1)
+        headers = getHeaders("$social", user_cookie, int(time.time()), index=1)
         response = send_http2_request('GET', f'https://{headers["Host"]}/api/task/v2/home', headers, None)
         data = response.json()['data']
         message = "任务中心：<br>"
@@ -3247,7 +3353,7 @@ def notice_and_rank(user_cookie, user_config, total_user_cnt):
     with lock:
         if target_class_list == []:
             time_long = int(time.time() * 1000)
-            headers = getHeaders("$group", user_cookie, time_long, index=1)
+            headers = getHeaders("$group", user_cookie, int(time.time()), index=1)
             response = send_http2_request('GET', f'https://{headers["Host"]}/group/get_group_rank?rank={target_rank}', headers, None)
             target_class_list = response.json()['data']['list']
 
@@ -3258,7 +3364,7 @@ def notice_and_rank(user_cookie, user_config, total_user_cnt):
         if class_list == []:
             # 先获取班级列表
             time_long = int(time.time() * 1000)
-            headers = getHeaders("$group", user_cookie, time_long, index=1)
+            headers = getHeaders("$group", user_cookie, int(time.time()), index=1)
             response = send_http2_request('GET', f'https://{headers["Host"]}/group/get_group_rank?rank={rank_type}', headers, None)
             class_list = response.json()['data']['list']
         
@@ -3269,7 +3375,7 @@ def notice_and_rank(user_cookie, user_config, total_user_cnt):
     data_list = []
     for i in range(class_rank_start, class_rank_end + 1):
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$group", user_cookie, time_long, index=1)
+        headers = getHeaders("$group", user_cookie, int(time.time()), index=1)
         try:
             share_key = target_class_list[i - 1]['shareKey']
         except :
@@ -3308,7 +3414,7 @@ def notice_and_rank(user_cookie, user_config, total_user_cnt):
             class_name = group_info['name']
             content = group_info['notice']
             introduction = group_info['introduction']
-            if content == None:
+            if content == None or content == '':
                 content = '(空)'
             content += f'\n{class_name}({introduction})'
             share_key = group_info['shareKey']
@@ -3343,19 +3449,26 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
     message_str = '#'
     client_date = int(datetime.datetime.now().strftime('%Y%m%d'))
 
-    # 临时函数放这里
-    
+    threading.Thread(target=heartbeat_demon, args=(user_cookie, user_config)).start()
+
     # 临时函数放这里
 
-    threading.Thread(target=heartbeat_demon, args=(user_cookie, user_config)).start()
+    # 临时函数放这里
+
 
     for msg in deskmate_pk(cookie=user_cookie, config=user_config):
         message_str += msg
         yield message_str
     time.sleep(react_wait_second)
 
+    # pk2 # 1
+    round_finished = random.randint(0, 6)
+    for msg in pkonline2(user_cookie=user_cookie, user_config=user_config, max_round=round_finished):
+        message_str += msg
+        yield message_str
+
     # pk # 1
-    for msg in pkonline(user_cookie=user_cookie, user_config=user_config, max_round=random.randint(0, 3)):
+    for msg in pkonline(user_cookie=user_cookie, user_config=user_config, max_round=0):
         message_str += msg
         yield message_str
     time.sleep(react_wait_second)
@@ -3377,26 +3490,22 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
     def get_task_status_desc():
         
         # https://social.baicizhan.com/api/task/accept_task
-        time_long = int(time.time() * 1000)
-        headers = getHeaders("$social", user_cookie, time_long, index=1)
+        headers = getHeaders("$social", user_cookie, int(time.time()), index=1)
         headers['Content-Type'] = 'application/json; charset=UTF-8'
         response = send_http2_request('POST', f'https://{headers["Host"]}/api/task/accept_task', headers, '{}')
 
         # https://social.baicizhan.com/api/task/finish_task # 发一次空接收、完成请求以完成签到
-        time_long = int(time.time() * 1000)
-        headers = getHeaders("$social", user_cookie, time_long, index=1)
+        headers = getHeaders("$social", user_cookie, int(time.time()), index=1)
         headers['Content-Type'] = 'application/json; charset=UTF-8'
         response = send_http2_request('POST', f'https://{headers["Host"]}/api/task/finish_task', headers, '{}')
         
         #  https://group.baicizhan.com/group/study_words_together_home_page
-        time_long = int(time.time() * 1000)
-        headers = getHeaders("$group", user_cookie, time_long, index=1)
+        headers = getHeaders("$group", user_cookie, int(time.time()), index=1)
         response = send_http2_request('GET', f'https://{headers["Host"]}/group/study_words_together_home_page', headers, None)
         data = response.json()['data']
 
         # https://social.baicizhan.com/api/task/get_task_list
-        time_long = int(time.time() * 1000)
-        headers = getHeaders("$social", user_cookie, time_long, index=1)
+        headers = getHeaders("$social", user_cookie, int(time.time()), index=1)
         response = send_http2_request('GET', f'https://{headers["Host"]}/api/task/get_task_list', headers, None)
         tasklist = response.json()['data']['taskInfoVoList']
         state = 0
@@ -3408,8 +3517,7 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
                     state += 1
 
         # https://social.baicizhan.com/api/deskmate/home_page
-        time_long = int(time.time() * 1000)
-        headers = getHeaders("$social", user_cookie, time_long, index=1)
+        headers = getHeaders("$social", user_cookie, int(time.time()), index=1)
         response = send_http2_request('GET', f'https://{headers["Host"]}/api/deskmate/home_page', headers, None)
         deskmate_data = response.json()['data']
         if deskmate_data is None or deskmate_data['deskmate'] is None:
@@ -3435,8 +3543,7 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
     def get_task_reward_desc(client_date):# 签到奖励
 
         # https://social.baicizhan.com/api/task/get_task_reward {"taskId":1,"receptionTime":20240817}
-        time_long = int(time.time() * 1000)
-        headers = getHeaders("$social", user_cookie, time_long, index=1)
+        headers = getHeaders("$social", user_cookie, int(time.time()), index=1)
         headers['Content-Type'] = 'application/json; charset=UTF-8'
         payload = {"taskId": 1, "receptionTime": client_date}
         response = send_http2_request('POST', f'https://{headers["Host"]}/api/task/get_task_reward', headers, json.dumps(payload))
@@ -3458,7 +3565,7 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
         report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=0)
 
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$social", user_cookie, time_long, index=1)
+        headers = getHeaders("$social", user_cookie, int(time.time()), index=1)
         headers['Content-Type'] = 'application/json; charset=UTF-8'
         response = send_http2_request('POST', f'https://{headers["Host"]}/api/deskmate/daka_reward?type={type}', headers, '{}')
         return response.json()['data']
@@ -3482,7 +3589,7 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
         report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=0)
 
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$group", user_cookie, time_long, index=1)
+        headers = getHeaders("$group", user_cookie, int(time.time()), index=1)
         headers['Content-Type'] = 'application/json; charset=UTF-8'
         if type == 0:
             # https://group.baicizhan.com/group/open_box?surprise=0
@@ -3509,21 +3616,21 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
         # https://learn.baicizhan.com/api/mall/proxy/homepage/get_home_page_info
         # 获取今日是否已领日奖
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$learn", user_cookie, time_long, index=1)
+        headers = getHeaders("$learn", user_cookie, int(time.time()), index=1)
         response = send_http2_request('GET', f'https://{headers["Host"]}/api/mall/proxy/homepage/get_home_page_info', headers, None)
         daily_credit_status = response.json()['data']['dailyCreditStatus']
 
         # https://learn.baicizhan.com/api/mall/proxy/creditmall/get_credit
         # 获取当前铜板数
         time_long = int(time.time() * 1000)
-        headers = getHeaders("$learn", user_cookie, time_long, index=1)
+        headers = getHeaders("$learn", user_cookie, int(time.time()), index=1)
         response = send_http2_request('GET', f'https://{headers["Host"]}/api/mall/proxy/creditmall/get_credit', headers, None)
         balance = response.json()['data']
         
         if not daily_credit_status:
             # https://learn.baicizhan.com/api/mall/proxy/homepage/get_daily_reward
             time_long = int(time.time() * 1000)
-            headers = getHeaders("$learn", user_cookie, time_long, index=1)
+            headers = getHeaders("$learn", user_cookie, int(time.time()), index=1)
             response = send_http2_request('GET', f'https://{headers["Host"]}/api/mall/proxy/homepage/get_daily_reward', headers, None)
             return balance, response.json()['data']['credit']
         else:
@@ -3549,6 +3656,11 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
 
     # pk # 2
     for msg in pkonline(user_cookie=user_cookie, user_config=user_config, max_round=3):
+        message_str += msg
+        yield message_str
+
+    # pk2 # 2
+    for msg in pkonline2(user_cookie=user_cookie, user_config=user_config, max_round=6-round_finished):
         message_str += msg
         yield message_str
 

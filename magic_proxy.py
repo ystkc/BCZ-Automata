@@ -223,7 +223,7 @@ def main():# 注意：if __name__ == "__main__": 内不能用global关键字
     global enable_fiddler_proxy
     try:
         print('使用方式:运行magic_proxy.py,然后运行app.py点击魔法账号,然后启动客户端/模拟器,如果魔法未生效则手动设置代理本机ip:8080')
-        print('若使用fiddler，请【先启动fiddler】，【再启动本程序】')
+        print('若使用fiddler，请【先启动fiddler】，【再启动本程序】，如果没反应请关闭再打开fiddler的捕获开关')
         # 检测8888端口是否被占用
         if test_port(8888):
             enable_fiddler_proxy = False
