@@ -26,6 +26,19 @@ function reloadAll(){
     console.error(error);
   });
 }
+function updateNotice(){
+  return fetch('/update_notice', {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json'
+    }
+  }).then(function(response) {
+    return response.json();
+  })
+ .then(function(data) {
+    alert(data.msg);
+  })
+}
 
 function loadAccountList() {
     return fetch('/accounts/list', {

@@ -2366,7 +2366,7 @@ def pkonline(user_cookie=user_cookie, user_config=user_config, max_round=3):
                     return
                 random_wait_second = random.randint(1,4)
             
-def pkonline2(user_cookie=user_cookie, user_config=user_config, max_round=3):
+def pkonline2(user_cookie=user_cookie, user_config=user_config, max_round=3, max_win_round=3):
     '''单词对战''' # max_round无论输赢，但是体力值不足时，会自动退出
     if user_config.get('no_pk', False) == True:
         yield f'{user_config["name"]}不参加pk'
@@ -2380,9 +2380,10 @@ def pkonline2(user_cookie=user_cookie, user_config=user_config, max_round=3):
     pk_post_headers['content-type'] = 'application/json'
 
     total_round = 0
+    total_win_round = 0
     while True:
         total_round += 1
-        if total_round > max_round:
+        if total_round > max_round or total_win_round > max_win_round:
             return
         url = f'https://{pk_get_headers["Host"]}/api/rankpk/v2/current_session?time={time_long}'
         response = send_http2_request('GET', url, pk_get_headers, None)
@@ -2492,7 +2493,7 @@ def pkonline2(user_cookie=user_cookie, user_config=user_config, max_round=3):
         current_time = 10000
         my_score = 0
         score_delta = 0
-        rival_score = 10
+        rival_score = 0
         topic_id = 0
         time_start = time.time()
         while order < puzzle_count: # 最后一题作答完毕之后，退出
@@ -2526,8 +2527,8 @@ def pkonline2(user_cookie=user_cookie, user_config=user_config, max_round=3):
             rival_answer = data['rival']['answer']
 
             yield f'第{order}题 {msg}<br>'
-            lb = 6100 + min(1400, max(0, rival_score - my_score) * 100)
-            ub = 9100 - chosen_id * 500
+            lb = 6100 + min(1500, max(0, rival_score - my_score + 150) * 10)
+            ub = 9100 - chosen_id * 450
             target_time = random.randint(lb, ub) # 分数就是剩余时间后两位
             current_time = data['puzzle']['cd']
             
@@ -2642,6 +2643,7 @@ def pkonline2(user_cookie=user_cookie, user_config=user_config, max_round=3):
         yield f' {my_score} - {rival_score} - '
         if my_score > rival_score:
             yield f'<font color="green">WIN</font><br>'
+            total_win_round += 1
         elif my_score < rival_score:
             yield f'<font color="red">LOSE</font><br>'
         else:
@@ -2947,7 +2949,7 @@ def learn_words(user_cookie=user_cookie, user_config=user_config, react_wait_sec
             ]
             report_event(user_cookie=user_cookie, user_config=user_config, jsons=payload, type=1, host=0)
             learnt_count += 1
-            if not sCO and learnt_count == 5:
+            if learnt_count == 5:
                 # 上传win_streak_status
                 user_study.user_study_submit_win_streak_records(user_cookie=user_cookie, user_config=user_config)
             time.sleep(react_wait_seconds)
@@ -3233,7 +3235,7 @@ def learn_words(user_cookie=user_cookie, user_config=user_config, react_wait_sec
         progress = monthly_task_data.get('progress', 'null')
         total = monthly_task_data.get('actionCnt', 'null')
     
-    yield f' 月任务{progress}/{total}'
+    # yield f' 新任务{progress}/{total}'
 
 
     # 前往任务中心领取奖励
@@ -3277,7 +3279,7 @@ def learn_words(user_cookie=user_cookie, user_config=user_config, react_wait_sec
             
             if task['status'] == 1:
                 message += f"领取{get_award(task['userTaskId'], task['awardList'])}<br>"
-            if task_name == '加量学5个单词' or task_name == '新学5个单词':
+            elif task_name == '加量学5个单词' or task_name == '新学5个单词':
                 time.sleep(1.5)
                 user_study.user_study_upload_task_action(user_cookie=user_cookie, user_config=user_config, task_upload_req_list=[['learnMore', 5]])
                 time.sleep(3)
@@ -3344,6 +3346,7 @@ def learn_words(user_cookie=user_cookie, user_config=user_config, react_wait_sec
 
 target_class_list = []
 target_rank = datetime.datetime.now().weekday() + 1 # 星期几
+# target_rank = 7
 def notice_and_rank(user_cookie, user_config, total_user_cnt):
     '''获取公告和排名'''
     # https://group.baicizhan.com/group/get_group_rank?rank=7
@@ -3378,6 +3381,7 @@ def notice_and_rank(user_cookie, user_config, total_user_cnt):
         headers = getHeaders("$group", user_cookie, int(time.time()), index=1)
         try:
             share_key = target_class_list[i - 1]['shareKey']
+            score = target_class_list[i - 1]['score']
         except :
             yield (f'❌ → 获取到排名{rank_type}的班级列表失败，请检查网络或排名是否存在')
             yield f'({class_rank_start}, {class_rank_end}, {len(target_class_list)})'
@@ -3385,7 +3389,9 @@ def notice_and_rank(user_cookie, user_config, total_user_cnt):
             break
 
         response = send_http2_request('GET', f'https://{headers["Host"]}/group/information?shareKey={share_key}', headers, None)
-        data_list.append( response.json()['data']['groupInfo'] )
+        group_info = response.json()['data']['groupInfo']
+        group_info['score'] = score
+        data_list.append( group_info )
 
         yield f'{target_rank}.{i}.{data_list[-1]["name"]}<br>'
 
@@ -3416,26 +3422,54 @@ def notice_and_rank(user_cookie, user_config, total_user_cnt):
             introduction = group_info['introduction']
             if content == None or content == '':
                 content = '(空)'
-            content += f'\n{class_name}({introduction})'
             share_key = group_info['shareKey']
+            score = group_info['score']
 
             hash_value = hashlib.md5(content.encode('utf-8')).hexdigest()
-            cursor.execute(f"SELECT NAME FROM notice WHERE HASH_VALUE='{hash_value}'")
+            cursor.execute(f"SELECT NAME FROM notice WHERE HASH_VALUE='{hash_value}' AND SHARE_KEY='{share_key}'")
             result = cursor.fetchone()
             if not result:
                 print(f'❤️ → 获取到排名{i + class_rank_start}的班级{class_name}的通知\n')
                 # 保存通知到数据库
                 yield '.'
                 cursor.execute("""
-                    INSERT INTO notice (SHARE_KEY, NAME,RANK_TYPE, RANK, HASH_VALUE, CONTENT, DATE) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (share_key, class_name, target_rank, i + class_rank_start, hash_value, content, time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())))
+                    INSERT INTO notice (SHARE_KEY, NAME, RANK_TYPE, RANK, HASH_VALUE, CONTENT, DATE, SCORE) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (share_key, f'{class_name}({introduction})', target_rank, i + class_rank_start, hash_value, content, time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()), score))
             else:
                 yield '`'
                 print(f'🙈 → 排名{i + class_rank_start}的班级{class_name}的通知已存在数据库，跳过')
         conn.commit()
         conn.close()
 
+
+def watch_daily_sentences(user_cookie, user_config):
+    '''观看每日句子精讲'''
+    # https://learn.baicizhan.com/api/activity/sentence/list
+    headers = getHeaders("$learn", user_cookie, int(time.time()), index=1)
+    headers['Content-Type']= 'application/json'
+    response = send_http2_request('POST', f'https://{headers["Host"]}/api/activity/sentence/list', headers, '{"size":20}')
+    data = response.json()['data']['data']
+    for sentence in data:
+        sentence_id = sentence['id']
+        daka_num = sentence['dakaNum']
+        cn = sentence['sentence']['cn']
+        en = sentence['sentence']['en']
+        sentence_source = sentence['sentenceSource']
+        yield f'句子精讲 #{sentence_id} {daka_num}打卡<br>{cn}<br>{en}<br>{sentence_source}'
+        # https://learn.baicizhan.com/api/activity/sentence/sentence_daka
+        headers = getHeaders("$learn", user_cookie, int(time.time()), index=1)
+        headers['Content-Type']= 'application/json'
+        response = send_http2_request('POST', f'https://{headers["Host"]}/api/activity/sentence/sentence_daka', headers, content = f'{{"sentenceId":{sentence_id}}}')
+        if response.json()['code'] == 1:
+            yield '打卡成功'
+        # https://learn.baicizhan.com/api/activity/sentence/detail?sentenceId=882
+        headers = getHeaders("$learn", user_cookie, int(time.time()), index=1)
+        response = send_http2_request('GET', f'https://{headers["Host"]}/api/activity/sentence/detail?sentenceId={sentence_id}', headers, None)
+        if response.json()['code'] == 1:
+            yield '获取详情成功'
+        break
+    return
 
 lock = threading.Lock()
 def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
@@ -3452,9 +3486,14 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
     threading.Thread(target=heartbeat_demon, args=(user_cookie, user_config)).start()
 
     # 临时函数放这里
-
+    
     # 临时函数放这里
 
+    
+    for msg in watch_daily_sentences(user_cookie, user_config):
+        message_str += msg
+        yield message_str
+    time.sleep(react_wait_second)
 
     for msg in deskmate_pk(cookie=user_cookie, config=user_config):
         message_str += msg
@@ -3462,16 +3501,17 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
     time.sleep(react_wait_second)
 
     # pk2 # 1
-    round_finished = random.randint(0, 6)
+    round_finished = random.randint(5, 8)
     for msg in pkonline2(user_cookie=user_cookie, user_config=user_config, max_round=round_finished):
         message_str += msg
         yield message_str
 
     # pk # 1
-    for msg in pkonline(user_cookie=user_cookie, user_config=user_config, max_round=0):
-        message_str += msg
-        yield message_str
-    time.sleep(react_wait_second)
+    if random.randint(0, 1) == 1:
+        for msg in pkonline(user_cookie=user_cookie, user_config=user_config, max_round=3):
+            message_str += msg
+            yield message_str
+        time.sleep(react_wait_second)
 
     yield yzdd(user_cookie=user_cookie, user_config=user_config)
     if user_config.get('only_yzdd', "False") == "True":
@@ -3660,7 +3700,7 @@ def daka(user_cookie=user_cookie, user_config=user_config, total_user_cnt = 18):
         yield message_str
 
     # pk2 # 2
-    for msg in pkonline2(user_cookie=user_cookie, user_config=user_config, max_round=6-round_finished):
+    for msg in pkonline2(user_cookie=user_cookie, user_config=user_config, max_round=8-round_finished):
         message_str += msg
         yield message_str
 

@@ -23,6 +23,6 @@ def find_unique_id(avatar_url, nickname=None):
     c.execute("SELECT USER_ID FROM MEMBERS WHERE AVATAR = ?", (avatar_url,))
     result = c.fetchone()
     if result:
-        return str(result[0])
+        return str(avatar_url + ': '+ result[0])
     else:
         return 'None' if nickname is None else find_unique_id_by_name(nickname)

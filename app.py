@@ -1,7 +1,6 @@
 import sys
 import time
-import ssl
-import socket
+import sqlite3
 import logging
 
 debug = True
@@ -34,6 +33,7 @@ import certifi
 import random
 import datetime
 import traceback
+import threading
 
 from flask import Flask, Response, render_template, jsonify, request
 from flask_socketio import SocketIO, emit
@@ -44,6 +44,7 @@ from src.config import Config
 import src.thrift_utils as thrift_utils
 from src.thrift_utils import user_dict
 from src.thrift_utils import getHeaders, send_http2_request, get_http2_client
+from src.notice_parser import update_notice
 
 
 logging.basicConfig(
@@ -63,7 +64,7 @@ user_dict_obj = user_dict()
 
 
 
-def daka_sse(unique_id, request_time):
+def daka_sse(unique_id):
     global daka_cnt
     daka_cnt += 1
     index, user_dict = user_dict_obj.find(unique_id)
@@ -87,11 +88,11 @@ def daka_sse(unique_id, request_time):
 def daka(data):
     '''打卡'''
     try:
-        request_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        # request_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         unique_id = data
         if not unique_id:
             return restful(400, '调用方法异常Σ(っ °Д °;)っ')
-        for msg in daka_sse(unique_id, request_time):
+        for msg in daka_sse(unique_id):
             emit('msg', msg)
     except Exception as e:
         err_str = traceback.format_exc()
@@ -101,6 +102,45 @@ def daka(data):
         emit('error', f'$打卡失败{e}{err_str}')
         print(err_str)
         
+@app.route('/preserved_daka', methods=['GET'])
+def preserved_daka():
+    '''预约打卡，懒人选项，不设参数'''
+    user_dict_list = user_dict_obj.user_dict_list
+    user_cnt = len(user_dict_list)
+    if user_cnt == 0:
+        print('没有可预约的打卡用户')
+        return restful(400, '没有可预约的打卡用户')
+    # 预约明天早上4:40打卡，大概5点打完
+    tomorrow = datetime.datetime.now() + datetime.timedelta(days=1)
+    tomorrow_4_40 = datetime.datetime.combine(tomorrow, datetime.time(hour=4, minute=40))
+    print(f'预约打卡时间{tomorrow_4_40}')
+    wait_seconds = int((tomorrow_4_40 - datetime.datetime.now()).total_seconds())
+    def waiting_thread(wait_seconds):
+        while wait_seconds > 0:
+            time.sleep(2)
+            wait_seconds -= 2
+            print(f'等待{wait_seconds}秒')
+            
+        def daka_thread(unique_id, name):
+            message = ""
+            try:
+                for msg in daka_sse(unique_id):
+                    message = msg
+            except Exception as e:
+                err_str = traceback.format_exc()
+                message += f'$打卡失败{e}{err_str}'
+                print(err_str)
+            date_str = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            with open(f'{name}.{unique_id}_{date_str}.txt', 'w', encoding='utf-8') as f:
+                f.write(message)
+        for user_dict in user_dict_list:
+            unique_id = user_dict['config']['unique_id']
+            name = user_dict['config']['name']
+            threading.Thread(target=daka_thread, args=(unique_id,name)).start()
+
+    threading.Thread(target=waiting_thread, args=(wait_seconds,)).start()
+    return restful(200, '预约成功')
+
 
 
 @app.route('/')
@@ -154,6 +194,17 @@ def proxy():
     except Exception as e:
         return restful(400, f'{e}')
         
+
+@app.route('/update_notice', methods=['GET'])
+def update_notice():
+    try:
+        conn = sqlite3.connect('../BCZ-Notice-Examiner/bcz_notice.db')
+        update_notice(conn) # 根据现有公告数据库自动更新
+        conn.close()
+        return restful(200, '更新成功')
+    except Exception as e:
+        return restful(400, f'{e}')
+
 @app.route('/accounts', methods=['GET'])
 def accounts():
     return render_template('accounts.html')
