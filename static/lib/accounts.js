@@ -1,10 +1,25 @@
 // 页面加载后，请求账号列表
-let daka = 0, not_daka = 0;
+let daka = 0, not_daka = 0; // 总账号数=daka+not_daka，总班位数=总账号数*6
+let groups_list = []; // 加入的班级列表，{name: 'xxx', count: 有多少个账号加入该班级, include_leader: true/false}
+let notice_groups_count = 0, not_notice_groups_count = 0; // 加入的青铜班级（用于更公告）数量
+let all_groups_count = 0; // 总现在开了的班位数量
 String.prototype.replaceAll = function(s1, s2) {
   return this.replace(new RegExp(s1, "gm"), s2);
 }
 function refresh(btn){
-  btn.textContent = `已打卡${daka}，未打卡${not_daka}`;
+  btn.innerHTML = `已打卡${daka}，未打卡${not_daka}`;
+  var group_str = '';
+  groups_list.sort(function(a, b){
+    return b.count - a.count;
+  });
+  groups_list.forEach(function(item){
+    group_str += `${item.name}(${item.count})`;
+    if (item.include_leader) {
+      group_str += '含班长';
+    }
+    group_str += '<br>';
+  });
+  document.getElementById("info").innerHTML = `总班位${(daka + not_daka) * 6}，已开班位${all_groups_count}，加入青铜班级${notice_groups_count}，非青铜班级${not_notice_groups_count} <br> 加入的班级${group_str}`;
 }
 function reloadAll(){
   // 清空打卡计数
@@ -107,6 +122,18 @@ function quitGroup(group_name, group_share_key, unique_id) {
     loadOwnGroups(unique_id);
   });
 }
+function groupCounter(group_name, is_leader=false){
+  group_name = group_name.split('<br>')[0];
+  group_item = groups_list.find(item => item.name == group_name);
+  if (group_item) {
+    group_item.count += 1;
+    if (is_leader) {
+      group_item.include_leader = true;
+    }
+  } else {
+    groups_list.push({name: group_name, count: 1, include_leader: is_leader});
+  }
+}
 // 显示账号列表
 function showOwnGroups(data, unique_id) {
   if (document.querySelector(`#table${unique_id}`)) document.querySelector(`#table${unique_id}`).remove();
@@ -135,10 +162,11 @@ function showOwnGroups(data, unique_id) {
           background = 'background-color: #4CAF5088;';
           daka += 1;
         }
+        all_groups_count += group.introduction;
         table += `<tr style='${background}'>
           <td>${group.name}</td>
           <td>${group.rank}</td>
-          <td>${group.introduction}</td>
+          <td>加入上限${group.introduction}</td>
           <td id='img_frame'>${group.notice}</td>
           <td id='nickname'>${group.group_nickname}</td>
           <td><button onclick="moreGroups(${unique_id})">增加班位</button></td>
@@ -147,12 +175,19 @@ function showOwnGroups(data, unique_id) {
       }else{
         quit_button = '';
         background = '';
+        
         if (group.leader == true){
           quit_button = `<td><button id='op1' onclick="changeNotice(this.parentNode, '${group.share_key}', ${unique_id}, '${group.group_id}')">改公告</button></td>`
           background = 'background-color: #00ffff88;';
         }
         else{
           quit_button = `<td><button id='op1'onclick="quitGroup('${group.name}', '${group.share_key}', ${unique_id})">退出</button></td>`
+        }
+        if (group.rank == 1)
+          notice_groups_count += 1;
+        else {
+          not_notice_groups_count += 1;
+          groupCounter(group.name, is_leader=group.leader);
         }
         table += `
           <tr style='${background}'>
