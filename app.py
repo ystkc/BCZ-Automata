@@ -27,6 +27,7 @@ else:
     
 import requests
 import json
+import os
 import httpx
 import hashlib
 import certifi
@@ -42,9 +43,13 @@ from flask_socketio import SocketIO, emit
 from src import bcz
 from src.config import Config
 import src.thrift_utils as thrift_utils
-from src.thrift_utils import user_dict
+from src.thrift_utils import user_dict, daka_list_class
 from src.thrift_utils import getHeaders, send_http2_request, get_http2_client
-from src.notice_parser import update_notice
+from src.notice_parser import update_notice, member_storage_class
+from src.schedule import Schedule
+
+
+daka_list_obj = daka_list_class()
 
 
 logging.basicConfig(
@@ -80,7 +85,7 @@ def daka_sse(unique_id):
     # yield f' {unique_id} 开始打卡{daka_cnt}<br>...\n\n'
     # time.sleep(1)
     # yield f' {unique_id} 开始打卡{daka_cnt}<br>....\n\n'
-    for msg in thrift_utils.daka(user_cookie = user_dict['cookie'], user_config = user_dict['config'], total_user_cnt=user_cnt):
+    for msg in thrift_utils.daka(daka_list_obj, user_cookie = user_dict['cookie'], user_config = user_dict['config'], total_user_cnt=user_cnt):
         yield f'{msg}\n\n'
     daka_cnt -= 1
             
@@ -101,45 +106,27 @@ def daka(data):
         #     f.write(err_str)
         emit('error', f'$打卡失败{e}{err_str}')
         print(err_str)
-        
+
+@app.route('/get_bad_words', methods=['GET'])
+def get_bad_words():
+    '''获取坏词'''
+    return restful(daka_list_obj.get_bad_words())
+
 @app.route('/preserved_daka', methods=['GET'])
 def preserved_daka():
     '''预约打卡，懒人选项，不设参数'''
+    if not os.path.exists('./logs'):
+        os.mkdir('./logs')
     user_dict_list = user_dict_obj.user_dict_list
     user_cnt = len(user_dict_list)
     if user_cnt == 0:
         print('没有可预约的打卡用户')
         return restful(400, '没有可预约的打卡用户')
-    # 预约明天早上4:40打卡，大概5点打完
-    tomorrow = datetime.datetime.now() + datetime.timedelta(days=1)
-    tomorrow_4_40 = datetime.datetime.combine(tomorrow, datetime.time(hour=4, minute=40))
-    print(f'预约打卡时间{tomorrow_4_40}')
-    wait_seconds = int((tomorrow_4_40 - datetime.datetime.now()).total_seconds())
-    def waiting_thread(wait_seconds):
-        while wait_seconds > 0:
-            time.sleep(2)
-            wait_seconds -= 2
-            print(f'等待{wait_seconds}秒')
-            
-        def daka_thread(unique_id, name):
-            message = ""
-            try:
-                for msg in daka_sse(unique_id):
-                    message = msg
-            except Exception as e:
-                err_str = traceback.format_exc()
-                message += f'$打卡失败{e}{err_str}'
-                print(err_str)
-            date_str = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            with open(f'{name}.{unique_id}_{date_str}.txt', 'w', encoding='utf-8') as f:
-                f.write(message)
-        for user_dict in user_dict_list:
-            unique_id = user_dict['config']['unique_id']
-            name = user_dict['config']['name']
-            threading.Thread(target=daka_thread, args=(unique_id,name)).start()
-
-    threading.Thread(target=waiting_thread, args=(wait_seconds,)).start()
-    return restful(200, '预约成功')
+    # 预约明天早上4:30打卡，大概5点打完
+    Schedule("* 4-7 * * * daka_schedule", lambda: thrift_utils.daka_all_headless(daka_list_obj, only_patch=False))
+    # Schedule("* 6 * * * patch_schedule", lambda: thrift_utils.daka_all_headless(daka_list_obj, only_patch=True))
+    # 目前来说，应该是服务器app会被休眠，但是Schedule类可以一直运行，即便合上电脑也不会停止。
+    return restful(200, '预约成功.请插电并主动锁定设备')
 
 
 
@@ -195,15 +182,28 @@ def proxy():
         return restful(400, f'{e}')
         
 
+status = 0
 @app.route('/update_notice', methods=['GET'])
-def update_notice():
+def parse_notice():
+    global status
+    if status == 1:
+        return restful(200, '更新中')
+    status = 1
     try:
+        logger.info('开始更新...')
+        member_storage = member_storage_class()
+        member_storage.update_member_infos(logger)
+        status = 0
+        return restful(200, '更新成功')
         conn = sqlite3.connect('../BCZ-Notice-Examiner/bcz_notice.db')
         update_notice(conn) # 根据现有公告数据库自动更新
         conn.close()
+        
+        status = 0
         return restful(200, '更新成功')
     except Exception as e:
-        return restful(400, f'{e}')
+        status = 0
+        return restful(400, f'{e}\n{traceback.format_exc()}')
 
 @app.route('/accounts', methods=['GET'])
 def accounts():
@@ -533,7 +533,7 @@ def own_groups():
             introduction = group['introduction'].replace('\n', '<br>')
             notice = group['notice'].replace('\n', '<br>')
             groups.append({
-                'name': f"{group['name']}(加入{group['joinDays']}天)",
+                'name': f"{group['name']}<br>(加入{group['joinDays']}天)",
                 'share_key': group['shareKey'],
                 'group_id': group['id'],
                 'rank': group['rank'],
@@ -565,7 +565,7 @@ def own_groups():
             'name': f'用户年级组{data["grade"]}书本{user_dict["config"]["book_id"]}',
             'share_key': '',
             'rank': f'{today_daka}于{date}',
-            'introduction': f'加入上限{data["groupLimiteNumber"]}',
+            'introduction': data["groupLimiteNumber"],
             'notice': f'授权上限{data["groupAuthorizationLimiteNumber"]}',
             'group_nickname': ''
         })
@@ -800,6 +800,23 @@ if __name__ == '__main__':
         # app.run(debug=True, host='127.0.0.1', port=8850, request_handler=MyRequestHandler)
         socketio.run(app, debug=True, host='127.0.0.1', port=8850)
     else:
+        if '--static' not in sys.argv:
+            logger.info('若未充满电，请设置屏幕关闭和睡眠时间为3小时以上')
+            Schedule("15-59 4-7 * * 0 daka_schedule", lambda: thrift_utils.daka_all_headless(daka_list_obj,-1))
+            Schedule("35-59 5-7 * * 1-6 daka_schedule", lambda: thrift_utils.daka_all_headless(daka_list_obj,-1))
+
+            Schedule("15-59 23 * * * rank_and_notice_bronze", lambda: thrift_utils.daka_all_headless(daka_list_obj, only_rank_and_notice=1))
+            Schedule("20-59 23 * * * rank_and_notice_silver", lambda: thrift_utils.daka_all_headless(daka_list_obj, only_rank_and_notice=2))
+            Schedule("25-59 23 * * * rank_and_notice_gold", lambda: thrift_utils.daka_all_headless(daka_list_obj, only_rank_and_notice=3))
+            Schedule("30-59 23 * * * rank_and_notice_platinum", lambda: thrift_utils.daka_all_headless(daka_list_obj, only_rank_and_notice=4))
+            Schedule("35-59 23 * * * rank_and_notice_diamond", lambda: thrift_utils.daka_all_headless(daka_list_obj, only_rank_and_notice=5))
+            Schedule("40-59 23 * * * rank_and_notice_stellar", lambda: thrift_utils.daka_all_headless(daka_list_obj, only_rank_and_notice=6))
+            Schedule("45-59 23 * * * rank_and_notice_champion", lambda: thrift_utils.daka_all_headless(daka_list_obj, only_rank_and_notice=7))
+            # 以后可能加一个legend(doge)
+            Schedule("50-59 23 * * * rank_and_notice_official", lambda: thrift_utils.daka_all_headless(daka_list_obj, only_rank_and_notice=0))
+
+
+
         # waitress.serve(app, host=config.host, port=config.port, threads=6, expose_tracebacks = True)
         http_server = WSGIServer((config.host, config.port), socketio.run(app, host=config.host, port=config.port), log=logging)
         http_server.serve_forever()
