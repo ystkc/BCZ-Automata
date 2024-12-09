@@ -5,10 +5,12 @@ import sqlite3
 import logging
 import statistics
 import openpyxl
+from openpyxl.chart import BarChart, Reference, LineChart, ScatterChart, Series
 import json
 import os
+import re
 
-DEBUG = True
+DEBUG = False
 
 def encoder(text):
     # 转化成bytearray类型
@@ -42,9 +44,9 @@ bad_notice_path = '../BCZ-Notice-Examiner/bad_notice.txt'
 year = datetime.datetime.now().year
 member_info_path = '../BCZ-Notice-Examiner/assets/member/' # 要按照unique_id来处理
 member_name_path = '../BCZ-Notice-Examiner/assets/member_name/'
-member_info_top_rate_path = '../BCZ-Notice-Examiner/assets/member_info_top_rate.bin'
-member_info_top_rate_screen_path = '../BCZ-Notice-Examiner/assets/member_info_top_rate_screen.bin'
-member_info_top_name_path = "../BCZ-Notice-Examiner/assets/member_info_top_name.bin"
+member_info_top_rate_path = '../BCZ-Notice-Examiner/assets/js/member_info_top_rate.js'
+member_info_top_rate_screen_path = '../BCZ-Notice-Examiner/assets/js/member_info_top_rate_screen.js'
+member_info_top_name_path = "../BCZ-Notice-Examiner/assets/js/member_info_top_name.js"
 groups_path = '../BCZ-Notice-Examiner/assets/groups.bin'
 books_path = '../BCZ-Notice-Examiner/assets/books.bin'
 default_notice_db_path = f'../BCZ-Notice-Examiner/bcz_notice.db'
@@ -83,19 +85,22 @@ replace_dict = {
     '玖': '9',
     '〇': '0',
 }
+pattern = r'[^\w\d\u4e00-\u9fa5\U0001F601-\U0001F64F\U00002702-\U000027B0\U0001F680-\U0001F6C0\U0001F170-\U0001F251\U0001F600-\U0001F636\U0001F681-\U0001F6C5\U0001F30D-\U0001F567]'
 def slice_invalid_char(text: str):
     # 去除并存储无效字符的位置
-    invalid_chars = [',', '.', '!', '?', ':', ';', '，', '。', '！', '？', '：', '；','\n',' ','/','"',"'",'、','‘','’','“','”','(',')','（','）','-','—','_']
+    global pattern
+    # invalid_chars = [',', '.', '!', '?', ':', ';', '，', '。', '！', '？', '：', '；','\n',' ','/','"',"'",'、','‘','’','“','”','(',')','（','）','-','—','_']
     invalid_storage = {}
     position = 0
     new_text = ""
     for char in text:
-        if char in invalid_chars:
-            set_invalid_storage(invalid_storage, position, char)
-        elif char in replace_dict:
+        
+        if char in replace_dict:
             set_invalid_storage(invalid_storage, position, char)
             position += 1
             new_text += replace_dict[char]
+        elif re.match(pattern, char) is not None:
+            set_invalid_storage(invalid_storage, position, char)
         else:
             position += 1
             new_text += char
@@ -142,11 +147,26 @@ def restore_invalid_char_unaccept(text: str, invalid_storage: dict):
             new_text += text[position]
     return new_text
 
+def filter_string(text: str):
+    # \w\d\u4e00-\u9fa5 数字字母和汉字
+    global pattern
+    
+
+    filtered_string = re.sub(pattern, '', text)
+
+    # 传统方式
+    # invalid_chars = [',', '.', '!', '?', ':', ';', '，', '。', '！', '？', '：', '；','\n',' ','/','"',"'",'、','‘','’','“','”','(',')','（','）','~','*','@','～','【','】','《','》','[',']','%','％','=','\\','\t','|','<','>','#','『','』','^','…']
+    invalid_chars = ['_','丨','✔']
+
+    for char in invalid_chars:
+        filtered_string = filtered_string.replace(char, '')
+    return filtered_string
+
 def parse_text(text: str) -> list:
     '''将文本解析长度为2的所有字串列表'''
-    invalid_chars = [',', '.', '!', '?', ':', ';', '，', '。', '！', '？', '：', '；','\n',' ','/','"',"'",'、','‘','’','“','”','(',')','（','）']
-    for char in invalid_chars:
-        text = text.replace(char, '')
+
+    text = filter_string(text)
+
     for char in replace_dict:
         text = text.replace(char, replace_dict[char])
     result = []
@@ -207,47 +227,44 @@ def update_notice(conn: sqlite3.Connection):
         notice_content = notice[3]
         date = notice[4]
         latest_date = notice[5]
-        # if date < least_valid_date:
-        #     continue
+        if latest_date is None:
+            latest_date = date
         if share_key not in notice_dict:
             notice_dict[share_key] = []
-            notice_date[share_key] = [latest_date]
+            notice_date[share_key] = []
         notice_dict[share_key].append(notice_content)
         notice_date[share_key].append(latest_date)
         if notice_content.startswith('(空)') and date > most_recent_clear_date:
             most_recent_clear_date = date # 这里使用开始而不是最新日期
     # 遍历每个分类，找到公告被清空（以'(空)'开头）的那天
     print(f"most_recent_clear_date: {most_recent_clear_date}")
+    most_recent_clear_date_ymd = most_recent_clear_date.split(' ')[0]
     warn_words = []
     accept_words = []
     accept_notice_list = []
     bad_notice_list = []
     for share_key, notice_list in notice_dict.items():
-        length = len(notice_list)
-        for i in range(0, length):
-            if notice_list[i].startswith('(空)'):
-                # 前面的公告加入到warn_words中
-                for j in range(i): # 补药放一堆(空)进去啦
-                    accept_words.extend(parse_text(notice_list[j]))
-                    accept_notice_list.append(notice_list[j])
-                    
-                for j in range(i+1, length):
-                    if notice_list[j].startswith('(空)'):
-                        continue
-                    warn_words.extend(parse_text(notice_list[j]))
-                    bad_notice_list.append(notice_list[j])
-                    break # 暂时只要(空)后面的第一个公告
+        notice_date_list = notice_date[share_key]
+        index_time = ''
+        for notice, date in zip(notice_list, notice_date_list):
+            if date.startswith(most_recent_clear_date_ymd) and notice.startswith('(空)'): # 找到同一天的(空)的位置
+                index_time = date
                 break
+        if index_time != '':
+            for notice, date in zip(notice_list, notice_date_list):
+                if date.startswith(most_recent_clear_date_ymd):
+                    if date < index_time: # 同一天早些时候的公告
+                        warn_words.extend(parse_text(notice))
+                        bad_notice_list.append(notice)
+                    elif date > index_time: # 同一天晚些时候的公告
+                        accept_words.extend(parse_text(notice))
+                        accept_notice_list.append(notice)
         else:
-            # 公告都没有被清空，且是最近的公告，全部加入到accept_words中
-            for notice, date in zip(notice_list, notice_date[share_key]):
-                if date >= most_recent_clear_date:
+            # 公告都没有被清空，且是当天的公告，全部加入到accept_words中
+            for notice, date in zip(notice_list, notice_date_list):
+                if date.startswith(most_recent_clear_date_ymd):
                     accept_words.extend(parse_text(notice))
                     accept_notice_list.append(notice)
-                else:
-                    continue # 没清空，但不确定，故也不要
-                    warn_words.extend(parse_text(notice))
-                    bad_notice_list.append(notice)
     # 去重
     warn_words = set(warn_words)
     accept_words = set(accept_words)
@@ -265,7 +282,7 @@ def update_notice(conn: sqlite3.Connection):
     def flatten(str):
         return str.replace(' ','')
     with open(warn_word_path, 'wb') as f:
-        f.write(encoder(flatten(json.dumps(list(warn_words), ensure_ascii=False))))
+        f.write(encoder(flatten("\n".join(list(warn_words)))))
     with zipfile.ZipFile(f"{warn_word_path}.zip", 'w', zipfile.ZIP_DEFLATED) as f:
         f.write(warn_word_path, arcname=warn_word_path)
         
@@ -273,7 +290,7 @@ def update_notice(conn: sqlite3.Connection):
     today_date = f"数据更新日期：{datetime.datetime.now().strftime('%Y-%m-%d')}"
     accept_words.insert(0, today_date)
     with open(accept_word_path, 'wb') as f:
-        f.write(encoder(flatten(json.dumps(accept_words, ensure_ascii=False))))
+        f.write(encoder(flatten("\n".join(accept_words))))
     with zipfile.ZipFile(f"{accept_word_path}.zip", 'w', zipfile.ZIP_DEFLATED) as f:
         f.write(accept_word_path, arcname=accept_word_path)
     with open(accept_notice_path, 'w', encoding='utf-8') as f:
@@ -282,25 +299,35 @@ def update_notice(conn: sqlite3.Connection):
         f.write(bad_fuzz)
 
 class member_storage_class:
-    def __init__(self):
+    def __init__(self, logger = None):
+        if logger is None:
+            self.logger = logging.getLogger(__name__)
+        else:
+            self.logger = logger
+        self.gross_daka_time_dict = {} # 统计近30天内，所有各分钟内的打卡人次（按日期%7归类）
+        self.gross_daka_time_dict_7 = {} # 统计近7天内，所有单次打卡人次
+        self.gross_daka_date = {} # 上面对应%7数的日期
         self.db_path = default_notice_db_path
-        self.logger = logging.getLogger(__name__)
         self.hash_dict = {}
         self.hash_index = 0
 
         self.word_count_period = 25 # 25词分一档
         self.time_count_period = 1800 # 30分钟分一档
         self.reserve_digits = 1000000 # 保留uid的最后6位
+        self.rank_max_num = 100 # 排行榜最多显示前100名（允许同分）
 
         conn = sqlite3.connect(self.db_path)
         cur = conn.cursor()
         # 获取所有书本信息
         # HASH_ID, BOOK_NAME, BOOK_ID, BOOK_URL
+        self.logger.info("正在初始化 书本信息")
         cur.execute("SELECT HASH_ID, BOOK_NAME FROM BOOK_NAME")
         self.book_dict = {}
         for book in cur.fetchall():
             self.book_dict[book[0]] = book[1]
+        
         # 获取所有班级信息
+        self.logger.info("正在初始化 班级信息")
         cur.execute("SELECT DISTINCT GROUP_ID, NAME FROM notice WHERE GROUP_ID IS NOT NULL ORDER BY DATE DESC")
         self.group_dict = {}
         for group in cur.fetchall():
@@ -311,16 +338,24 @@ class member_storage_class:
             else:                
                 self.group_dict[group[0]] = group[1].split('\n')[0].replace(' ', '\t') # 班名中可能有空格
                 # 第二行是介绍，不需要
+        self.logger.info("正在统计 成员信息条数")
+        cur.execute("SELECT COUNT(*) FROM MEMBERS")
+        cnt = cur.fetchone()[0]
+        self.logger.info(f"成员信息条数：{cnt}")
         # 获取所有成员信息
         command = "SELECT USER_ID, NICKNAME, COMPLETED_TIME, TODAY_DATE, WORD_COUNT, COMPLETED_TIMES, DURATION_DAYS, BOOK_NAME, GROUP_ID, STUDY_CHEAT FROM MEMBERS ORDER BY TODAY_DATE DESC"
+        self.logger.info("正在初始化 成员信息")
         if DEBUG: # 苔泰！
-            command = "SELECT USER_ID, NICKNAME, COMPLETED_TIME, TODAY_DATE, WORD_COUNT, COMPLETED_TIMES, DURATION_DAYS, BOOK_NAME, GROUP_ID, STUDY_CHEAT FROM MEMBERS WHERE USER_ID == 1141201181 OR USER_ID == 1584809188 OR USER_ID == 766773235 ORDER BY TODAY_DATE DESC"
+            # command = "SELECT USER_ID, NICKNAME, COMPLETED_TIME, TODAY_DATE, WORD_COUNT, COMPLETED_TIMES, DURATION_DAYS, BOOK_NAME, GROUP_ID, STUDY_CHEAT FROM MEMBERS WHERE USER_ID == 1141201181 OR USER_ID == 1584809188 OR USER_ID == 766773235 OR USER_ID == 1798946708 ORDER BY TODAY_DATE DESC"
+            command = "SELECT USER_ID, NICKNAME, COMPLETED_TIME, TODAY_DATE, WORD_COUNT, COMPLETED_TIMES, DURATION_DAYS, BOOK_NAME, GROUP_ID, STUDY_CHEAT FROM MEMBERS ORDER BY RANDOM() LIMIT 3000"
         cur.execute(command)
         # 按照USER_ID分类
+        self.logger.info("正在分类 成员信息")
         self.member_name = {}
         member_name_date = {}
         self.members = {}
-        for member in cur.fetchall():
+        processed_cnt = 0
+        for member in cur:
             user_id = member[0]
             if user_id not in self.members:
                 self.members[user_id] = []
@@ -328,7 +363,10 @@ class member_storage_class:
 
             name = member[1]
             if name is not None and user_id not in self.member_name:
-                self.member_name[user_id] = member[1]
+                self.member_name[user_id] = name.replace('\n','')
+            processed_cnt += 1
+            if processed_cnt % 100000 == 0:
+                self.logger.info(f"已处理 {processed_cnt} 条成员信息")
             # 下面这个是没有排序的版本
             # today_name = member[1]
             # today_date = member[3]
@@ -339,6 +377,7 @@ class member_storage_class:
             #     member_name_date[user_id] = today_date
 
         # 读取黑名单评分
+        self.logger.info("正在读取 黑名单评分")
         with open(black_list_rating_path, 'r', encoding='utf-8') as f:
             self.rating_dict = json.load(f)
         # 读取黑名单
@@ -452,13 +491,19 @@ class member_storage_class:
         # 返回：当前昵称、加入的班级列表，学过的书本名称，词数统计、打卡时间统计
         member_infos = []
         today_start = datetime.datetime.now().replace(hour=0, minute=0, second=0)
-        seven_days_start = (today_start - datetime.timedelta(days=7)).timestamp()
+        seven_days_start_datetime = today_start - datetime.timedelta(days=7)
+        seven_days_start_timestamp = int(seven_days_start_datetime.timestamp())
+        seven_days_start_dateint = int(seven_days_start_datetime.strftime("%Y%m%d"))
+        thirty_days_start = int((today_start - datetime.timedelta(days=35)).timestamp())
+        # 为了让每个分类的天数均衡，范围必须是7的倍数。数据库slice也是必须在35天以上
+        processed_cnt = 0
         for user_id, member_list in self.members.items():
             book_name_set = set()
             word_count_dict = {}
             word_count_sum = 0
             word_count_cnt = 0
             completed_time_dict = {}
+            daka_dates = {} # 用于给self.gross_daka_time_dict去重（每人每天只计入一次）
             completed_time_list = []
             completed_time_sum = 0
             completed_time_stdev = 0
@@ -470,16 +515,52 @@ class member_storage_class:
 
             daka_timestamp = 0
             for member in member_list:
+                # 处理以前有漏卡的连胜
+                today_date = int(member[3])
+                if streak_date - today_date == 1:
+                    streak_days += 1
+                else:
+                    streak_days = 1
+                streak_date = today_date
+
+                # 统计学过的书本
                 book_name_set.add(member[7])
+
+                # 统计打卡时间
                 if member[2] != '0':
                     daka_timestamp = int(member[2])
                     # 判断是否在本周
-                    if daka_timestamp >= seven_days_start:
+                    if daka_timestamp >= seven_days_start_timestamp:
                         completed_time_cnt_this_week += 1
                     daka_time = ((daka_timestamp + 14400) % 86400) # UTC+8要+28800s # 鼓励早打卡，而不是凌晨打卡，因此多减4小时14400s，共+14400s
-                    completed_time_list.append(daka_time)
-                    completed_time_sum += daka_time
-                    completed_time_cnt += 1
+
+                    if daka_timestamp >= thirty_days_start:
+                        if today_date not in daka_dates:
+                            daka_dates[today_date] = 1
+                            category = today_date % 7
+                            daka_minute = int(daka_time / 60)
+                            if category not in self.gross_daka_time_dict:
+                                self.gross_daka_time_dict[category] = {}
+                            if today_date >= seven_days_start_dateint:
+                                if category not in self.gross_daka_date:
+                                    self.gross_daka_date[category] = today_date
+
+                                if today_date not in self.gross_daka_time_dict_7:
+                                    self.gross_daka_time_dict_7[today_date] = {}
+                                if daka_minute not in self.gross_daka_time_dict_7[today_date]:
+                                    self.gross_daka_time_dict_7[today_date][daka_minute] = 1
+                                else:
+                                    self.gross_daka_time_dict_7[today_date][daka_minute] += 1
+
+                            if daka_minute not in self.gross_daka_time_dict[category]:
+                                self.gross_daka_time_dict[category][daka_minute] = 1
+                            else:
+                                self.gross_daka_time_dict[category][daka_minute] += 1
+
+                        # 排名只记录30天内的打卡时间
+                        completed_time_sum += daka_time
+                        completed_time_cnt += 1
+                        completed_time_list.append(daka_time) # 等下要算标准差
                     completed_time_div = int(daka_time/self.time_count_period)
                     if completed_time_div not in completed_time_dict:
                         completed_time_dict[completed_time_div] = 1
@@ -490,21 +571,14 @@ class member_storage_class:
                 if member[4] > 0:
                     word_count = -self.word_count_period if member[9] == 1 else member[4]
                     word_count_div = int(word_count/self.word_count_period)
-                    if daka_timestamp >= seven_days_start: # 用于排行的只计算7天，统计的计算所有历史
+                    # 排名只记录7天内的单词数量
+                    if daka_timestamp >= seven_days_start_timestamp:
                         word_count_sum += word_count
                         word_count_cnt += 1
                     if word_count_div not in word_count_dict:
                         word_count_dict[word_count_div] = 1
                     else:
                         word_count_dict[word_count_div] += 1
-
-                # 处理以前有漏卡的连胜
-                today_date = int(member[3])
-                if streak_date - today_date == 1:
-                    streak_days += 1
-                else:
-                    streak_days = 1
-                streak_date = today_date
 
                 # 统计班级信息：最长的连卡天数（COMPLETED_TIMES==DURATION_DAYS），最长在班时间和对应的打卡天数（COMPLETED_TIME）（分别记录班级ID和名称）
                 group_id = member[8]
@@ -540,13 +614,12 @@ class member_storage_class:
                 word_average = 0
             else:
                 word_average = round(word_count_sum / word_count_cnt, 2)
-            if completed_time_cnt == 0:
-                completed_time_average = 0
+            if completed_time_cnt < 3: # 至少要打3次才计算平均值、计入排行榜
+                completed_time_average = 86399
             else:
                 completed_time_average = completed_time_sum / completed_time_cnt
             # 根据completed_time_dict计算标准差
             if completed_time_cnt > 1:
-                completed_time_list.sort()
                 completed_time_stdev = statistics.stdev(completed_time_list)
             max_expectancy = round(max_expectancy, 2)
             total_rating = 100
@@ -556,9 +629,15 @@ class member_storage_class:
                 for info in blacklist_info_with_rating:
                     total_rating += info[0]
                     blacklist_info.append(info[1:])
-            if completed_time_cnt_this_week > 0: # 为节省空间，只有本周至少打卡1次的成员才算有效
-                member_infos.append([user_id, group_infos, list(book_name_set), word_count_dict, completed_time_dict, word_average, round(completed_time_average, 2), max_streak, max_expectancy, round(completed_time_average + completed_time_stdev, 2), blacklist_info, total_rating])
+            if completed_time_cnt_this_week > 0 or len(blacklist_info) > 0: # 为节省空间，只有本周至少打卡1次的成员才算有效
+                member_infos.append([user_id, group_infos, list(book_name_set), word_count_dict, completed_time_dict, word_average, int(completed_time_average / 60) * 60, max_streak, max_expectancy, int((completed_time_average + completed_time_stdev) / 60) * 60, blacklist_info, total_rating])
+            else:
+                # 移除没有打卡的成员名称
+                del self.member_name[user_id]
             # 最大数据大小（字节）： 10  + 6 * (10 + 10) +       50        +       100     +          200        +      5      +           5           +     5     +       5        +             5      = 505
+            processed_cnt += 1
+            if processed_cnt % 100000 == 0:
+                self.logger.info(f"已处理{processed_cnt}人")
         return member_infos
     
     def clear_screen(self):
@@ -579,7 +658,7 @@ class member_storage_class:
         self.screen_set.add(final_screen_uid)
         return uid + delta, final_screen_uid
     
-    def screen(self, members, num, index_1, index_2): 
+    def screen(self, members, num, max_num, index_1, index_2): 
         '''屏蔽前num名的id'''
         rank = [0]
         rank_screen = [num]
@@ -590,7 +669,7 @@ class member_storage_class:
             rank.append(score)
             rank_screen.append(screen_uid)
             rank_screen.append(score)
-        for member in members[num:500]: # 保留前500名
+        for member in members[num:max_num]: # 保留前max_num名
             uid, screen_uid = self.add_screen(member[index_1])
             score = member[index_2]
             rank.append(uid)
@@ -599,64 +678,225 @@ class member_storage_class:
             rank_screen.append(score)
         return rank, rank_screen
         
-    def update_member_infos(self, logger=None):
+    def update_member_infos(self, logger=None, NO_EXCEL=True):
         '''计算真正有意义的排行榜。
         按照词数加权均值、加权打卡时间均值、连卡天数、连卡期望分别出前1000名'''
         if logger is None:
             logger = self.logger
-        self.logger.info("开始更新成员信息")
+        self.logger.info(f"开始更新成员信息，共{len(self.members)}人")
         member_infos = self.get_member_infos()
         # 如果排名相同，按照其他三个指标排序
         self.clear_screen() # 得到前排的去重后的uid，得到昵称
+
+        # 创建一个新的工作簿
+        if not NO_EXCEL:
+            wb = openpyxl.Workbook()
+        def get_line_chart(ws, title, xtitle, ytitle, xcol, ycol, maxrow, is_time=False):
+            chart = LineChart()
+            chart.title = title
+            chart.style = 7
+            chart.y_axis.title = ytitle
+            chart.x_axis.title = xtitle
+            data = Reference(ws, min_col=ycol, min_row=2, max_col=ycol, max_row=maxrow+1)
+            cats = Reference(ws, min_col=xcol, min_row=2, max_col=xcol, max_row=maxrow+1)
+            chart.add_data(data, titles_from_data=True)
+            chart.set_categories(cats)
+            chart.shape = 4
+            chart.height = 15
+            chart.width = 30
+            if is_time:
+                chart.x_axis.number_format = 'hh:mm:ss'
+            return chart
+        def get_bar_chart(ws, title, xtitle, ytitle, xcol, ycol, maxrow, log_base=True):
+            chart = BarChart()
+            chart.title = title
+            chart.style = 7
+            chart.y_axis.title = ytitle
+            chart.x_axis.title = xtitle
+            # y轴使用对数坐标
+            if log_base:
+                chart.y_axis.scaling.logBase = 10
+            data = Reference(ws, min_col=ycol, min_row=2, max_col=ycol, max_row=maxrow+1)
+            cats = Reference(ws, min_col=xcol, min_row=2, max_col=xcol, max_row=maxrow+1)
+            chart.add_data(data, titles_from_data=True)
+            chart.set_categories(cats)
+            chart.shape = 5
+            chart.height = 15
+            chart.width = 30
+            return chart
+        def get_scatter_chart(ws, title, xtitle, ytitle, xcol, ycol: int | list, maxrow, titles=None):
+            chart = ScatterChart()
+            chart.title = title
+            chart.style = 7
+            chart.y_axis.title = ytitle
+            chart.x_axis.title = xtitle
+            x_data = Reference(ws, min_col=xcol, min_row=2, max_col=xcol, max_row=maxrow+1)
+            if isinstance(ycol, int):
+                y_data = Reference(ws, min_col=ycol, min_row=2, max_col=ycol, max_row=maxrow+1)
+                series = Series(y_data, x_data, title=title)
+                series.graphicalProperties.line.noFill = True # 取消线条
+                chart.series.append(series)
+                series.marker.symbol = "circle" # 显示数据标记
+                series.marker.size = 5
+            else:
+                for i, y_col in enumerate(ycol):
+                    y_data = Reference(ws, min_col=y_col, min_row=2, max_col=y_col, max_row=maxrow+1)
+                    series = Series(y_data, x_data, title=titles[i])
+                    series.graphicalProperties.line.noFill = True
+                    chart.series.append(series)
+                    series.marker.symbol = "circle"
+                    series.marker.size = 5
+            chart.shape = 4
+            chart.height = 15
+            chart.width = 30
+            # 设置x轴显示为时间
+            chart.x_axis.number_format = 'hh:mm:ss'
+            return chart
+        
+        def calc_and_save_ranking(member_infos, key_func, main_key_index, screen_num, screen_max_num):
+            same_rank_count = {}
+            rank_score = {}
+            member_infos.sort(key=key_func, reverse=True)
+            ranking = 1
+            score_prev = member_infos[0][main_key_index]
+            count_same_score = 0  # 同分人数
+            for i, member in enumerate(member_infos):
+                if i > 0 and member[main_key_index] != score_prev:
+                    same_rank_count[ranking] = count_same_score
+                    rank_score[ranking] = score_prev
+                    ranking += 1
+                    score_prev = member[main_key_index]
+                    count_same_score = 0  # 重置同分人数
+                count_same_score += 1  # 增加同分人数
+                member.append(ranking)
+
+            # 处理最后一个排名
+            same_rank_count[ranking] = count_same_score
+            rank_score[ranking] = score_prev
+
+            rank, rank_screen = self.screen(member_infos, screen_num,screen_max_num, 0, main_key_index)
+
+            return rank, rank_screen, same_rank_count, rank_score
+
         # 连卡天数
         self.logger.info("开始计算streak排名")
-        member_infos.sort(key=lambda x: (x[7], x[8], x[5], -x[9]), reverse=True)
-        for i, member in enumerate(member_infos):
-            member.append(i+1)
-        streak_rank, streak_rank_screen = self.screen(member_infos, 101, 0, 7)
+        streak_rank, streak_rank_screen, same_rank_count, rank_score = calc_and_save_ranking(member_infos, lambda x: x[7], 7, 100, 100)
+        # 写入streak排名统计
+        if not NO_EXCEL:
+            ws = wb.active
+            ws.title = "streak"
+            ws.append(["排名", "连卡天数", "同分人数", datetime.datetime.now().strftime("%Y-%m-%d"), f"排名展示{len(streak_rank)}人"])
+            for rank in same_rank_count:
+                ws.append([rank, rank_score[rank], same_rank_count[rank]])
+
+            ws.add_chart(get_line_chart(ws, "streak排名", "排名", "连卡天数", 1, 2, len(same_rank_count)), "D1")
+            ws.add_chart(get_bar_chart(ws, "streak排名", "排名", "同分人数", 1, 3, len(same_rank_count)), "D31")
+        
         # 连卡期望
         self.logger.info("开始计算expectancy排名")
-        member_infos.sort(key=lambda x: (x[8], x[7], x[5], -x[9]), reverse=True)
-        for i, member in enumerate(member_infos):
-            member.append(i+1)
-        expectancy_rank, expectancy_rank_screen = self.screen(member_infos, 101, 0, 8)
+        expectancy_rank, expectancy_rank_screen, same_rank_count, rank_score = calc_and_save_ranking(member_infos, lambda x: x[8], 8, 100, 100)
+        # 写入expectancy排名统计
+        if not NO_EXCEL:
+            ws = wb.create_sheet("expectancy")
+            ws.append(["排名", "接近满卡天数", "同分人数", datetime.datetime.now().strftime("%Y-%m-%d"), f"排名展示{len(expectancy_rank)}人"])
+            for rank in same_rank_count:
+                ws.append([rank, rank_score[rank], same_rank_count[rank]])
+            ws.add_chart(get_line_chart(ws, "expectancy排名", "排名", "接近满卡天数", 1, 2, len(same_rank_count)), "D1")
+            ws.add_chart(get_bar_chart(ws, "expectancy排名", "排名", "同分人数", 1, 3, len(same_rank_count)), "D31")
+
         # 词数
         self.logger.info("开始计算word排名")
-        member_infos.sort(key=lambda x: (x[5], x[7], x[8], -x[9]), reverse=True)
-        for i, member in enumerate(member_infos):
-            member.append(i+1)
-        word_rank, word_rank_screen = self.screen(member_infos, 101, 0, 5)
+        word_rank, word_rank_screen, same_rank_count, rank_score = calc_and_save_ranking(member_infos, lambda x: x[5], 5, 100, 100)
+        # 写入word排名统计
+        if not NO_EXCEL:
+            ws = wb.create_sheet("word")
+            ws.append(["排名", "词数", "同分人数", datetime.datetime.now().strftime("%Y-%m-%d"), f"排名展示{len(word_rank)}人"])
+            for rank in same_rank_count:
+                ws.append([rank, rank_score[rank], same_rank_count[rank]])
+            ws.add_chart(get_line_chart(ws, "word排名", "排名", "词数", 1, 2, len(same_rank_count)), "D1")
+            ws.add_chart(get_bar_chart(ws, "word排名", "排名", "同分人数", 1, 3, len(same_rank_count)), "D31")
+
         # 打卡时间
         self.logger.info("开始计算time排名")
-        member_infos.sort(key=lambda x: (-x[9], x[7], x[8], x[5]), reverse=True)
-        for i, member in enumerate(member_infos):
-            member.append(i+1)
-        time_rank, time_rank_screen = self.screen(member_infos, 101, 0, 9)
+        time_rank, time_rank_screen, same_rank_count, rank_score = calc_and_save_ranking(member_infos, lambda x: -x[6], 6, 100, 100)
+        # 写入time排名统计
+
+        def get_weekday(date: int):
+            return datetime.datetime.strptime(f"{date}", '%Y%m%d').weekday()+1
+
+        # 到时候要把这个做成全服缓存排名，也就是每30天存一次excel和db的image，然后每天删掉30天前的缓存
+        if not NO_EXCEL:
+            ws = wb.create_sheet("time")
+            # 根据get_weekday(self.gross_daka_date[key])排序
+            sorted_keys = sorted(self.gross_daka_date.keys(), key=lambda x: get_weekday(self.gross_daka_date[x]))
+            title = ["排名", "打卡时间", "同分人数"]
+            title.extend([self.gross_daka_date[i] for i in sorted_keys]*2)
+            title.extend([datetime.datetime.now().strftime("%Y-%m-%d"), f"排名展示{len(time_rank)}人"])
+            ws.append(title)
+            for i, key in enumerate(sorted_keys):
+                self.gross_daka_time_dict[key][172800] = i # 排序用
+                self.gross_daka_time_dict_7[self.gross_daka_date[key]][172800] = i
+
+            gross_daka_time_list = sorted(self.gross_daka_time_dict.values(), key=lambda x: x[172800])
+            gross_daka_time_list_7 = sorted(self.gross_daka_time_dict_7.values(), key=lambda x: x[172800])
+            for rank in same_rank_count:
+                score_minute = (rank_score[rank]) / 60
+                data = [rank, (rank_score[rank] + 14400)/86400, same_rank_count[rank]]
+                for value_dict in gross_daka_time_list_7:
+                    data.append(value_dict.get(score_minute, 0))
+                for value_dict in gross_daka_time_list:
+                    data.append(value_dict.get(score_minute, 0))
+                ws.append(data)
+
+            sub_series_titles = []
+            for i, key in enumerate(sorted_keys):
+                sub_series_titles.append(f"{self.gross_daka_date[key]}星期{get_weekday(self.gross_daka_date[key])}")
+            t1_start = 4
+            t1_end = 4+len(self.gross_daka_time_dict_7)
+            t2_start = 4+len(self.gross_daka_time_dict_7)
+            t2_end = 4+len(self.gross_daka_time_dict_7)+len(self.gross_daka_time_dict)
+            ws.add_chart(get_scatter_chart(ws, "人次(7)", "打卡时间", "人数", 2, [i for i in range(t1_start, t1_end)], len(same_rank_count), titles=sub_series_titles), "D1")
+            ws.add_chart(get_scatter_chart(ws, "人次(30)", "打卡时间", "人数", 2, [i for i in range(t2_start, t2_end)], len(same_rank_count), titles=sub_series_titles), "D31")
+            ws.add_chart(get_line_chart(ws, "time排名", "打卡时间", "排名", 2, 1, len(same_rank_count), is_time=True), "D61")
+
+
+        
         # 被拉黑次数（黑名单评分）
         self.logger.info("开始计算blacklist排名")
-        member_infos.sort(key=lambda x: (-x[11], -x[7], -x[8]), reverse=True)
-        for i, member in enumerate(member_infos):
-            member.append(i+1)
-        blacklist_rank, blacklist_rank_screen = self.screen(member_infos, 0, 0, 11)
+        blacklist_rank, blacklist_rank_screen, same_rank_count, rank_score = calc_and_save_ranking(member_infos, lambda x: -x[11], 11, 0, 100)
+        # 写入blacklist排名统计
+        if not NO_EXCEL:
+            ws = wb.create_sheet("blacklist")
+            ws.append(["排名", "信誉评分", "同分人数", datetime.datetime.now().strftime("%Y-%m-%d"), f"排名展示{len(blacklist_rank)}人"])
+            for rank in same_rank_count:
+                ws.append([rank, rank_score[rank], same_rank_count[rank]])
+            ws.add_chart(get_line_chart(ws, "blacklist排名", "排名", "信誉评分", 1, 2, len(same_rank_count)), "D1")
+            ws.add_chart(get_bar_chart(ws, "blacklist排名", "排名", "人数", 1, 3, len(same_rank_count)), "D31")
+
+            # 保存到Excel文件
+            logger.info("开始保存Excel文件")
+            date_str = datetime.datetime.now().strftime("%Y.%m.%d")
+            wb.save(f"排名统计{date_str}.xlsx")
+
 
 
         self.logger.info("开始写入排名数据")
-        with open(member_info_top_rate_path, 'wb') as f:
-            f.write(encoder(self.flatten(json.dumps([streak_rank, expectancy_rank, word_rank, time_rank, blacklist_rank], ensure_ascii=False))))
-        with zipfile.ZipFile(f"{member_info_top_rate_path}.zip", 'w', zipfile.ZIP_DEFLATED) as f:
-            f.write(member_info_top_rate_path, arcname=member_info_top_rate_path)
+        with open(member_info_top_rate_path, 'w', encoding='utf-8') as f:
+            f.write("rank="+self.flatten(json.dumps([streak_rank, expectancy_rank, word_rank, time_rank, blacklist_rank], ensure_ascii=False))+";")
+        # with zipfile.ZipFile(f"{member_info_top_rate_path}.zip", 'w', zipfile.ZIP_DEFLATED) as f:
+        #     f.write(member_info_top_rate_path, arcname=member_info_top_rate_path)
 
-        with open(member_info_top_rate_screen_path, 'wb') as f:
-            f.write(encoder(self.flatten(json.dumps([streak_rank_screen, expectancy_rank_screen, word_rank_screen, time_rank_screen, blacklist_rank_screen], ensure_ascii=False))))
-        with zipfile.ZipFile(f"{member_info_top_rate_screen_path}.zip", 'w', zipfile.ZIP_DEFLATED) as f:
-            f.write(member_info_top_rate_screen_path, arcname=member_info_top_rate_screen_path)
+        with open(member_info_top_rate_screen_path, 'w', encoding='utf-8') as f:
+            f.write("var rank="+self.flatten(json.dumps([streak_rank_screen, expectancy_rank_screen, word_rank_screen, time_rank_screen, blacklist_rank_screen], ensure_ascii=False))+";")
+        # with zipfile.ZipFile(f"{member_info_top_rate_screen_path}.zip", 'w', zipfile.ZIP_DEFLATED) as f:
+        #     f.write(member_info_top_rate_screen_path, arcname=member_info_top_rate_screen_path)
 
         self.logger.info("开始写入排名name信息")
         # 用self.screen_set查表得到昵称
-        with open(member_info_top_name_path, 'wb') as f:
-            f.write(encoder(self.flatten('\n'.join([f"{screen_uid}\n{self.member_name.get(uid, '未知昵称')}" for uid, screen_uid in self.id_dict.items()]))))
-        with zipfile.ZipFile(f"{member_info_top_name_path}.zip", 'w', zipfile.ZIP_DEFLATED) as f:
-            f.write(member_info_top_name_path, arcname=member_info_top_name_path)
+        with open(member_info_top_name_path, 'w', encoding='utf-8') as f:
+            f.write("var rankNames=`"+self.flatten('\n'.join([f"{screen_uid}\n{self.member_name.get(uid, '未知昵称')}" for uid, screen_uid in self.id_dict.items()]))+"`;")
+        # with zipfile.ZipFile(f"{member_info_top_name_path}.zip", 'w', zipfile.ZIP_DEFLATED) as f:
+        #     f.write(member_info_top_name_path, arcname=member_info_top_name_path)
         
         # 然后写入班级和书本信息
         self.logger.info("开始写入班级和书本信息")
@@ -709,27 +949,36 @@ class member_storage_class:
             classified_member_infos[sect].append(member)
 
         logger.info(f"开始写入member数据，共{len(classified_member_infos)}个文件")
+        processed_cnt = 0
         for sect, member_list in classified_member_infos.items():
             flatten_str = self.flatten(json.dumps(member_list, ensure_ascii=False))
             with open(f"{member_info_path}{sect}.bin", 'wb') as f:
                 f.write(encoder(flatten_str))
             with zipfile.ZipFile(f"{member_info_path}{sect}.bin.zip", 'w', zipfile.ZIP_DEFLATED) as f:
                 f.write(f"{member_info_path}{sect}.bin", arcname=f"{member_info_path}{sect}.bin")
+            processed_cnt += 1
+            if processed_cnt % 100 == 0:
+                logger.info(f"完成第{processed_cnt}个文件")
 
         self.logger.info("开始压缩member_name数据")
         classified_member_names = {}
+        processed_cnt = 0
         for user_id, nickname in self.member_name.items():
             sect = str(user_id)[:sect_num]
             if sect not in classified_member_names:
                 classified_member_names[sect] = []
             classified_member_names[sect].append([user_id, nickname])
         self.logger.info(f"开始写入member_name数据，共{len(classified_member_names)}个文件")
+        processed_cnt = 0
         for sect, member_list in classified_member_names.items():
             flatten_str = "\n".join([f"{user_id}\n{nickname}" for user_id, nickname in member_list])
             with open(f"{member_name_path}{sect}.bin", 'wb') as f:
                 f.write(encoder(flatten_str)) # nickname中有空格，不flatten
             with zipfile.ZipFile(f"{member_name_path}{sect}.bin.zip", 'w', zipfile.ZIP_DEFLATED) as f:
                 f.write(f"{member_name_path}{sect}.bin", arcname=f"{member_name_path}{sect}.bin")
+            processed_cnt += 1
+            if processed_cnt % 100 == 0:
+                logger.info(f"完成第{processed_cnt}个文件")
 
         self.logger.info("更新成员信息完成")
 

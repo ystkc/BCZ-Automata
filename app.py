@@ -182,27 +182,45 @@ def proxy():
         return restful(400, f'{e}')
         
 
+
+def parse_notice_offline():
+    try:
+        logger.info('开始更新...')
+        member_storage = member_storage_class(logger)
+        member_storage.update_member_infos(logger, NO_EXCEL=False)
+
+        logger.info('开始更新违禁词库...')
+        conn = sqlite3.connect('../BCZ-Notice-Examiner/bcz_notice.db')
+        update_notice(conn) # 根据现有公告数据库自动更新
+        conn.close()
+    except Exception as e:
+        traceback.print_exc()
+
 status = 0
 @app.route('/update_notice', methods=['GET'])
 def parse_notice():
     global status
-    if status == 1:
-        return restful(200, '更新中')
-    status = 1
+    if time.time() - status < 10:
+        return restful(200, '已更新过')
     try:
         logger.info('开始更新...')
-        member_storage = member_storage_class()
-        member_storage.update_member_infos(logger)
-        status = 0
-        return restful(200, '更新成功')
+        arg = request.args.get('no_excel', '1')
+        no_excel = True
+        if arg == '0':
+            logger.info('导出Excel')
+            no_excel = False
+        member_storage = member_storage_class(logger)
+        member_storage.update_member_infos(logger, NO_EXCEL=no_excel)
+
+        logger.info('开始更新违禁词库...')
         conn = sqlite3.connect('../BCZ-Notice-Examiner/bcz_notice.db')
         update_notice(conn) # 根据现有公告数据库自动更新
         conn.close()
         
-        status = 0
+        status = time.time()
         return restful(200, '更新成功')
     except Exception as e:
-        status = 0
+        status = time.time()
         return restful(400, f'{e}\n{traceback.format_exc()}')
 
 @app.route('/accounts', methods=['GET'])
@@ -776,6 +794,14 @@ def user_login():
         return restful(200, '登陆成功', data)
     except Exception as e:
         return restful(400, f'{e}')
+    
+def shutdown():
+    try:
+        logger.info('BCZ-Automata 关闭中...')
+    except:
+        pass
+    os.system('shutdown -s -t 120')
+
 
 def restful(code: int, msg: str = '', data: dict = {}) -> Response:
     '''以RESTful的方式进行返回响应'''
@@ -787,6 +813,16 @@ def restful(code: int, msg: str = '', data: dict = {}) -> Response:
             'msg': msg,
             'data': data
     }), code
+
+def prevent_sleep():
+    '''防止系统进入休眠'''
+    path = "start ../shadlc-BCZ-Group-Manager/timeout.exe"
+    os.system(path)
+
+def allow_sleep():
+    '''允许系统进入休眠'''
+    path = "start ../shadlc-BCZ-Group-Manager/timeout_reversed.exe"
+    os.system(path)
     
 if __name__ == '__main__':
     
@@ -802,8 +838,12 @@ if __name__ == '__main__':
     else:
         if '--static' not in sys.argv:
             logger.info('若未充满电，请设置屏幕关闭和睡眠时间为3小时以上')
-            Schedule("15-59 4-7 * * 0 daka_schedule", lambda: thrift_utils.daka_all_headless(daka_list_obj,-1))
-            Schedule("35-59 5-7 * * 1-6 daka_schedule", lambda: thrift_utils.daka_all_headless(daka_list_obj,-1))
+            Schedule("* 0-1 * * 0 update_notice", lambda: parse_notice_offline())
+            Schedule("20-59 4-8 * * 0 daka_schedule", lambda: thrift_utils.daka_all_headless(daka_list_obj,-1))
+            Schedule("* 5-8 * * 1-6 daka_schedule", lambda: thrift_utils.daka_all_headless(daka_list_obj,-1))
+            Schedule("* 21-23 * * 0-6 prevent_sleep", lambda: prevent_sleep())
+            Schedule("* 0-1 * * 1-6 shutdown", lambda: shutdown())
+            Schedule("* 0-1 * * 1-6 allow_sleep", lambda: allow_sleep())
 
             Schedule("15-59 23 * * * rank_and_notice_bronze", lambda: thrift_utils.daka_all_headless(daka_list_obj, only_rank_and_notice=1))
             Schedule("20-59 23 * * * rank_and_notice_silver", lambda: thrift_utils.daka_all_headless(daka_list_obj, only_rank_and_notice=2))
