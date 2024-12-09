@@ -53,7 +53,7 @@ def request(flow: http.HTTPFlow) -> None:
     global proxy_device_id
     global proxy_id
     
-    if 'baicizhan.com/change_token' in flow.request.url:
+    if 'baicizhan.com/change_token' in flow.request.url or 'change_token' in flow.request.url:
         proxy_token = flow.request.url.split('/')[4] # www.baicizhan.com/change_token/xxx
         proxy_id = int(flow.request.url.split('/')[5])
         # 使用md5
@@ -166,29 +166,6 @@ def response(flow: http.HTTPFlow) -> None:
         flow.response.content = json.dumps(content).encode(encoding='utf-8')
         # print(" modified content:", flow.response.content)
         return
-    if 'apply' in flow.request.url:
-        # 加载请求中的json
-        # content = json.loads(flow.response.content.decode(encoding='utf-8'))
-        # data = content['data']
-        # data['type'] = temp_period
-        # temp_period += 1
-        # content['data'] = data
-        # # 重新编码json
-        # flow.response.content = json.dumps(content).encode(encoding='utf-8')
-        # print(" modified content:", flow.request.content)
-        return
-    if 'team-up-recite/home' in flow.request.url:
-        # 加载请求中的json
-        ...
-        # content = json.loads(flow.response.content.decode(encoding='utf-8'))
-        # data = content['data']
-        # data['count'] = 0
-        # data['phase'] = 0
-        # data['expireAt'] = 10388961
-        # content['data'] = data
-        # # 重新编码json
-        # flow.response.content = json.dumps(content).encode(encoding='utf-8')
-        return
 
 addons = [  
     (request, 'test_addon'),
@@ -221,6 +198,7 @@ def test_port(port):
     
 def main():# 注意：if __name__ == "__main__": 内不能用global关键字
     global enable_fiddler_proxy
+    os.system("ipconfig")
     try:
         print('使用方式:运行magic_proxy.py,然后运行app.py点击魔法账号,然后启动客户端/模拟器,如果魔法未生效则手动设置代理本机ip:8080')
         print('若使用fiddler，请【先启动fiddler】，【再启动本程序】，如果没反应请关闭再打开fiddler的捕获开关')

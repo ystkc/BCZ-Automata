@@ -1173,8 +1173,6 @@ class user_study:
         result = client.recv_submit_win_streak_records()
         transport.close()
 
-        print(client_date)
-        print(datetime.datetime.now().strftime('%Y%m%d'))
         result = f"{result}.{client_date}.{datetime.datetime.now().strftime('%Y%m%d')}"
 
         return result
@@ -2268,6 +2266,7 @@ class daka_list_class:
         self.patch_list = []
         self.status = [] # 标记每个patch_list中的检查状态：0未检查，1已从后检查，2已双向检查
         self.class_list = {}
+        self.time_start = time.time()
 
         # 初始化notice_and_rank_conn
         year = datetime.datetime.now().year
@@ -2340,6 +2339,9 @@ class daka_list_class:
 
     def add(self, unique_id):
         with self.lock:
+            if len(self.daka_list) == 0:
+                print('daka_list time start!')
+                self.time_start = time.time()
             self.daka_list.append(unique_id)
 
     def remove(self,unique_id):
@@ -2347,7 +2349,9 @@ class daka_list_class:
             if unique_id in self.daka_list:
                 self.daka_list.remove(unique_id)
             if self.is_empty():
+                print('daka_list is empty!')
                 self.close()
+                print(f'总耗时{time.time() - self.time_start}秒')
 
     def query(self, unique_id):
         return unique_id in self.daka_list
@@ -2427,9 +2431,28 @@ def print_puzzle(puzzle_dict):
 
 def pkonline(user_cookie=user_cookie, user_config=user_config, max_round=3):
     '''pkonline'''# max_round用来随机轮数，用来调用2次分散打卡时间
-    if user_config.get('no_pk', False) == True:
-        yield f'{user_config["name"]}不参加pk'
-        return
+    return # 已于12.5结束
+    # 领奖
+    # https://pkonline1.baicizhan.com/api/contest/2024/prepare/giftMain?code=mB5AG9fCzo
+    headers = getHeaders("$pkonline1", user_cookie, int(time.time()), index=1)
+    url = f'https://{headers["Host"]}/api/contest/2024/prepare/giftMain?code=mB5AG9fCzo'
+    response = send_http2_request('GET', url, headers, None)
+    data = response.json()['data']
+    cnt = data['blindBox']
+    while cnt > 0:
+        # https://pkonline1.baicizhan.com/api/contest/2024/prepare/useBlindBox
+        headers = getHeaders("$pkonline1", user_cookie, int(time.time()), index=1)
+        url = f'https://{headers["Host"]}/api/contest/2024/prepare/useBlindBox'
+        response = send_http2_request('POST', url, headers, content='{}')
+        data = response.json()['data']
+        yield f'领取{data["name"]}成功:{data["url"]}，剩余{cnt-1}个'
+
+        url = f'https://{headers["Host"]}/api/contest/2024/prepare/giftMain?code=mB5AG9fCzo'
+        response = send_http2_request('GET', url, headers, None)
+        data = response.json()['data']
+        cnt = data['blindBox']
+        time.sleep(random.randint(1, 2))
+
     puzzle_init('BCZ_NCSVC')
     # https://pk.baicizhan.com/contest2024/sign/?code=mB5AG9fCzo
     # https://pk.baicizhan.com/contest2024/preparation/index.html?code=mB5AG9fCzo
@@ -2914,6 +2937,7 @@ def pkonline2(user_cookie=user_cookie, user_config=user_config, max_round=3, max
                         break
             except:
                 yield traceback.format_exc()
+                break # 有可能是睡眠导致比赛异常，退出即可
         # 最后一题作答完毕
         score_str = f'{my_score}' if order > 1 else ''
         payload = [
@@ -2957,6 +2981,8 @@ def pkonline2(user_cookie=user_cookie, user_config=user_config, max_round=3, max
 
 def yzdd(user_cookie=user_cookie, user_config=user_config):
     '''一站到底'''
+    # 2024.12.2已经结束
+    return
     # 如果是星期日，跳过
     if datetime.datetime.now().weekday() == 6:
         return "$星期日，跳过"
@@ -3748,6 +3774,7 @@ def save_member_info(group_name, group_id, members, cursor: sqlite3.Cursor):
     today_date = datetime.datetime.now().strftime('%Y%m%d')
     data_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     for member in members:
+        # member["uniqueId"]=int
         # 选取同一天、同一用户的最早打卡时间
         recorded_time = cursor.execute(
             f'SELECT COMPLETED_TIME FROM {table_name} WHERE USER_ID = ? AND TODAY_DATE = ? ORDER BY COMPLETED_TIME',
@@ -3760,16 +3787,17 @@ def save_member_info(group_name, group_id, members, cursor: sqlite3.Cursor):
             # 可能加入新的小班后，会产生更晚的时间，以早的为准
 
         # 选取同一用户的最早头像
-        avatar = cursor.execute(
-            f'SELECT AVATAR FROM {table_name} WHERE USER_ID = ? AND (TODAY_DATE < ? OR GROUP_ID IS NOT ?) ORDER BY COMPLETED_TIME',
-            (member['uniqueId'], today_date, group_id)
-        ).fetchone()
-        if avatar and avatar[0]==member['avatar']:
-            member['avatar'] = None
+        # avatar = cursor.execute(
+        #     f'SELECT AVATAR FROM {table_name} WHERE USER_ID = ? AND (TODAY_DATE < ? OR GROUP_ID IS NOT ?) AND AVATAR IS NOT NULL',
+        #     (member['uniqueId'], today_date, group_id)
+        # ).fetchone()
+        # if avatar and avatar[0]==member['avatar']:
+        #     member['avatar'] = None
+        member['avatar'] = None # 暂时不需要头像
 
         # 选取同一用户的最早昵称
         nickname = cursor.execute(
-            f'SELECT NICKNAME FROM {table_name} WHERE USER_ID = ? AND (TODAY_DATE < ? OR GROUP_ID IS NOT ?) ORDER BY COMPLETED_TIME',
+            f'SELECT NICKNAME FROM {table_name} WHERE USER_ID = ? AND (TODAY_DATE < ? OR GROUP_ID IS NOT ?) AND NICKNAME IS NOT NULL',
             (member['uniqueId'], today_date, group_id)
         ).fetchone()
         if nickname and nickname[0]==member['nickname']:
@@ -3979,10 +4007,12 @@ def daka(daka_list: daka_list_class, user_cookie=user_cookie, user_config=user_c
     threading.Thread(target=heartbeat_demon, args=(daka_list, user_cookie, user_config)).start()
 
     # 临时函数放这里
+
     # only_rank_and_notice = 0
-    # for msg in pkonline2(user_cookie=user_cookie, user_config=user_config, max_round=256, max_win_round=128):
+    # for msg in pkonline(user_cookie=user_cookie, user_config=user_config):
     #     message_str += msg
-    #     yield message_str
+        # yield message_str
+
     # daka_list.remove(unique_id)
     # return 
     # 临时函数放这里
@@ -4224,6 +4254,8 @@ def daka_headless(daka_list: daka_list_class, unique_id, name, user_cnt, only_ra
     if only_rank_and_notice != -1:
         random_delay = 0
     delay = random.randint(1, max(user_cnt*5, random_delay))
+    if name == "奶芋" or name == "星烛":
+        delay = random_delay / 2
     message = ""
     index, user_dict = user_dict_obj.find(unique_id)
     user_dict['config']['user_index'] = index

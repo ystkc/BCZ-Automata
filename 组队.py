@@ -3,6 +3,7 @@ import json
 import time
 import sys
 import requests
+import random
 from src.thrift_utils import getHeaders, send_http2_request
 
 cookie = []
@@ -16,9 +17,11 @@ print('警告！请提前关闭magic_proxy')
 
 
 current_code = []
+current_token = {}
 
 def team_up_recite(publish_team=False):
     global current_code
+    global current_token
     activity_id = str(input('请输入活动ID：(team-up-recite/home的请求JSON里面有，一般是1xx)'))
     for user in cookie:
         config = user['config']
@@ -49,21 +52,24 @@ def team_up_recite(publish_team=False):
         if count == 0:
             create_new = True
             valid_current_code = []
+            valid_current_token = {}
             for code in current_code:
-                valid_current_code.push(code)
                 print(f'未组队，尝试加入邀请码{code}')
                 # https://activity.baicizhan.com/api/activity/team-up-recite/apply
                 url = 'https://activity.baicizhan.com/api/activity/team-up-recite/apply'
                 content = {
                     'activityId': activity_id,
                     'code': code,
-                    'status': 0
+                    'status': 1
                 }
                 time_long = int(time.time() * 1000)
                 headers = getHeaders('$activity', user_cookie, time_long, index = 1)
                 headers['Content-Type'] = 'application/json; charset=UTF-8'
                 response = requests.post(url, headers=headers, data=json.dumps(content))
                 print(response.json()['data']['type']) #  0成功 1过期 2无效 3已在队伍中  5已满
+                if code not in valid_current_code:
+                    valid_current_code.append(code)
+                    valid_current_code[code] = access_token
                 if response.json()['data']['type'] == 0:
                     print('邀请码加入成功')
                     create_new = False
@@ -74,9 +80,11 @@ def team_up_recite(publish_team=False):
                     break
                 if response.json()['data']['type'] == 5 or response.json()['data']['type'] == 2 or response.json()['data']['type'] == 1:
                     print('队伍已满/无效/过期')
-                    valid_current_code.pop()
+                    valid_current_code.remove(code)
+                    del valid_current_token[code]
                 time.sleep(1)
             current_code = valid_current_code
+            current_token = valid_current_token
             if create_new:
                 print('未组队，尝试创建队伍')
                 # https://activity.baicizhan.com/api/activity/team-up-recite/get_random_name
@@ -109,8 +117,10 @@ def team_up_recite(publish_team=False):
                 response = send_http2_request('POST', url, headers, content_str)
                 print(response.json()['data']['type']) # 0成功 1失败 2失败 3已在队伍中 4队名非法
                 if response.json()['data']['type'] == 0:
-                    current_code = response.json()['data']['code']
-                    print(f'新队伍 邀请码：{current_code}')
+                    new_code = response.json()['data']['code']
+                    print(f'新队伍 邀请码：{new_code}')
+                    current_code.append(new_code)
+                    current_token[new_code] = access_token
                 elif response.json()['data']['type'] == 3:
                     print('已在队伍中')
                 else:
@@ -131,35 +141,96 @@ def team_up_recite(publish_team=False):
             time.sleep(1)
         elif count < nums:
             print('未满，记录邀请码')
-            current_code.append(code)
+            if code not in current_code:
+                current_code.append(code)
+                current_token[code] = access_token
         else:
             print('队伍已满，组队成功')
-
         
         print(f'公开状态：{is_published} 邀请码：{code}')
-        if is_published == False and publish_team:
-            # 公开
-            # https://activity.baicizhan.com/api/activity/team-up-recite/publish_team
+def publish_team():
+    user_cookie_template = cookie[0]['cookie'].copy()
+    global current_code
+    global current_token
+    activity_id = str(input('请输入活动ID：(team-up-recite/home的请求JSON里面有，一般是1xx)'))
+    for code in current_code:
+        token = current_token[code]
+        user_cookie_template['access_token'] = token
+        # 公开
+        # https://activity.baicizhan.com/api/activity/team-up-recite/publish_team
 
-            url = 'https://activity.baicizhan.com/api/activity/team-up-recite/publish_team'
-            content = {
-                'activityId': activity_id
-            }
+        url = 'https://activity.baicizhan.com/api/activity/team-up-recite/publish_team'
+        content = {
+            'activityId': activity_id
+        }
 
-            time_long = int(time.time() * 1000)
-            headers = getHeaders('$activity', user_cookie, time_long, index = 1)
-            headers['Content-Type'] = 'application/json; charset=UTF-8'
-            response = requests.post(url, headers=headers, data=json.dumps(content))
-            print(f'公开{response.json()["message"]}')
-            
+        time_long = int(time.time() * 1000)
+        headers = getHeaders('$activity', user_cookie_template, time_long, index = 1)
+        headers['Content-Type'] = 'application/json; charset=UTF-8'
+        response = requests.post(url, headers=headers, data=json.dumps(content))
+        print(f'公开{response.json()["message"]}')
+        time.sleep(1)
         
-        print(f'{name}.{unique_id}组队完成')
-        time.sleep(2)
+    
+
+def flag_bet():
+    activity_id = str(input('请输入活动ID：(bet的请求JSON里面有，例如12)'))
+    for user in cookie:
+        config = user['config']
+        user_cookie = user['cookie']
+        name = config['name']
+        unique_id = config['unique_id']
+        access_token = user_cookie['access_token']
+        print(f'正在为{name}.{unique_id}立flag...')
+        # https://activity.baicizhan.com/api/activity/bet/info?id=12
+        url = f'https://activity.baicizhan.com/api/activity/bet/info?id={activity_id}'
+        time_long = int(time.time() * 1000)
+        headers = getHeaders('$activity', user_cookie, time_long, index = 1)
+        response = requests.get(url, headers=headers)
+        data = response.json()['data']
+        home = data['home']
+        status = home['status']
+        can_apply = home['canApply']
+        if can_apply == False:
+            print('立flag活动已结束')
+            return
+        if status == 1:
+            print('已立flag，跳过')
+            time.sleep(1)
+            continue
+        # https://activity.baicizhan.com/api/activity/bet/apply?type=2&id=12
+        url = f'https://activity.baicizhan.com/api/activity/bet/apply?type=2&id={activity_id}'
+        content = {
+        }
+        time_long = int(time.time() * 1000)
+        headers = getHeaders('$activity', user_cookie, time_long, index = 1)
+        headers['Content-Type'] = 'application/json; charset=UTF-8'
+        response = requests.post(url, headers=headers, data=json.dumps(content))
+        print(response.json())
+        print(f'{name}.{unique_id}立flag完成')
+        # 重新获取队伍信息
+        url = f'https://activity.baicizhan.com/api/activity/bet/info?id={activity_id}'
+        time_long = int(time.time() * 1000)
+        headers = getHeaders('$activity', user_cookie, time_long, index = 1)
+        response = requests.get(url, headers=headers)
+        data = response.json()['data']
+        home = data['home']
+        status = home['status']
+        accumulative_task = home['accumulativeTask']
+        credit_cnt_list = [(task['day'], task['creditCnt']) for task in accumulative_task]
+        credit_cnt_list.extend([(task['day'], task['creditCnt']) for task in home['dailyTask']])
+        print(f"status:{status} list:{credit_cnt_list}")
+        time.sleep(random.randint(2, 4))
+
+
 
 if __name__ == '__main__':
-    team_up_recite()
-    if input(f'剩余{len(current_code)}个队伍可能未满，是否要公开剩余有效队伍？(y/n)') == 'y':
-        team_up_recite(publish_team=True)
+    if input("组队 or 立flag？(1/2)") == '1':
+        team_up_recite()
+        if input(f'剩余{len(current_code)}个队伍可能未满，是否要公开剩余有效队伍？(y/n)') == 'y':
+            publish_team()
+    else:
+        flag_bet()
     
 
         
