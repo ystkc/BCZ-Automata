@@ -4,7 +4,7 @@ import time
 import sys
 import requests
 import random
-from src.thrift_utils import getHeaders, send_http2_request
+from src.daka_utils import getHeaders, send_http2_request
 
 cookie = []
 with open('user_cookie.json', 'r', encoding='utf-8') as f:

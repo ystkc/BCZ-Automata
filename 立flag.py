@@ -3,7 +3,7 @@
 import json
 import time
 import requests
-from src.thrift_utils import getHeaders, send_http2_request
+from src.thrift_utils import getHeaders
 
 with open('user_cookie.json', 'r', encoding='utf-8') as f:
     cookie = json.load(f)
