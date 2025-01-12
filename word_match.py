@@ -1,10 +1,11 @@
-# 每周双人战.py
+# word_match.py
+'''【独立工具 - 已废弃】为所有用户完成每周双人战（已经整合到主程序中，无需手动调用）'''
 import json
 import time
-import requests
 import random
 import threading
-from src.thrift_utils import getHeaders, send_http2_request
+from src.thrift_utils import getHeaders, http2_client
+http2_client_obj = http2_client()
 
 with open('user_cookie.json', 'r', encoding='utf-8') as f:
     cookie = json.load(f)
@@ -28,7 +29,7 @@ def run(user, random_delay_thresh = 20):
     time_long = int(time.time() * 1000)
     headers = getHeaders('$social', cookie, time_long, index = 1)
     headers['Content-Type'] = 'application/json'
-    response = send_http2_request('POST',f'https://{headers["Host"]}/api/deskmate/game/start_word_match_game', headers, '{}')
+    response = http2_client_obj.send_http2_request('POST',f'https://{headers["Host"]}/api/deskmate/game/start_word_match_game', headers, '{}')
     print(f'{name} 开始每周双人战{response.json()}')
     if response.json()['code'] == 100:
         return
@@ -40,7 +41,7 @@ def run(user, random_delay_thresh = 20):
         time_long = int(time.time() * 1000)
         headers = getHeaders('$social', cookie, time_long, index = 1)
         headers['Content-Type'] = 'application/json'
-        response = send_http2_request('GET',f'https://{headers["Host"]}/api/deskmate/game/get_word_match_info', headers, None)
+        response = http2_client_obj.send_http2_request('GET',f'https://{headers["Host"]}/api/deskmate/game/get_word_match_info', headers, None)
         data = response.json()['data']
         if data.get('needCompletedTopicList', None) is not None:
             break
@@ -53,7 +54,7 @@ def run(user, random_delay_thresh = 20):
         headers = getHeaders('$social', cookie, time_long, index = 1)
         headers['Content-Type'] = 'application/json'
         time.sleep(4)
-        response = send_http2_request('POST',f'https://{headers["Host"]}/api/deskmate/game/finish_new_user_guide', headers, '{}')
+        response = http2_client_obj.send_http2_request('POST',f'https://{headers["Host"]}/api/deskmate/game/finish_new_user_guide', headers, '{}')
 
     finish_all = False
     if time.localtime().tm_wday in [5,6]:
@@ -95,14 +96,14 @@ def run(user, random_delay_thresh = 20):
             time_long = int(time.time() * 1000)
             headers = getHeaders('$social', cookie, time_long, index = 1)
             headers['Content-Type'] = 'application/json'
-            response = send_http2_request('POST',f'https://{headers["Host"]}/api/deskmate/game/word_match', headers, json.dumps({"topicId":topic_id,"topicOption":topic_option}, ensure_ascii=False))
+            response = http2_client_obj.send_http2_request('POST',f'https://{headers["Host"]}/api/deskmate/game/word_match', headers, json.dumps({"topicId":topic_id,"topicOption":topic_option}, ensure_ascii=False))
             response_json = response.json()['data']
             # 刷新
             while True:
                 # https://social.baicizhan.com/api/deskmate/game/get_word_match_info
                 time_long = int(time.time() * 1000)
                 headers = getHeaders('$social', cookie, time_long, index = 1)
-                response = send_http2_request('GET',f'https://{headers["Host"]}/api/deskmate/game/get_word_match_info', headers, None)
+                response = http2_client_obj.send_http2_request('GET',f'https://{headers["Host"]}/api/deskmate/game/get_word_match_info', headers, None)
                 data = response.json()['data']
                 if data['needCompletedTopicList'] is not None:
                     break
@@ -123,13 +124,13 @@ def run(user, random_delay_thresh = 20):
             time_long = int(time.time() * 1000)
             headers = getHeaders('$social', cookie, time_long, index = 1)
             headers['Content-Type'] = 'application/json'
-            response = send_http2_request('POST',f'https://{headers["Host"]}/api/deskmate/game/send_word_match_reward', headers, '{}')
+            response = http2_client_obj.send_http2_request('POST',f'https://{headers["Host"]}/api/deskmate/game/send_word_match_reward', headers, '{}')
 
             # 检验是否领取成功
             # https://social.baicizhan.com/api/deskmate/game/get_word_match_info
             time_long = int(time.time() * 1000)
             headers = getHeaders('$social', cookie, time_long, index = 1)
-            response = send_http2_request('GET',f'https://{headers["Host"]}/api/deskmate/game/get_word_match_info', headers, None)
+            response = http2_client_obj.send_http2_request('GET',f'https://{headers["Host"]}/api/deskmate/game/get_word_match_info', headers, None)
             data = response.json()['data']
             if data['wordMatchReward']['status'] == 1:
                 print('00 每周双人战奖励领取成功')

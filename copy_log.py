@@ -1,6 +1,6 @@
-# 读取当前文件夹下，当天创建的txt文件，连接并拷贝内容
+# copy_log.py
+'''【独立工具】读取当前文件夹下，当天创建的txt日志和错误信息文件，连接并拷贝内容'''
 import os
-import shutil
 import time
 
 # 获取当前时间

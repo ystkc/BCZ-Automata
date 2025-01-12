@@ -1,3 +1,5 @@
+# hex_transmute.py
+'''【调试工具】将fiddler中拷贝的cookie转换成python可以识别的字典'''
 res_string = ""
 line = input('fiddler parser, end with enter:')
 while line != '':

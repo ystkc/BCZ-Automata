@@ -1,5 +1,6 @@
 
-# 立flag.py
+# flag.py
+'''【独立工具】为所有写入的账号立flag'''
 import json
 import time
 import requests
@@ -9,6 +10,7 @@ with open('user_cookie.json', 'r', encoding='utf-8') as f:
     cookie = json.load(f)
 
 
+id = input('请输入立flag活动编号（如11）：')
 for user in cookie:
     config = user['config']
     cookie = user['cookie']
@@ -21,7 +23,7 @@ for user in cookie:
     time_long = int(time.time() * 1000)
     headers = getHeaders('$activity', cookie, time_long, index = 1)
     headers['Content-Type'] = 'application/json; charset=UTF-8'
-    url = 'https://activity.baicizhan.com/api/activity/bet/info?id=11'
+    url = f'https://activity.baicizhan.com/api/activity/bet/info?id={id}'
     response = requests.get(url, headers=headers)
     time.sleep(2)
     data = response.json()['data']
@@ -33,7 +35,7 @@ for user in cookie:
     time_long = int(time.time() * 1000)
     headers = getHeaders('$activity', cookie, time_long, index = 1)
     headers['Content-Type'] = 'application/json; charset=UTF-8'
-    url = 'https://activity.baicizhan.com/api/activity/bet/apply?type=2&id=11'
+    url = f'https://activity.baicizhan.com/api/activity/bet/apply?type=2&id={id}'
     response = requests.post(url, headers=headers, data='{}')
     time.sleep(1)
     code = response.json()['code']

@@ -1,3 +1,5 @@
+# fit.py
+'''【独立工具】从fit.xlsx中读取数据进行高斯拟合和指数拟合（分段）。数据来源：automata导出'''
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -102,6 +104,7 @@ for segment_name, segment_fit in fit_results_updated.items():
 print(results_str)
 import pyperclip
 pyperclip.copy(results_str)
+print("Results copied to clipboard.")
     
 
 plt.title("Updated Fitting Results for Segments", fontsize=14)

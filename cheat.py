@@ -1,7 +1,9 @@
+# cheat.py
+'''【独立工具】绘图显示昨日500词以上用户的作弊、爆破情况，来自目录下的"cheat_tracker.%YY-%MM-%DD.csv"文件，数据来源于automata的notice_and_rank'''
 import os
 import csv
 path = "./logs/"
-# 打开目录下的"cheat_tracker.%YY-%MM-%DD.csv"文件
+
 
 result = {}
 result_not_daka = {}
@@ -27,16 +29,16 @@ fig, axes = plt.subplots(1, 2, figsize=(12, 6))
 
 def get_style(status): # 作弊1用宏色，正常0用蓝色，爆破成功3用绿色
     if status == 1:
-        return "r"
+        return "red"
     elif status == 0:
-        return "b"
+        return "grey"
     else:
-        return "g"
+        return "blue"
 
 colors = [get_style(status) for word, time, status in result.values()]
 
 # 画图(设置点小一点)
-axes[0].scatter([time for word, time, status in result.values()], [word for word, time, status in result.values()], c=colors, s=1)
+axes[0].scatter([time for word, time, status in result.values()], [word for word, time, status in result.values()], c=colors, s=1, cmap="Set1")
 
 fig.suptitle("已打卡")
 axes[0].set_xlabel("Time (UTC+8)")
@@ -46,7 +48,7 @@ axes[0].set_ylabel("Words")
 colors = [get_style(status) for word, time, status in result_not_daka.values()]
 
 # 画图
-axes[1].scatter([time for word, time, status in result_not_daka.values()], [word for word, time, status in result_not_daka.values()], c=colors, s=1)
+axes[1].scatter([time for word, time, status in result_not_daka.values()], [word for word, time, status in result_not_daka.values()], c=colors, s=1, cmap="Set1")
 
 fig.suptitle("未打卡")
 axes[1].set_xlabel("Time (UTC+8)")

@@ -1,3 +1,5 @@
+# read_thrift.py
+'''【调试工具】读取thrift文件内容的脚本，用于测试thrift文件是否正确解析。'''
 from src.thriftAPI import UserStudyApiService
 from thrift.transport import TTransport
 from thrift.protocol import TCompactProtocol
@@ -8,8 +10,12 @@ from src.thrift_utils import print_thrift_object
 
 
 
-content = 'GRwYCWxlYXJuTW9yZRUKAAA='
-# 要从方法名后面开始复制！不然解读不了
+content = 'HBgLMTk5MTE1MTA5NzEYCUJBMjRFOThEMxggRENPLUFMMDAtSFVBV0VJLThkOTQ2ZjJkZGFmOTBmMTgAAA=='
+print('''使用方法备忘：
+1.编写thrift，编译
+2.fiddler解压，从方法名后面开始复制 base64
+3.从上一层结构开始（如bcz_login_result而不是UserLoginResult）
+4.追踪进ttypes魔改fid+1(搞定了记得改回来)''')
 decoded_content = base64.b64decode(content)
 # print(decoded_content)
 transport = TTransport.TMemoryBuffer(decoded_content)
@@ -17,7 +23,8 @@ protocol = TCompactProtocol.TCompactProtocol(transport)
 
 from src.thriftAPI.ttypes import *
 # client = UserStudyApiService.Client(protocol)
-args = upload_task_action_args()
+# 
+args = bcz_login_args()
 args.read(protocol)
 print_thrift_object(args)
 transport.close()

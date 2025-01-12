@@ -1,5 +1,6 @@
+# cooper.py
+'''【独立工具】将现有账号（打过卡的）的铜板数绘图'''
 import json
-from math import log
 
 json_path = "./user_cookie.json"
 with open(json_path, "r", encoding="utf-8") as f:
@@ -7,6 +8,8 @@ with open(json_path, "r", encoding="utf-8") as f:
 names = []
 coopers = []
 for user_dict in user_cookie:
+    if not user_dict['config']['can_daka']:
+        continue
     names.append(user_dict['config']["name"])
     coopers.append(user_dict['config'].get("cooper", -1))
 

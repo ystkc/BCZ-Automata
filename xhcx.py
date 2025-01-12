@@ -1,12 +1,13 @@
-# 小号查询器
-import httpx
+# xhcx.py
+'''【独立工具】小号查询器，从指定班级分享码查询班级成员IP和当日打卡时间。'''
+'''声明：本程序获取的都是公开校牌信息，请勿用于违法用途。'''
 import json
 import threading
-import certifi
 import time
 import os
 import random
-from src.thrift_utils import send_http2_request
+from src.thrift_utils import http2_client
+http2_client_obj = http2_client()
 from src.get_headers import getHeaders
 
 storage_path = "./storage/"
@@ -32,7 +33,7 @@ ips_completed_times = {}
 # https://group.baicizhan.com/group/information?shareKey=
 url = f'https://group.baicizhan.com/group/information?shareKey={target_share_key}'
 headers = getHeaders("$group", cookies[0], int(time.time()), index=1)
-response_json = send_http2_request('GET', f'https://{headers["Host"]}/group/information?shareKey={target_share_key}', headers, None, True)
+response_json = http2_client_obj.send_http2_request('GET', f'https://{headers["Host"]}/group/information?shareKey={target_share_key}', headers, None, True)
 
 group_info = response_json['data']['groupInfo']
 members = response_json['data']['members']
@@ -78,7 +79,7 @@ else:
             # https://social.baicizhan.com/api/deskmate/personal_details?uniqueId=
             url = f'https://social.baicizhan.com/api/deskmate/personal_details?uniqueId={unique_id}'
             headers = getHeaders("$social", cookies[index%cookie_cnt], int(time.time()), index=1)
-            response = send_http2_request('GET', url, headers, None, True)
+            response = http2_client_obj.send_http2_request('GET', url, headers, None, True)
             if response['code'] == 1:
                 ip = response['data']['ip']
                 if ip not in ips:

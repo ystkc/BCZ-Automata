@@ -1,3 +1,14 @@
+# magic_proxy.py
+'''【独立工具】令牌登录客户端。方法备忘：
+一次性设置：
+1.获得令牌，导入automata，启动automata
+2.启动fiddler（于8888端口），设置fiddler二次代理到8080端口
+（或双重保险：设置筛选器转发*.baicizhan.com请求到127.0.0.1:8080）
+3.启动客户端，配置代理为fiddler的地址和端口
+
+每次设置：
+4.启动fiddler，启动客户端（确保代理有效），启动magic_proxy.py，刷新fiddler捕获状态
+5.启动automata网页端，点击魔法令牌，弹框CHANGE_TOKEN:...且magic_proxy出现绿色提示 即为成功'''
 from mitmproxy import http
 import hashlib
 import traceback
