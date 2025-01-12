@@ -1,0 +1,3079 @@
+
+from src.thrift_utils import report_event, social_send_share_success, user_study, user_dict, http2_client
+from src.get_headers import getHeaders
+from src.avatar import find_unique_id
+from src.notice_parser import NoticeParser
+import os
+import re
+import csv
+import random
+import time
+import json
+import datetime
+import sqlite3
+import threading
+import hashlib
+import traceback
+from fuzzywuzzy import process
+DEBUG = False
+DEBUG_SIZE = 1
+LOAD_MEMBER_TABLE = True # 如果要一天获取多次，请设置为True
+
+def clear_learnt_list(unique_id):
+    conn = sqlite3.connect('learnt_words.db')
+    learnt_words_db = f'learnt_words_{unique_id}'
+    cursor = conn.cursor()
+    cursor.execute(f'''DROP TABLE IF EXISTS {learnt_words_db}''')
+    conn.commit()
+
+def get_learnt_list(unique_id):
+    conn = sqlite3.connect('learnt_words.db')
+    learnt_words_db = f'learnt_words_{unique_id}'
+    cursor = conn.cursor()
+    cursor.execute(f'''CREATE TABLE IF NOT EXISTS {learnt_words_db} (
+        TOPIC_ID INTEGER,
+        DATE TEXT)
+    ''')
+    conn.commit()
+    result = cursor.execute(f'''SELECT TOPIC_ID FROM {learnt_words_db}''')
+    learnt_list = [i[0] for i in result.fetchall()]
+    return learnt_list
+
+def add_learnt_list(unique_id, topic_id: list):
+    conn = sqlite3.connect('learnt_words.db')
+    learnt_words_db = f'learnt_words_{unique_id}'
+    cursor = conn.cursor()
+    cursor.execute(f'''CREATE TABLE IF NOT EXISTS {learnt_words_db} (
+        TOPIC_ID INTEGER,
+        DATE TEXT)
+    ''')
+    conn.commit()
+    today_date = datetime.datetime.now().strftime('%Y-%m-%d')
+    for i in topic_id:
+        cursor.execute(f'''INSERT INTO {learnt_words_db} (TOPIC_ID, DATE) VALUES (?,?)''', (i, today_date))
+    conn.commit()
+
+def get_history_learnt_list(unique_id, delta=1):
+    '''获取delta天前的学习列表'''
+    conn = sqlite3.connect('learnt_words.db')
+    learnt_words_db = f'learnt_words_{unique_id}'
+    cursor = conn.cursor()
+    cursor.execute(f'''CREATE TABLE IF NOT EXISTS {learnt_words_db} (
+        TOPIC_ID INTEGER,
+        DATE TEXT)
+    ''')
+    conn.commit()
+    history_date = (datetime.datetime.now() - datetime.timedelta(days=delta)).strftime('%Y-%m-%d')
+    print(f"get{delta}={history_date}")
+    today_date = datetime.datetime.now().strftime('%Y-%m-%d')
+    result = cursor.execute(f'''SELECT TOPIC_ID FROM {learnt_words_db} WHERE DATE == ?''', (history_date, ))
+    learnt_list = [i[0] for i in result.fetchall()]
+    return learnt_list
+
+from src.bcz import getRandomWordIDInBook
+
+conn = None
+def puzzle_init(puzzle_category):
+    global conn
+    if conn is not None:
+        return
+    conn = sqlite3.connect('puzzle.db')
+    cursor = conn.cursor()
+    cursor.execute(f'''CREATE TABLE IF NOT EXISTS {puzzle_category} (
+        INDEX_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+        ID INTEGER UNIQUE,
+        QUESTION TEXT,
+        CHN_MEAN TEXT,
+        ANSWER TEXT,
+        OPTIONS1 TEXT,
+        OPTIONS2 TEXT,
+        OPTIONS3 TEXT,
+        TOPIC_ID INTEGER)
+    ''')
+    conn.commit()
+
+def puzzle_solver(puzzle_dict, puzzle_category):
+    # 链接数据库
+    cursor = conn.cursor()
+    id = int(puzzle_dict['id'])
+    chn_mean = puzzle_dict['chnMean']
+    if chn_mean is None:
+        puzzle_dict['chnMean'] = ''
+    option_list = puzzle_dict['options'].copy()
+    answer = puzzle_dict['rightAnswer']
+    question = puzzle_dict['question']
+    topic_id = puzzle_dict['topicId']
+    # 查找答案
+    cursor.execute(f'''SELECT ANSWER FROM {puzzle_category} WHERE ID == ?''', (id, ))
+    result = cursor.fetchone()
+    stored = False
+    if result is not None:
+        stored = True
+        puzzle_dict['chnMean'] += 'Stored'
+        # print(id ,result, option_list)
+        if answer is None:
+            for i, option in enumerate(option_list):
+                # print(i, option, result[0], answer)
+                if option == result[0]:
+                    answer = i + 1
+                    break
+            if answer is None:
+                # print(i, option, result[0], answer, puzzle_dict['chnMean'])
+                puzzle_dict['chnMean'] += 'Expired'
+                stored = False
+                print(f'id={id} 题目过期...更新中')
+            
+    
+    # print(stored, answer, puzzle_dict['chnMean'])
+    if not stored and answer is not None:
+        answer_text = option_list[answer - 1]
+        cursor.execute(f'''INSERT OR REPLACE INTO {puzzle_category} (ID, QUESTION, CHN_MEAN, ANSWER, OPTIONS1, OPTIONS2, OPTIONS3, TOPIC_ID) VALUES (?, ?, ?, ?, ?, ?,?, ?)''', (id, question, chn_mean, answer_text, option_list[0], option_list[1], option_list[2], topic_id))
+        conn.commit()
+        puzzle_dict['chnMean'] += 'Learnt'
+    if answer is None:
+        answer = random.randint(0, 4)
+        if answer == 0:
+            answer = 1 # 干扰概率
+    return answer
+
+def puzzle_close():
+    global conn
+    if conn is None:
+        return
+    conn.close()
+    conn = None
+
+wl_conn = None
+wl_patch_conn = None
+whitelist = []
+def word_lookup_init():
+    global wl_conn
+    global wl_patch_conn
+    global whitelist
+    with open('whitelist.json', 'r', encoding='utf-8') as f:
+        whitelist = json.load(f)
+    if wl_conn is not None:
+        return
+    wl_conn = sqlite3.connect('lookup.db')
+    wl_patch_conn = sqlite3.connect('lookup_patch.db')
+    cursor = wl_patch_conn.cursor()
+    cursor.execute('''CREATE TABLE IF NOT EXISTS dict_bcz (
+        TOPIC_ID INTEGER,
+        WORD TEXT,
+        ANSWER TEXT,
+        RANK TEXT)
+    ''')
+    wl_patch_conn.commit()
+    # 默认存在，不需要创建
+    return
+
+def find_variant(word):
+    cursor = wl_conn.cursor()
+    cursor.execute(f'''SELECT origin FROM {get_variant_table_name(word)} WHERE variant == ?''', (word, ))
+    result = cursor.fetchone()
+    if result is None:
+        return word
+    return result[0]
+
+def get_variant_table_name(word):
+    if word[0] >= 'a' and word[0] <= 'b':
+        return 'variant_a_b'
+    elif word[0] == 'c':
+        return 'variant_c'
+    elif word[0] >= 'd' and word[0] <= 'f':
+        return 'variant_d_f'
+    elif word[0] >= 'g' and word[0] <= 'k':
+        return 'variant_g_k'
+    elif word[0] >= 'l' and word[0] <= 'o':
+        return 'variant_l_o'
+    elif word[0] >= 'p' and word[0] <= 'r':
+        return 'variant_p_r'
+    elif word[0] == 's':
+        return 'variant_s'
+    elif word[0] >= 't' and word[0] <= 'z':
+        return 'variant_t_z'
+    else:
+        return 'variant_t_z'
+        raise ValueError(f'word{word} not in any variant')
+
+def word_lookup(word, topic_id=None):
+    # 先尝试查找原型
+    cursor = wl_patch_conn.cursor()
+    cursor.execute(f'''SELECT ANSWER FROM dict_bcz WHERE WORD == ?''', (word, ))
+    result = cursor.fetchall()
+    if result is not None and result != []:
+        # 可能有多个，用，连接
+        return '@' + '，'.join([i[0] for i in result])
+    
+    # 尝试查找topic_id
+    if topic_id is not None:
+        cursor = wl_conn.cursor()
+        cursor.execute(f'''SELECT mean_cn FROM dict_bcz WHERE topic_id == ?''', (int(topic_id), ))
+        result = cursor.fetchone()
+        if result is not None and result[0] is not None:
+            return f'#{result[0]}'
+    
+    cursor = wl_conn.cursor()
+    cursor.execute(f'''SELECT mean_cn FROM dict_bcz WHERE word == ?''', (word, ))
+    result = cursor.fetchone()
+    if result is not None and result[0] is not None:
+        return result[0]
+    # 再尝试查找变体
+    variant = find_variant(word)
+    if variant == word:
+        return None
+    cursor.execute(f'''SELECT mean_cn FROM dict_bcz WHERE word == ?''', (variant, ))
+    result = cursor.fetchone()
+    if result is not None and result[0] is not None:
+        return '##' + result[0]
+    return None
+
+
+def word_lookup_close():
+    global wl_conn
+    if wl_conn is None:
+        return
+    wl_conn.close()
+    wl_conn = None
+    global wl_patch_conn
+    if wl_patch_conn is None:
+        return
+    wl_patch_conn.close()
+    wl_patch_conn = None
+
+replace_dict = {
+    '（':'',
+    '）':'',
+    '  ': ' ',
+    '…': '',
+    '/': '',
+    ', ': '，',
+    '…': '',
+    '.': '',
+    '；':'，'
+}
+def standardize(chn_mean):
+    if chn_mean is None:
+        return None
+    # 将大写字母转换为小写字母
+    # chn_mean = chn_mean.lower()
+    for key, value in replace_dict.items():
+        chn_mean = chn_mean.replace(key, value)
+    return chn_mean # 统一成中文逗号
+
+def word_lookup_puzzle_solver(puzzle_dict):
+    word = standardize(puzzle_dict['title'])
+    topic_id = puzzle_dict['topicId']
+    msg = word
+    chn_mean = standardize(word_lookup(word, topic_id))
+    if chn_mean is None:
+        chn_mean = ''
+        Warning(f'word_lookup_puzzle_solver: word not found: {word}')
+        msg += '<font color="red">未找到</font>'
+    options = puzzle_dict['options']
+    options_text = [standardize(option['text']) for option in options] # 统一成中文逗号
+    result = None
+    for text in options_text:
+        if text == chn_mean:
+            result = (text, 100)
+            msg += '&ltEXACT&gt'
+            break
+        elif text in chn_mean and (result is None or len(text) > len(result[0])):
+            result = (text, 95)
+            msg += '&ltIN&gt'
+    if result is None:
+        result = process.extractOne(chn_mean, options_text)
+        msg += '&ltFUZZ&gt'
+    msg += f'{options_text}match={result}<br>释义：{chn_mean}'
+    if result is None:
+        return random.randint(0, 3)
+    index = options[options_text.index(result[0])]['id']
+    return index, msg
+
+def word_lookup_patcher(puzzle_dict, answer_id, topic_id, rank, rival_score):
+    word = puzzle_dict['title']
+    for option in puzzle_dict['options']:
+        if option['id'] == answer_id:
+            answer = option['text']
+            break
+    else:
+        Warning(f'PATCHER: answer_id={answer_id} not found in options')
+        return
+    cursor = wl_patch_conn.cursor()
+    # 检查是否已经存在
+    cursor.execute(f'''SELECT RANK FROM dict_bcz WHERE WORD == ? AND ANSWER == ?''', (word, answer))
+    result = cursor.fetchone()
+    if result is None:
+        cursor.execute(f'''INSERT OR IGNORE INTO dict_bcz (TOPIC_ID, WORD, ANSWER, RANK) VALUES (?, ?, ?, ?)''', (topic_id, word, answer, rank))
+        wl_patch_conn.commit()
+    elif result[0] is None:
+        cursor.execute(f'''UPDATE dict_bcz SET RANK = ? WHERE WORD == ? AND ANSWER == ?''', (rank, word, answer))
+        wl_patch_conn.commit()
+    else:
+        recorded_rank = result[0].split(',')
+        if rank not in recorded_rank:
+            recorded_rank.append(rank)
+            cursor.execute(f'''UPDATE dict_bcz SET RANK = ? WHERE WORD == ? AND ANSWER == ?''', (','.join(recorded_rank), word, answer))
+            wl_patch_conn.commit()
+
+
+
+class daka_list_class:
+    def __init__(self, logger, http2_client_obj: http2_client):
+        self.http2_client_obj = http2_client_obj
+        self.logger = logger
+        self.daka_list = []
+        self.logs = []
+        self.warnings = []
+        self.lock = threading.Lock()
+        self.patch_list = [] # 公告块，切分合并成1000长度(每次检测最多1000个)，检测后切除通过的部分，得到坏词
+        self.status = [] # 标记每个patch_list中的检查状态：0未检查，1已从后检查，2已双向检查
+        self.class_list = {}
+        self.time_start = 0
+
+        # 加载用户字典
+        self.user_dict_obj = user_dict()
+        logger.info(f'加载了{self.get_user_cnt()}个用户')
+
+        # 初始化数据储存信息
+        self.group_counter_dir = f'./group_counter/'
+        self.notice_and_rank_path = f'../BCZ-Notice-Examiner/bcz_notice.db'
+        self.log_dir = f'./logs/'
+
+        # 读取今天的cheat_tracker
+        self.load_cheat_tracker(datetime.datetime.now().strftime('%Y-%m-%d'))# 防止数据跨天
+
+        # 初始化数据库
+        conn = sqlite3.connect(self.notice_and_rank_path)
+        cursor = conn.cursor()
+        cursor.execute('''CREATE TABLE IF NOT EXISTS notice (
+            GROUP_ID INTEGER,
+            RANK_TYPE_RANK INTEGER, -- rank_type * 1000 + rank
+            CONTENT VARCHAR(1000),
+            DATE INTEGER,
+            LATEST_DATE INTEGER,
+            SCORE INTEGER,
+            CHECKED INTEGER)  -- 9位数，第1位(0未检查，1已从后检查，2已双向检查)，2-5位(000-1000)上次检查到的位置, 6-8位(000-1000)上次检查到的位置''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS MEMBERS (                   -- 成员表（以用户 + 小班 + 日期 为主键）
+            USER_ID INTEGER,             -- 用户ID   *
+            COMPLETED_TIME INTEGER,                -- 打卡时间
+            TODAY_DATE INTEGER,             -- 记录日期 * MMDD
+            WORD_COUNT INTEGER,                 -- 今日词数
+            STUDY_CHEAT INTEGER,                -- 是否作弊
+            BOOK_NAME INTEGER,                     -- 学习词书
+            GROUP_ID_1 INTEGER,            -- 小班ID
+            COMPLETED_TIMES_1 INTEGER,            -- 打卡天数
+            DURATION_DAYS_1 INTEGER,              -- 入班天数
+            GROUP_ID_2 INTEGER,
+            COMPLETED_TIMES_2 INTEGER,
+            DURATION_DAYS_2 INTEGER,
+            GROUP_ID_3 INTEGER,
+            COMPLETED_TIMES_3 INTEGER,
+            DURATION_DAYS_3 INTEGER,
+            GROUP_ID_4 INTEGER,
+            COMPLETED_TIMES_4 INTEGER,
+            DURATION_DAYS_4 INTEGER,
+            GROUP_ID_5 INTEGER,
+            COMPLETED_TIMES_5 INTEGER,
+            DURATION_DAYS_5 INTEGER,
+            GROUP_ID_6 INTEGER,
+            COMPLETED_TIMES_6 INTEGER,
+            DURATION_DAYS_6 INTEGER,            -- 最多6个小班(虽然很多人填不满，但还是比重复要省空间)
+            UNIQUE(USER_ID, TODAY_DATE))''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS BOOK_NAME (
+            HASH_ID INTEGER PRIMARY KEY,
+            BOOK_NAME TEXT,
+            BOOK_ID INTEGER,
+            BOOK_URL TEXT)''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS USER_NAME ( -- 最新的用户信息
+            NICKNAME TEXT,
+            USER_ID INTEGER PRIMARY KEY,
+            USER_AVATAR TEXT)''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS GROUP_NAME ( -- 最新的小班信息
+            GROUP_ID INTEGER PRIMARY KEY,
+            SHARE_KEY VARCHAR(16),
+            MONITOR_ID INTEGER,
+            GROUP_NAME VARCHAR(10),
+            GROUP_INTRODUCTION VARCHAR(50),
+            GROUP_AVATAR TEXT)''') # 定期备份数据库，要获得旧的小班、用户信息，看历史版本即可
+        cursor.execute('''CREATE TABLE IF NOT EXISTS OTHER_INFO ( -- 其他数据
+            TODAY_DATE INTEGER PRIMARY KEY,
+            UV_INDEX INTEGER,
+            MAX_GROUP_ID INTEGER,
+            GROUP_COUNT_1 INTEGER,
+            GROUP_COUNT_2 INTEGER,
+            GROUP_COUNT_3 INTEGER,
+            GROUP_COUNT_4 INTEGER,
+            GROUP_COUNT_5 INTEGER,
+            GROUP_COUNT_6 INTEGER)''')
+        conn.commit()
+        conn.close()
+        self.latest_check_notice_timestamp = 0
+        self.notice_parser = NoticeParser()
+
+        # 创建线程来执行耗时的初始化任务
+        self.__not_prepared = True
+
+    
+    def init_notice_storage(self, logger):
+        if not self.__not_prepared:
+            return
+        logger.info('开始读取数据库')
+        conn = sqlite3.connect(self.notice_and_rank_path, uri=True)
+        cursor = conn.cursor()
+        # 取消阻塞
+        cursor.execute('''PRAGMA synchronous = OFF''')
+        cursor.execute('''PRAGMA journal_mode = MEMORY''')
+        cursor.execute('''PRAGMA locking_mode = EXCLUSIVE''')
+        cursor.execute('''PRAGMA temp_store = MEMORY''')
+        cursor.execute('''PRAGMA cache_size = -100000''')
+        # 读取需要检查的notice
+        self.check_list = []
+        # 加载坏词
+        try:
+            with open('tmp_bad_words.json', 'r', encoding='utf-8') as f:
+                self.bad_words = json.load(f)
+        except:
+            self.bad_words = []
+        # 加载check_list
+        cursor.execute('''SELECT GROUP_ID, CHECKED, DATE, CONTENT FROM notice WHERE CHECKED IS NOT NULL AND CHECKED < 200000000''')
+        for row in cursor.fetchall():
+            self.check_list.append({'group_id': row[0], 'date': row[2], 'content': row[3], 'checked': row[1]//100000000, 'cursorA': row[1]%100000000//10000, 'cursorB': row[1]%10000, 'modified': False, 'valid': True})
+        logger.info(f'check_list剩余{len(self.check_list)}条')
+        # 加载普通notice
+        self.notice_list = {}
+        cursor.execute('''SELECT GROUP_ID, CONTENT, DATE, LATEST_DATE FROM notice''')
+        cnt = 0
+        for row in cursor.fetchall(): # 按group_id分类
+            group_id = row[0]
+            if group_id not in self.notice_list:
+                self.notice_list[group_id] = {}
+            self.notice_list[group_id][row[1]] = row[3] if row[3] is not None else row[2]
+            cnt += 1
+        logger.info(f'notice_list共加载{cnt}条({len(self.notice_list)}班)')
+        # 加载小班信息
+        self.group_infos = {} # GROUP_ID:(GROUP_NAME, GROUP_INTRODUCTION)
+        cursor.execute('''SELECT GROUP_ID, SHARE_KEY, MONITOR_ID, GROUP_NAME, GROUP_INTRODUCTION, GROUP_AVATAR FROM GROUP_NAME''')
+        for row in cursor.fetchall():
+            self.group_infos[row[0]] = (row[0], row[1], row[2], row[3], row[4], row[5])
+        logger.info(f'group_infos共加载{len(self.group_infos)}班')
+        # 加载用户信息
+        self.user_infos = {} # USER_ID:(NICKNAME,)
+        cursor.execute('''SELECT USER_ID, NICKNAME, USER_AVATAR FROM USER_NAME''')
+        for row in cursor.fetchall():
+            self.user_infos[row[0]] = (row[0], row[1], row[2])
+        logger.info(f'user_infos共加载{len(self.user_infos)}个用户')
+        # 加载成员信息
+        if LOAD_MEMBER_TABLE:
+            self.load_member_list(cursor, int(datetime.datetime.now().strftime('%m%d')))
+        else:
+            self.member_list = {} # USER_ID: (COMPLETED_TIME, TODAY_DATE, WORD_COUNT, STUDY_CHEAT, BOOK_NAME, GROUP_ID_1, COMPLETED_TIMES_1, DURATION_DAYS_1, GROUP_ID_2, COMPLETED_TIMES_2, DURATION_DAYS_2, GROUP_ID_3, COMPLETED_TIMES_3, DURATION_DAYS_3, GROUP_ID_4, COMPLETED_TIMES_4, DURATION_DAYS_4, GROUP_ID_5, COMPLETED_TIMES_5, DURATION_DAYS_5, GROUP_ID_6, COMPLETED_TIMES_6, DURATION_DAYS_6)
+        # 加载书本信息
+        self.book_name_dict = {} # BOOK_NAME:BOOK_ID
+        cursor.execute('''SELECT HASH_ID, BOOK_NAME, BOOK_ID, BOOK_URL FROM BOOK_NAME''')
+        for row in cursor.fetchall():
+            self.book_name_dict[row[1]] = row[0]
+        # 加载其他数据
+        today_date = datetime.datetime.now()
+        today_date_int = int(today_date.strftime('%Y%m%d'))
+        self.group_counter_date = today_date_int
+        cursor.execute('''SELECT UV_INDEX, MAX_GROUP_ID, GROUP_COUNT_1, GROUP_COUNT_2, GROUP_COUNT_3, GROUP_COUNT_4, GROUP_COUNT_5, GROUP_COUNT_6 FROM OTHER_INFO WHERE TODAY_DATE == ?''', (today_date_int,))
+        row = cursor.fetchone()
+        if row is None:
+            self.uv_index = 0
+            self.max_group_id = 0
+            self.group_counter = [0, 0, 0, 0, 0, 0]
+            self.logger.info('没有找到其他数据')
+        else:
+            self.uv_index = row[0]
+            self.max_group_id = row[1]
+            self.group_counter = [row[2], row[3], row[4], row[5], row[6], row[7]]
+            self.logger.info(f'其他数据：uv_index={self.uv_index}, max_group_id={self.max_group_id}')
+            self.logger.info(f'组统计：{self.group_counter}')
+        conn.close()
+        # 读取log
+        max_timestamp = int(today_date.timestamp()) - 86400
+        t = 0
+        today_date_str = datetime.datetime.now().strftime('%Y-%m-%d')
+        for file_name in os.listdir(self.log_dir):
+            if file_name.startswith(f'log_{today_date_str}') and file_name.endswith('.txt'):
+                t = int(file_name.split('.')[1])
+                if t > max_timestamp:
+                    max_timestamp = t
+        self.logger.info(f'上次更新用户和通知状态于{int(today_date.timestamp()) - max_timestamp}秒前')
+        self.latest_check_notice_timestamp = self.latest_check_user_timestamp = max_timestamp
+        # 初始化数据库内存缓冲区
+        self.notice_buffer = [] # 每天最多7000条，暂无需设置大小
+        self.notice_cleared_buffer = []
+        self.notice_time_buffer = []
+        self.group_info_buffer = [] # 每天最多7000条，暂无需设置大小
+        self.user_info_buffer = [] # 每天最多700000条，暂无需设置大小
+        self.member_buffer = {} # 每天最多700000条，暂无需设置大小
+        self.book_name_buffer = []
+        
+        logger.info('数据库初始化完毕')
+        self.__not_prepared = False
+
+
+    def wait(self):
+        while self.__not_prepared:
+            time.sleep(1)
+
+    def close(self):
+        self.wait()
+        not_daka_users = []
+        current_timestamp = int(datetime.datetime.now().timestamp())
+        if current_timestamp - self.latest_check_user_timestamp > 3600:
+            not_daka_users = self.check_not_daka_users(include_not_daka=False) # 有网络请求，要放在close前面，防止log太多
+            self.latest_check_user_timestamp = current_timestamp
+        else:
+            self.logger.info(f'最近{current_timestamp - self.latest_check_user_timestamp}秒前检测过 未打卡用户，不重复检查')
+        self.add_log(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'daka_list', 0, f'本轮{len(self.daka_list)}账号，有{len(not_daka_users)}人未打卡，共耗时{current_timestamp - self.time_start}秒')
+        # 保存用户配置
+        self.user_dict_obj.save()
+        self.logger.info(f'用户配置保存完毕')
+        # 将检测结果存入notice_and_rank_path
+        cnt = 0
+        conn = sqlite3.connect(self.notice_and_rank_path)
+        cursor = conn.cursor()
+        for i, check_item in enumerate(self.check_list):
+            if check_item['modified'] and check_item['valid']:
+                cursor.execute(f'''UPDATE notice SET CHECKED = ? WHERE GROUP_ID == ? AND DATE == ?''', (check_item['checked']*100000000 + check_item['cursorA'] * 10000 + check_item['cursorB'], check_item['group_id'], check_item['date']))
+                check_item['modified'] = False
+                cnt += 1
+        self.logger.info(f'本轮检查{cnt}条notice')
+        self.add_log(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'close_daka_list', 0, f'本轮检查{cnt}条notice')
+        conn.commit()
+        conn.close()
+        if cnt > 0:
+            # 将坏词存入json
+            with open('tmp_bad_words.json', 'w', encoding='utf-8') as f:
+                json.dump(self.get_bad_words(has_mid=False), f, ensure_ascii=False, indent=4)
+        # 写入日志
+        self.logger.info(f'写入了{len(self.logs)}条日志，{len(self.warnings)}条警告')
+        with open(f'{self.log_dir}log_{datetime.datetime.now().strftime("%Y-%m-%d %H-%M-%S")}.{self.latest_check_user_timestamp}.{len(self.logs)}.txt', 'w', encoding='utf-8') as f:
+            for msg in self.logs:
+                f.write(msg)
+            for msg in self.warnings:
+                f.write(msg)
+        self.logs = []
+        for warning in self.warnings:
+            self.logger.warning(warning)
+        self.warnings = []
+        # 写入作弊检测self.cheat_tracker结果到csv
+        if len(self.cheat_tracker) > 0:
+            with open(f'{self.log_dir}cheat_tracker.{self.cheat_tracker_date_str}.csv', 'w', encoding='utf-8', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(['bcz_id', 'word_cnt', 'time','study_cheat'])
+                for user_id, (word_count, time, status) in self.cheat_tracker.items():
+                    writer.writerow([user_id, word_count, time, status])
+        # 写入缓冲区到数据库
+        conn = sqlite3.connect(self.notice_and_rank_path)
+        cursor = conn.cursor()
+        # 删除35天前的MEMBERS和notice数据
+        now_date = datetime.datetime.now()
+        date_int = int(now_date.strftime('%m%d'))
+        thresh_date = datetime.datetime.combine((now_date - datetime.timedelta(days=35)), datetime.time.min)
+        thresh_date_int = int(thresh_date.strftime('%m%d'))
+        thresh_date_int_timestamp = int(thresh_date.timestamp())
+        if date_int < thresh_date_int: # 跨年
+            cursor.execute('''SELECT COUNT(*) FROM MEMBERS WHERE TODAY_DATE < ? AND TODAY_DATE > ? ''', (thresh_date_int, date_int))
+            print(f'删除去年{thresh_date_int}前的MEMBERS数据{cursor.fetchone()[0]}条')
+            cursor.execute('''DELETE FROM MEMBERS WHERE TODAY_DATE < ? AND TODAY_DATE > ? ''', (thresh_date_int, date_int))
+        else:
+            cursor.execute('''SELECT COUNT(*) FROM MEMBERS WHERE TODAY_DATE < ?''', (thresh_date_int,))
+            print(f'删除{thresh_date_int}前的MEMBERS数据{cursor.fetchone()[0]}条')
+            cursor.execute('''DELETE FROM MEMBERS WHERE TODAY_DATE < ?''', (thresh_date_int,))
+
+        # 删除notice中DATE<thresh_date_int且(LATEST_DATE 是None或<thresh_date_int)的记录
+        cursor.execute('''SELECT COUNT(*) FROM notice WHERE DATE < ? AND (LATEST_DATE IS NULL OR LATEST_DATE < ?)''', (thresh_date_int_timestamp, thresh_date_int_timestamp))
+        print(f'删除{thresh_date.strftime("%Y-%m-%d")}前的notice数据{cursor.fetchone()[0]}条')
+        cursor.execute('''DELETE FROM notice WHERE DATE < ? AND (LATEST_DATE IS NULL OR LATEST_DATE < ?)''', (thresh_date_int_timestamp, thresh_date_int_timestamp))
+        
+        # 写入notice
+        self.logger.info(f'写入notice缓冲区{len(self.notice_buffer)}条')
+        cursor.executemany('''INSERT OR REPLACE INTO notice (GROUP_ID, RANK_TYPE_RANK, CONTENT, DATE, LATEST_DATE, SCORE) VALUES (?, ?, ?, ?, ?, ?)''', self.notice_buffer)
+        # 仅更新时间的公告
+        self.logger.info(f'更新notice时间缓冲区{len(self.notice_time_buffer)}条')
+        cursor.executemany('''UPDATE notice SET LATEST_DATE = ?, RANK_TYPE_RANK = ? WHERE GROUP_ID = ? AND DATE = ?''', self.notice_time_buffer)
+        # 被清空的公告
+        self.logger.info(f'写入notice被清空缓冲区{len(self.notice_cleared_buffer)}条')
+        cursor.executemany('''UPDATE notice SET CHECKED=0 WHERE GROUP_ID = ? AND (DATE = ? OR LATEST_DATE = ?)''', self.notice_cleared_buffer)
+        # 写入group_name
+        self.logger.info(f'写入group_name缓冲区{len(self.group_info_buffer)}条')
+        cursor.executemany('''INSERT OR REPLACE INTO GROUP_NAME (GROUP_ID, SHARE_KEY, MONITOR_ID, GROUP_NAME, GROUP_INTRODUCTION, GROUP_AVATAR) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(GROUP_ID) DO UPDATE SET SHARE_KEY = excluded.SHARE_KEY, MONITOR_ID = excluded.MONITOR_ID, GROUP_NAME = excluded.GROUP_NAME, GROUP_INTRODUCTION = excluded.GROUP_INTRODUCTION, GROUP_AVATAR = excluded.GROUP_AVATAR''', self.group_info_buffer)
+        # 写入user_name
+        self.logger.info(f'写入user_name缓冲区{len(self.user_info_buffer)}条')
+        cursor.executemany('''INSERT OR REPLACE INTO USER_NAME (USER_ID, NICKNAME, USER_AVATAR) VALUES (?, ?, ?) ON CONFLICT(USER_ID) DO UPDATE SET NICKNAME = excluded.NICKNAME, USER_AVATAR = excluded.USER_AVATAR''', self.user_info_buffer)
+        # 写入member
+        # 如果是星期日，则全部写入；否则只保留已打卡的成员
+        copied_buffer = []
+        self.reset_group_counter()
+        if datetime.datetime.now().weekday() != 6:
+            for value in self.member_buffer.values():
+                if value[1] != 0:
+                    copied_buffer.append(value)
+                    self.count_group(value[9], value[12], value[15], value[18], value[21])
+            self.logger.info(f'写入member缓冲区，原有{len(self.member_buffer)}条，保留已打卡的成员{len(copied_buffer)}条')
+            cursor.executemany('''INSERT OR REPLACE INTO MEMBERS (USER_ID, COMPLETED_TIME, TODAY_DATE, WORD_COUNT, STUDY_CHEAT, BOOK_NAME, GROUP_ID_1, COMPLETED_TIMES_1, DURATION_DAYS_1, GROUP_ID_2, COMPLETED_TIMES_2, DURATION_DAYS_2, GROUP_ID_3, COMPLETED_TIMES_3, DURATION_DAYS_3, GROUP_ID_4, COMPLETED_TIMES_4, DURATION_DAYS_4, GROUP_ID_5, COMPLETED_TIMES_5, DURATION_DAYS_5, GROUP_ID_6, COMPLETED_TIMES_6, DURATION_DAYS_6) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', copied_buffer)
+        else:
+            self.logger.info(f'写入member缓冲区{len(self.member_buffer)}条')
+            for value in self.member_buffer.values():
+                self.count_group(value[9], value[12], value[15], value[18], value[21])
+            cursor.executemany('''INSERT OR REPLACE INTO MEMBERS (USER_ID, COMPLETED_TIME, TODAY_DATE, WORD_COUNT, STUDY_CHEAT, BOOK_NAME, GROUP_ID_1, COMPLETED_TIMES_1, DURATION_DAYS_1, GROUP_ID_2, COMPLETED_TIMES_2, DURATION_DAYS_2, GROUP_ID_3, COMPLETED_TIMES_3, DURATION_DAYS_3, GROUP_ID_4, COMPLETED_TIMES_4, DURATION_DAYS_4, GROUP_ID_5, COMPLETED_TIMES_5, DURATION_DAYS_5, GROUP_ID_6, COMPLETED_TIMES_6, DURATION_DAYS_6) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', self.member_buffer.values())
+        self.save_other_info(cursor)
+        # 写入book_name
+        self.logger.info(f'写入book_name缓冲区{len(self.book_name_buffer)}条')
+        cursor.executemany('''INSERT OR REPLACE INTO BOOK_NAME (HASH_ID, BOOK_NAME, BOOK_ID, BOOK_URL) VALUES (?, ?, ?, ?)''', self.book_name_buffer)
+        conn.commit()
+        self.logger.info(f'缓冲区写入完毕')
+        if current_timestamp - self.latest_check_notice_timestamp > 3600:
+            self.notice_parser.update_notice(conn, only_raw_notice=True)
+            self.latest_check_notice_timestamp = current_timestamp
+            self.logger.info(f'notice_parser检查库已更新')
+        else:
+            self.logger.info(f'notice_parser 时间过短，不更新')
+        conn.close()
+        # 清空前合并缓冲区到内存数据
+        self.notice_buffer = []
+        self.notice_cleared_buffer = [] # 已经在store_notice中处理
+        self.notice_time_buffer = []
+        for tp in self.group_info_buffer:
+            self.group_infos[tp[0]] = tp
+        self.group_info_buffer = []
+        for tp in self.user_info_buffer:
+            self.user_infos[tp[0]] = tp
+        self.user_info_buffer = []
+        for tp in self.member_buffer.values():
+            self.member_list[tp[0]] = tp
+        self.member_buffer = {}
+        for tp in self.book_name_buffer:
+            self.book_name_dict[tp[1]] = tp[0]
+        self.book_name_buffer = []
+        self.logger.info("内存已更新，全部保存操作完成")
+    
+    def closing_count_down(self):
+        '''为防止频繁关闭，增加关闭倒计时'''
+        close_timestamp = self.last_remove_timestamp
+        close_count_down_time = 60
+        while True:
+            if close_timestamp != self.last_remove_timestamp:
+                return
+            if close_count_down_time <= 0:
+                break
+            self.logger.info(f'关闭倒计时: {close_count_down_time}s')
+            time.sleep(6)
+            close_count_down_time -= 6
+        self.logger.info(f'关闭倒计时结束，准备关闭')
+        self.close()
+
+    def reset_group_counter(self):
+        today_date_int = int(datetime.datetime.now().strftime('%Y%m%d'))
+        if self.group_counter_date != today_date_int:
+            self.group_counter_date = today_date_int
+            self.group_counter = [0, 0, 0, 0, 0, 0]
+
+    def count_group(self, group_id_2, group_id_3, group_id_4, group_id_5, group_id_6):
+        if group_id_2 is None:
+            self.group_counter[0] += 1
+        elif group_id_3 is None:
+            self.group_counter[1] += 1
+        elif group_id_4 is None:
+            self.group_counter[2] += 1
+        elif group_id_5 is None:
+            self.group_counter[3] += 1
+        elif group_id_6 is None:
+            self.group_counter[4] += 1
+        else:
+            self.group_counter[5] += 1
+
+    def get_uv(self):
+        '''获取总用户uv，储存到self.uv_index'''
+        user_cookie = self.user_dict_obj.get_cookie()
+        user_config = self.user_dict_obj.get_config()
+        # https://group.baicizhan.com/group/study_words_together_home_page
+        headers = getHeaders("$group", user_cookie, int(time.time()), index=1)
+        response = self.http2_client_obj.send_http2_request('GET', f'https://{headers["Host"]}/group/study_words_together_home_page', headers, None)
+        data = response.json()['data']
+        self.uv_index = data['uv']
+        
+    def save_other_info(self, cursor: sqlite3.Cursor):
+        '''保存其他信息，包括uv_index，小班数量比例和最大group_id'''
+        if len(self.member_buffer) == 0:
+            return
+        total_count = sum(self.group_counter)
+        # 记录每种小班数量的比例
+        group_ratio = [round(count/total_count*100, 2) for count in self.group_counter]
+        self.logger.info(f'小班数量百分比：{group_ratio}')
+        self.get_uv()
+        today_date_int = int(datetime.datetime.now().strftime('%Y%m%d'))
+        cursor.execute('''INSERT OR REPLACE INTO OTHER_INFO (UV_INDEX, MAX_GROUP_ID, GROUP_COUNT_1, GROUP_COUNT_2, GROUP_COUNT_3, GROUP_COUNT_4, GROUP_COUNT_5, GROUP_COUNT_6, TODAY_DATE) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', (self.uv_index, self.max_group_id, self.group_counter[0], self.group_counter[1], self.group_counter[2], self.group_counter[3], self.group_counter[4], self.group_counter[5], today_date_int))
+    
+    def load_member_list(self, cursor: sqlite3.Cursor, date_int: int):
+        self.member_list = {}
+        self.member_list_date = date_int
+        cursor.execute('''SELECT USER_ID, COMPLETED_TIME, TODAY_DATE, WORD_COUNT, STUDY_CHEAT, BOOK_NAME, GROUP_ID_1, COMPLETED_TIMES_1, DURATION_DAYS_1, GROUP_ID_2, COMPLETED_TIMES_2, DURATION_DAYS_2, GROUP_ID_3, COMPLETED_TIMES_3, DURATION_DAYS_3, GROUP_ID_4, COMPLETED_TIMES_4, DURATION_DAYS_4, GROUP_ID_5, COMPLETED_TIMES_5, DURATION_DAYS_5, GROUP_ID_6, COMPLETED_TIMES_6, DURATION_DAYS_6 FROM MEMBERS WHERE TODAY_DATE == ?''', (date_int, ))
+        for row in cursor.fetchall():
+            self.member_list[row[0]] = (row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9], row[10], row[11], row[12], row[13], row[14], row[15], row[16], row[17], row[18], row[19], row[20], row[21], row[22], row[23])
+        self.logger.info(f'member_list共加载{len(self.member_list)}条数据')
+
+    def load_cheat_tracker(self, cheat_tracker_date_str: str):
+        self.cheat_tracker = {}
+        self.cheat_tracker_date_str = cheat_tracker_date_str
+        if os.path.exists(f'{self.log_dir}cheat_tracker.{cheat_tracker_date_str}.csv'):
+            with open(f'{self.log_dir}cheat_tracker.{cheat_tracker_date_str}.csv', 'r', encoding='utf-8') as f:
+                reader = csv.reader(f)
+                next(reader) # 跳过标题
+                for row in reader:
+                    self.cheat_tracker[int(row[0])] = (int(row[1]), int(row[2]), int(row[3]))
+        self.logger.info(f'cheat_tracker共加载{len(self.cheat_tracker)}个用户')
+
+
+
+        
+    def store_group_info(self, group_id, share_key, monitor_id, class_name, introduction, group_avatar):
+        self.wait()
+        group_avatar = None
+        if monitor_id == '':
+            monitor_id = None
+        with self.lock:
+            self.max_group_id = max(self.max_group_id, group_id)
+            current_data = self.group_infos.get(group_id, (None, None, None, None, None, None))
+            if current_data[3] == class_name and current_data[4] == introduction and current_data[5] == group_avatar:
+                return
+            self.group_info_buffer.append((group_id, share_key, monitor_id, class_name, introduction, group_avatar))
+
+    def store_notice(self, group_id, rank_type_rank, content, data_time, score) -> int: # 0被清空，1新增，2已存在
+        self.wait()
+        with self.lock:
+            if group_id not in self.notice_list:
+                self.notice_list[group_id] = {}
+            
+            if content == '(空)': # 只有第一次看到空公告才需要加入notice_cleared_buffer
+                # 从notice_list中找到该班级最近的不为空的公告，加入notice_cleared_buffer
+                max_date = 0
+                max_key = ''
+                for key, value in self.notice_list[group_id].items():
+                    if value > max_date:
+                        max_date = value
+                        max_key = key
+                if max_key == '(空)':
+                    self.notice_time_buffer.append((data_time, rank_type_rank, group_id, max_date)) # 记录时间
+                    return -1 # 如果最近的就是空，则不加入
+                self.notice_list[group_id][content] = data_time
+                self.notice_buffer.append((group_id, rank_type_rank, content, data_time, None, score))
+                if max_date > 0: 
+                    self.notice_cleared_buffer.append((group_id, max_date, max_date))
+                    return 0
+                return -2 # 没有最近的不为空的公告
+                
+            if content not in self.notice_list[group_id]:
+                self.notice_list[group_id][content] = data_time
+                self.notice_buffer.append((group_id, rank_type_rank, content, data_time, None, score))
+                return 1
+            else:
+                self.notice_list[group_id][content] = data_time
+                self.notice_time_buffer.append((data_time, rank_type_rank, group_id, self.notice_list[group_id][content])) # 仅更新时间
+                return 2
+    
+    
+    
+    def store_member(self, date_int, user_id, group_id, completed_time, today_date, word_count, study_cheat, completed_times, duration_days, book_name, nickname, user_avatar):
+        self.wait()
+        if date_int != self.member_list_date:
+            # 更新member_list
+            self.logger.info("日期不一致，更新member_list")
+            conn = sqlite3.connect(self.notice_and_rank_path)
+            cursor = conn.cursor()
+            self.load_member_list(cursor, date_int)
+            conn.close()
+        with self.lock:
+            def store_user_info(user_id, nickname, user_avatar):
+                user_avatar = None
+                current_data = self.user_infos.get(user_id, (None,None,None))
+                if current_data[1] == nickname and current_data[2] == user_avatar:
+                    return
+                self.user_infos[user_id] = (user_id, nickname, user_avatar)
+                self.user_info_buffer.append((user_id, nickname, user_avatar))
+            # 先存储用户信息
+            store_user_info(user_id, nickname, user_avatar)
+            # 先将书本名对应到id
+            book_id = self.book_name_dict.get(book_name)
+            if book_id is None:
+                book_id = len(self.book_name_dict) + 1
+                self.book_name_dict[book_name] = book_id
+                self.book_name_buffer.append((book_id, book_name, None, None))
+            # 先检查是否有重复记录
+            tp = self.member_list.get(user_id)
+            if tp is None:
+                tp = self.member_buffer.get(user_id)
+                if tp is None:
+                    self.member_buffer[user_id] = (user_id, completed_time, today_date, word_count, study_cheat, book_id,  group_id, completed_times, duration_days,  None, None, None,  None, None, None,  None, None, None,  None, None, None,  None, None, None)
+                    return
+            status_changed = 1 if tp[1] == 0 and completed_time > 0 else 0 # 今日打卡状态变化，要将拥有的小班的completed times+1
+            if group_id == tp[6]:
+                return
+            if tp[9] is None:
+                self.member_buffer[user_id] = (user_id, completed_time, today_date, word_count, study_cheat, book_id,  tp[6], tp[7] + status_changed, tp[8],  group_id, completed_times, duration_days,  None, None, None,  None, None, None,  None, None, None,  None, None, None)
+                return
+            if group_id == tp[9]:
+                return
+            if tp[12] is None:
+                self.member_buffer[user_id] = (user_id, completed_time, today_date, word_count, study_cheat, book_id,  tp[6], tp[7] + status_changed, tp[8],  tp[9], tp[10] + status_changed, tp[11],  group_id, completed_times, duration_days,  None, None, None,  None, None, None,  None, None, None)
+                return
+            if group_id == tp[12]:
+                return
+            if tp[15] is None:
+                self.member_buffer[user_id] = (user_id, completed_time, today_date, word_count, study_cheat, book_id,  tp[6], tp[7] + status_changed, tp[8],  tp[9], tp[10] + status_changed, tp[11],  tp[12], tp[13] + status_changed, tp[14],  group_id, completed_times, duration_days,  None, None, None,  None, None, None)
+                return
+            if group_id == tp[15]:
+                return
+            if tp[18] is None:
+                self.member_buffer[user_id] = (user_id, completed_time, today_date, word_count, study_cheat, book_id,  tp[6], tp[7] + status_changed, tp[8],  tp[9], tp[10] + status_changed, tp[11],  tp[12], tp[13] + status_changed, tp[14],  tp[15], tp[16] + status_changed, tp[17],  group_id, completed_times, duration_days,  None, None, None)
+                return
+            if group_id == tp[18]:
+                return
+            if tp[21] is None:
+                self.member_buffer[user_id] = (user_id, completed_time, today_date, word_count, study_cheat, book_id,  tp[6], tp[7] + status_changed, tp[8],  tp[9], tp[10] + status_changed, tp[11],  tp[12], tp[13] + status_changed, tp[14],  tp[15], tp[16] + status_changed, tp[17],  tp[18], tp[19] + status_changed, tp[20],  group_id, completed_times, duration_days)
+                return # 已满6个小班，不再添加
+            Warning(f'用户{user_id}:{group_id}: 组数 > 6 ? (挠头):{tp}')
+            # 有可能是刚刚换了班
+            
+    # def __del__(self):
+        # self.close() # 看起来销毁时不能读写文件
+
+    # 打卡状态检查链接：https://group.baicizhan.com/group/study_words_together_home_page
+    def check_if_daka(self, user_cookie):
+        headers = getHeaders('$group', user_cookie, int(time.time()), index = 1)
+        url = 'https://group.baicizhan.com/group/study_words_together_home_page'
+        response = self.http2_client_obj.send_http2_request('GET', url, headers=headers, content=None)
+        response_json = response.json()
+        return response_json['data']['todayDaka']
+    
+    def check_not_daka_users(self, include_not_daka: bool):
+        daka_check = {}
+        checked_cnt = 0
+        users = self.user_dict_obj.get_user_dict_list()
+        total_cnt = len(users)
+
+        not_daka_users = []
+        def delayed_check_if_daka(user_dict, total_user_cnt, index):
+            time.sleep(random.randint(0, total_user_cnt * 5) / 10)
+            daka_check[index] = self.check_if_daka(user_dict['cookie'])
+            if not daka_check[index]:
+                not_daka_users.append(user_dict)
+
+        for i, user in enumerate(users):
+            if not include_not_daka and user['config']['can_daka'] == 0:
+                total_cnt -= 1
+                continue
+            # 多线程检测
+            t = threading.Thread(target=delayed_check_if_daka, args=(user, total_cnt, i))
+            t.start()
+        # 等待所有线程结束
+        while len(daka_check) < total_cnt:
+            self.logger.info(f'检测中，已完成{len(daka_check)}个用户')
+            time.sleep(1)
+        self.logger.info(f'检测完毕，共{len(not_daka_users)}个用户未打卡')
+        if not include_not_daka:
+            self.logger.info(f'不包括 仅托管用户')
+        else:
+            self.logger.info(f'包括 仅托管用户')
+        for user in not_daka_users:
+            self.logger.info(f'{user["config"]["name"]}({user["config"]["unique_id"]})未打卡')
+        return not_daka_users
+
+    def add_warning(self, content):
+        time_str = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        self.warnings.append(f'[Warning][{time_str}] {content}\n')
+
+    def add_log(self, date_str, name, unique_id, msg):
+        self.logs.append(f'[{date_str}] {name}({unique_id})日志：\n{msg}\n')
+
+    def track_cheat_user(self, date_str, user_id, user_word_cnt, time, status): # 0未刷词，1刷词
+        if date_str != self.cheat_tracker_date_str:
+            self.load_cheat_tracker(date_str)
+        if user_id in self.cheat_tracker:
+            if self.cheat_tracker[user_id][2] == 0 and status == 1: # 爆破成功
+                print(f'{user_id}\033[31m刷词爆破成功\033[0m')
+                self.cheat_tracker[user_id] = (user_word_cnt, time, 3)
+                return
+        with self.lock:
+            self.cheat_tracker[user_id] = (user_word_cnt, time, status)
+    
+    def user_tracked(self, user_id):
+        return user_id in self.cheat_tracker
+        
+    def get_notice_and_rank_conn(self):
+        return sqlite3.connect(self.notice_and_rank_path)
+    
+    def get_user_cnt(self):
+        return self.user_dict_obj.get_count()
+
+    def get_user_dict(self, unique_id=0):
+        index = self.user_dict_obj.get_index_by_unique_id(unique_id)
+        if index is None:
+            return None
+        return {'cookie': self.user_dict_obj.get_cookie(index), 'config': self.user_dict_obj.get_config(index)}
+
+    def get_user_dict_list(self):
+        return self.user_dict_obj.get_user_dict_list()
+    
+    def update_user_dict(self, user_dict):
+        self.user_dict_obj.update_user_dict(user_dict)
+    
+    def reload_user_dict(self):
+        del self.user_dict_obj
+        self.user_dict_obj = user_dict()
+
+    def get_class_list(self, rank, user_cookie): # 此函数无需等待初始化完成
+        class_list = []
+        current_data_time = datetime.datetime.now().strftime('%Y-%m-%d')
+        if rank not in self.class_list or current_data_time != self.class_list[rank]['data_time']:
+            with self.lock:
+                headers = getHeaders("$group", user_cookie, int(time.time()), index=1)
+                if rank == 0:
+                    # https://group.baicizhan.com/group/recommended_groups
+                    response = self.http2_client_obj.send_http2_request('GET', f'https://{headers["Host"]}/group/recommended_groups', headers, None)
+                elif rank >= 1 and rank <= 7:
+                    response = self.http2_client_obj.send_http2_request('GET', f'https://{headers["Host"]}/group/get_group_rank?rank={rank}', headers, None)
+                else:
+                    return []
+                class_list = response.json()['data']['list']
+                self.class_list[rank] = {'data_time': current_data_time, 'class_list': class_list}
+                return class_list
+        class_list = self.class_list[rank]['class_list']
+        return class_list
+
+    def add(self, unique_id):
+        with self.lock:
+            if len(self.daka_list) == 0:
+                self.logger.info('daka_list time start!')
+                self.time_start = time.time()
+            self.daka_list.append(unique_id)
+
+    def remove(self,unique_id):
+        with self.lock:
+            if unique_id in self.daka_list:
+                self.daka_list.remove(unique_id)
+            if self.is_empty():
+                self.logger.info('daka_list is empty!')
+                self.last_remove_timestamp = time.time()
+                threading.Thread(target=self.closing_count_down).start()
+                self.logger.info(f'总耗时{time.time() - self.time_start}秒')
+
+    def query(self, unique_id):
+        return unique_id in self.daka_list
+    
+    def get_bad_words(self, has_mid=True): # 获取检查结果
+        # 拼接状态为1的notice
+        result = self.bad_words.copy()
+        if has_mid:
+            not_checked_str = ''
+            with self.lock:
+                for item in self.check_list:
+                    if item['checked'] == 1 and item['valid']:
+                        not_checked_str += f'{item["content"][-15:]}<br>'
+            result.append(not_checked_str)
+        return result
+
+    def clear_bad_words(self): # 清除检查结果
+        self.bad_words = []
+
+    def check_notice(self, content):
+        return self.notice_parser.check_notice(content)
+    
+    def get_check_notice(self):
+        self.wait()
+        with self.lock:
+            for item in self.check_list:
+                if item['checked'] < 2 and item['valid']:
+                    item['valid'] = False
+                    return item.copy()
+            return None
+        
+    def patch_check_notice(self, item, modified=True):
+        self.wait()
+        date_str = datetime.datetime.now().strftime('(%Y-%m-%d)')
+        with self.lock:
+            item['valid'] = True
+            item['modified'] = modified
+            if item['checked'] == 2 and item['cursorB'] > 0:
+                self.bad_words.append(date_str + item['content'])
+            self.check_list.insert(0, item)
+    
+    def is_empty(self):
+        return len(self.daka_list) == 0
+
+
+
+
+def heartbeat_demon( daka_list: daka_list_class, user_cookie, user_config, http2_client_obj: http2_client):
+    unique_id = user_config['unique_id']
+    time.sleep(random.randint(10, 100) / 10) # 随机延时，防止同时启动多个心跳线程
+    while daka_list.query(unique_id):
+        payload=[
+            {"index":0}
+        ]
+        report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=0)
+        time.sleep(30)
+    if daka_list.is_empty():
+        puzzle_close()
+
+
+    
+
+def print_puzzle(puzzle_dict):
+    chn_mean = puzzle_dict['chnMean']
+    option_list = puzzle_dict['options']
+    question = puzzle_dict['question']
+    answer = puzzle_dict['rightAnswer']
+    result = f'{question}({chn_mean})('
+    for i, option in enumerate(option_list):
+        if i == answer - 1:
+            result += f'<font color="green">{option}</font>/'
+        else:
+            result += f'{option}/'
+    result += ')'
+    return result
+
+
+def pkonline(user_cookie, user_config, http2_client_obj: http2_client, max_round=3):
+    '''pkonline'''# max_round用来随机轮数，用来调用2次分散打卡时间
+    return # 已于12.5结束
+    # 领奖
+    # https://pkonline1.baicizhan.com/api/contest/2024/prepare/giftMain?code=mB5AG9fCzo
+    headers = getHeaders("$pkonline1", user_cookie, int(time.time()), index=1)
+    url = f'https://{headers["Host"]}/api/contest/2024/prepare/giftMain?code=mB5AG9fCzo'
+    response = http2_client_obj.send_http2_request('GET', url, headers, None)
+    data = response.json()['data']
+    cnt = data['blindBox']
+    while cnt > 0:
+        # https://pkonline1.baicizhan.com/api/contest/2024/prepare/useBlindBox
+        headers = getHeaders("$pkonline1", user_cookie, int(time.time()), index=1)
+        url = f'https://{headers["Host"]}/api/contest/2024/prepare/useBlindBox'
+        response = http2_client_obj.send_http2_request('POST', url, headers, content='{}')
+        data = response.json()['data']
+        yield f'领取{data["name"]}成功:{data["url"]}，剩余{cnt-1}个'
+
+        url = f'https://{headers["Host"]}/api/contest/2024/prepare/giftMain?code=mB5AG9fCzo'
+        response = http2_client_obj.send_http2_request('GET', url, headers, None)
+        data = response.json()['data']
+        cnt = data['blindBox']
+        time.sleep(random.randint(1, 2))
+
+    puzzle_init('BCZ_NCSVC')
+    # https://pk.baicizhan.com/contest2024/sign/?code=mB5AG9fCzo
+    # https://pk.baicizhan.com/contest2024/preparation/index.html?code=mB5AG9fCzo
+    # https://pkonline1.baicizhan.com/api/contest/2024/tournament/status?code=mB5AG9fCzo
+    time_long = int(time.time() * 1000)
+    headers = getHeaders("$pk", user_cookie, int(time.time()), index=1)
+    url = f'https://{headers["Host"]}/contest2024/sign/?code=mB5AG9fCzo'
+    response = http2_client_obj.send_http2_request('GET', url, headers, None, False)
+    if response.status_code != 200:
+        yield f'<p style="color:red">单词pk接口请求失败</p>{response.text}'
+    url = f'https://{headers["Host"]}/contest2024/preparation/index.html?code=mB5AG9fCzo'
+    response = http2_client_obj.send_http2_request('GET', url, headers, None)
+
+    headers = getHeaders("$pkonline1", user_cookie, int(time.time()), index=3)
+    url = f'https://{headers["Host"]}/api/contest/2024/tournament/status?code=mB5AG9fCzo'
+    response = http2_client_obj.send_http2_request('GET', url, headers, None)
+    data = response.json()['data']
+    if data['status'] == 1:
+        yield f'pk正在进行 '
+    extra_info = "{\"ABPage\":\"B\"}"
+    if data['college'] == False:
+        extra_info = "{\"ABPage\":\"A\"}"
+    payload = [
+        {"index": 29, "extra_info": extra_info}, # pk加载
+    ]
+    report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=1)
+    # https://pkonline1.baicizhan.com/api/contest/2024/prepare/main?code=mB5AG9fCzo
+    url = f'https://{headers["Host"]}/api/contest/2024/prepare/main?code=mB5AG9fCzo'
+    response = http2_client_obj.send_http2_request('GET', url, headers, None)
+    data = response.json()['data']
+    if data is None:
+        yield f'<p style="color:red">请手动登录并报名pk再运行</p>'
+        return
+    if data['todayPKFinished'] == True:
+        yield f'今日PK已结束'
+        return
+    yield '开始pk'
+    payload = [
+        {"index": 30}, # pk主页
+    ]
+    report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=1)
+    # https://pkonline1.baicizhan.com/api/contest/2024/prepare/pkMain?code=mB5AG9fCzo
+    url = f'https://{headers["Host"]}/api/contest/2024/prepare/pkMain?code=mB5AG9fCzo'
+    response = http2_client_obj.send_http2_request('GET', url, headers, None)
+    data = response.json()['data']
+    daily_round = data['dailyRound']
+    current_round = 0
+    if max_round == 0:
+        return
+    yield f' 今已完成{daily_round}/3 '
+    time.sleep(1)
+    if daily_round < 3:
+        payload = [
+            {"index": 31} # 进入pk
+        ]
+        report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=1)
+        
+        # https://pkonline1.baicizhan.com/api/contest/2024/tournament/failed_puzzle?lastId=
+        time_long = int(time.time() * 1000)
+        headers = getHeaders("$pkonline1", user_cookie, int(time.time()), index=3)
+        url = f'https://{headers["Host"]}/api/contest/2024/tournament/failed_puzzle?lastId='
+        response = http2_client_obj.send_http2_request('GET', url, headers, None)
+        data = response.json()['data']
+
+        payload = [
+            {"index": 32} # pk练习页面
+        ]
+        report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=1)
+        time.sleep(1)
+        payload = [
+            {"index": 33} # 点击开始按钮
+        ]
+        report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=1)
+        # https://pk.baicizhan.com/contest2024/contest/index.html?code=mB5AG9fCzo&mode=practice
+        time_long = int(time.time() * 1000)
+        headers = getHeaders("$pk", user_cookie, int(time.time()), index=3)
+        url = f'https://{headers["Host"]}/contest2024/contest/index.html?code=mB5AG9fCzo&mode=practice'
+        response = http2_client_obj.send_http2_request('GET', url, headers, None)
+
+        while True:
+            payload = [
+                {"index": 34, "extra_info": "{\"CurrentRound\":%d}" % 0} # pk开始（CurrentRound是摆设）
+            ]
+            report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=1)
+            # 匹配
+            # https://pkonline1.baicizhan.com/api/contest/practice/match?code=mB5AG9fCzo&contestId=null
+            
+            time_long = int(time.time() * 1000)
+            headers = getHeaders("$pkonline1", user_cookie, int(time.time()), index=3)
+            url = f'https://{headers["Host"]}/api/contest/practice/match?code=mB5AG9fCzo&contestId=null'
+            response = http2_client_obj.send_http2_request('GET', url, headers, None)
+            data = response.json()['data']
+            challenge_id = data['challengeId']
+            current_round = data['currentRound']
+            yield f'第{current_round}轮<br>'
+            payload = [
+                {"index": 35, "extra_info": "{\"MatchTime\":%d}" % (int(time.time() * 1000) - time_long)} # pk匹配成功
+            ]
+            report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=1)
+
+            post_headers = getHeaders("$pkonline1", user_cookie, int(time.time()), index=3)
+            post_headers['content-type'] = 'application/json'
+            options_headers = getHeaders("$pkonline1", user_cookie, int(time.time()), index=2)# 这两个请求头一直使用到结束
+            time.sleep(3)
+
+            prev_order = 0
+            while True:
+                # 开始答题
+                # https://pkonline1.baicizhan.com/api/contest/practice/heartbeat
+                url = f'https://{options_headers["Host"]}/api/contest/practice/heartbeat'
+                response = http2_client_obj.send_http2_request('OPTIONS', url, options_headers, None)
+                content = {
+                    "challengeId": challenge_id
+                }
+                content_str = json.dumps(content)
+                response = http2_client_obj.send_http2_request('POST', url, post_headers, content_str)
+                data = response.json()['data']
+                order = data['order']
+                while order == 0 or order == prev_order:
+                    response = http2_client_obj.send_http2_request('POST', url, post_headers, content_str)
+                    data = response.json()['data']
+                    order = data['order']
+                    time.sleep(1)
+                yield f'第{order}题'
+                rival_escaped = data['rivalEscaped']
+                ans = puzzle_solver(data['puzzle'], 'BCZ_NCSVC')
+                response_thresh = 4000
+                response_delay = random.randint(2000, response_thresh)
+                start_timestamp = int(time.time() * 1000)
+                session_cnt = int(response_delay / 1000)
+                session_delay = response_delay % 1000
+                for i in range(session_cnt):
+                    time.sleep(1)
+                    response = http2_client_obj.send_http2_request('POST', url, post_headers, content_str)
+                    rival_escaped = response.json()['data']['rivalEscaped']
+                    if rival_escaped:
+                        break
+                time.sleep(session_delay / 1000)
+                ans_content = {
+                    "challengeId": challenge_id,
+                    "order": order,
+                    "answer": ans
+                }
+                ans_content_str = json.dumps(ans_content)
+                response = http2_client_obj.send_http2_request('POST', url, post_headers, ans_content_str)
+                data = response.json()['data']
+                rival_escaped = data['rivalEscaped']
+                payload = [
+                    {"index": 36, "extra_info": "{\"ContestId\":null,\"ChallengeId\":%d,\"QuesOrder\":%d,\"PuzzleId\":%d,\"ChoiceOrder\":%d,\"CostTime\":%d,\"IsRight\":false}" % (challenge_id, order, data['puzzle']['id'], ans, int(time.time() * 1000 - start_timestamp))} # pk答题成功
+                ]
+                report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=1)
+                if data['rivalAnswer'] is None and not rival_escaped:
+                # 等待对手作答
+                    while True:
+                        response = http2_client_obj.send_http2_request('POST', url, post_headers, content_str)
+                        data = response.json()['data']
+                        if data['rivalAnswer'] is not None or data['rivalEscaped']:
+                            break
+                        time.sleep(1)
+                # 检查答案
+                puzzle_solver(data['puzzle'], 'BCZ_NCSVC')
+                right_answer = data['puzzle']['rightAnswer']
+                my_answer = '√' if data['meAnswer'] == right_answer else '×'
+                rival_answer = '已逃跑'
+                if not rival_escaped:
+                    rival_answer = '√' if data['rivalAnswer'] == right_answer else '×'
+                puzzle_str = print_puzzle(data['puzzle'])
+                yield f'{puzzle_str} {my_answer}/{rival_answer}<br>'
+
+                time.sleep(3)
+                if order == 7:
+                    break
+                prev_order = order # 防止刷新不及时导致重复答题
+
+            # 结束本轮pk
+            payload = [
+                # "{\"CurrentRound\":1}"
+                {"index": 37, "extra_info": "{\"CurrentRound\":%d}" % current_round} # pk结束
+            ]
+            report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=1)
+            # https://pkonline1.baicizhan.com/api/contest/practice/result?contestId=null&challengeId=15133142&code=mB5AG9fCzo
+            time_long = int(time.time() * 1000)
+            headers = getHeaders("$pkonline1", user_cookie, int(time.time()), index=3)
+            url = f'https://{headers["Host"]}/api/contest/practice/result?contestId=null&challengeId={challenge_id}&code=mB5AG9fCzo'
+            response = http2_client_obj.send_http2_request('GET', url, headers, None)
+            data = response.json()['data']
+            daily_finished = data['dailyFinished']
+            if daily_finished:
+                yield f'完成3轮 +50铜板<br>'
+                break
+            else:
+                yield f'完成第{current_round}轮<br>'
+                current_round += 1
+                if current_round > max_round:
+                    return
+                random_wait_second = random.randint(1,4)
+
+pkonline2_lock = threading.Lock()
+def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, max_round=3, max_win_round=3, allow_self=False):
+    '''单词对战''' # max_round无论输赢，但是体力值不足时，会自动退出
+    if user_config.get('can_pk', True) == False:
+        yield f'{user_config["name"]}不参加pk'
+        return
+    word_lookup_init()
+    time_short = int(time.time())
+    time_long = int(time.time() * 1000) # 只有report_event的cookie和url需要更新time_long，其余均不需要
+    # https://pk.baicizhan.com/api/rankpk/v2/current_session?time=1728962138173
+    pk_get_headers = getHeaders("$pk", user_cookie, time_short, index=1, quote=True)
+    pk_post_headers = getHeaders("$pk", user_cookie, time_short, index=1, quote=True)
+    pk_post_headers['content-type'] = 'application/json'
+
+    total_round = 0
+    total_win_round = 0
+    while True:
+        total_round += 1
+        if total_round > max_round or total_win_round >= max_win_round:
+            return
+        url = f'https://{pk_get_headers["Host"]}/api/rankpk/v2/current_session?time={time_long}'
+        response = http2_client_obj.send_http2_request('GET', url, pk_get_headers, None)
+        data = response.json()['data']
+        current_user_info = data['currentRankUserInfo']
+        end_time_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(data['session']['endTime'] // 1000))# auditEndTime=1731772799000
+        session_id = data["session"]["sessionId"]
+        current_level = current_user_info["currentLevel"]
+        current_star = current_user_info["currentStar"]
+        current_energy = current_user_info["energy"]
+        yield f'单词pk第{total_round}轮 {session_id}赛季{current_level}段{current_star}星{current_energy}体力<br>'
+        state = data['session']['state']
+        if state == 3:
+            yield f'单词pk赛季清扫中，结束<br>'
+            return
+        if state != 2:
+            yield f'<p style="color:red">单词pk赛季状态{state}，请检查</p>'
+            return
+        # https://pk.baicizhan.com/api/rankpk/main?time=1728962138249&activity_id=0&session_id=40
+        url = f'https://{pk_get_headers["Host"]}/api/rankpk/main?time={time_long}&activity_id=0&session_id={session_id}'
+        response = http2_client_obj.send_http2_request('GET', url, pk_get_headers, None)
+        data = response.json()['data']
+        current_level = data['current_level']
+        current_star = data['current_star']
+        current_energy = data['energy']
+        reward_available = data['reward_avalible']
+
+        for level in data['levels']:
+            if level['level'] == current_level:
+                current_level_dict = level
+                break
+        energy_cost = current_level_dict['energy_cost']
+        if current_energy < energy_cost:
+            yield f'体力{current_energy}不足{energy_cost}，结束<br>'
+            return
+        rank_name_en = current_level_dict['name_en']
+
+        if reward_available:
+            yield f'正在领取'
+            payload = [
+                {"index": 38}
+            ]
+            report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=0)
+            # https://pk.baicizhan.com/api/rankpk/get_reward?time=1728962144814&session_id=40
+            url = f'https://{pk_get_headers["Host"]}/api/rankpk/get_reward?time={time_long}&session_id={session_id}'
+            response = http2_client_obj.send_http2_request('GET', url, pk_get_headers, None)
+            data = response.json()['data']
+            pre_session_id = data['sessionId']
+            money = data['money']
+            yield f'{pre_session_id}赛季+{money}铜板'
+        payload = [ # 进入页面
+            {"index": 38, "extra_info": '{"trace":"together_tab","session_id":"%d","pk_rank":"%d"}'% (session_id, current_level)}
+        ]
+        report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=0)
+        
+        time.sleep(1)
+
+        payload = [ # 开始匹配
+            {"index": 39, "without_login": True, "extra_info": '{"trace":"together_tab","session_id":"%d","pk_rank":"%d"}'% (session_id, current_level)}
+        ]
+        report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=0)
+
+        challenge_id = 0
+        puzzle_count = 0
+        side = ''
+        rival_name = ''
+        rival_avatar = ''
+        time_start = time.time()
+        if not allow_self:
+            pkonline2_lock.acquire()
+        while True:
+            # https://pk.baicizhan.com/api/rankpk/challenge/match?challenge_type=word&challenge_level=wood&time=1728962245954&activity_id=0&session_id=40
+            url = f'https://{pk_get_headers["Host"]}/api/rankpk/challenge/match?challenge_type=word&challenge_level={rank_name_en}&time={time_long}&activity_id=0&session_id={session_id}'
+            response = http2_client_obj.send_http2_request('GET', url, pk_get_headers, None)
+            data = response.json()['data']
+            if not data.get('again', False): # 匹配成功
+                challenge_id = data['challenge_id']
+                puzzle_count = data['puzzle_count']
+                side = data['side']
+                rival_name = data['rival']['nickname']
+                rival_avatar = data['rival']['avatar']
+                break
+            time.sleep(1)
+        yield f'匹配对手:{rival_name}<br>'
+        if not allow_self:
+            pkonline2_lock.release()
+        unique_id = find_unique_id(rival_avatar, nickname=rival_name)
+        if unique_id != 'None':
+            yield f'对手bczId:<font color="lemonchiffon">{unique_id}</font><br>'
+        else:
+            yield f'未找到对手bczId<br>'
+        if unique_id in whitelist:
+            yield f'白名单用户💖<br>'
+        # yield f'共{puzzle_count}题'
+        payload = [ # 匹配成功
+            {"index": 40, "extra_info": "{\"trace\":\"together_tab\",\"session_id\":\"%d\",\"pk_rank\":\"%d\",\"challenge_type\":\"排位赛\",\"challenge_id\":%d,\"cost_time\":%d}"% (session_id, current_level, challenge_id, int(time.time() - time_start))}
+        ]
+        report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=0)
+        time.sleep(0.5)
+        payload = [ # 初始化（重复发送3次等待）
+            {"index": 41, "extra_info": "{\"trace\":\"together_tab\",\"session_id\":\"%d\",\"pk_rank\":\"%d\",\"challenge_type\":\"排位赛\",\"challenge_id\":%d,\"cost_time\":%d}"% (session_id, current_level, challenge_id, int(time.time() - time_start))}
+        ]
+        report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=0)
+        time.sleep(0.25)
+        payload = [ # 初始化（重复发送3次等待）
+            {"index": 42, "extra_info": "{\"trace\":\"together_tab\",\"session_id\":\"%d\",\"pk_rank\":\"%d\",\"challenge_type\":\"排位赛\",\"challenge_id\":%d,\"cost_time\":%d}"% (session_id, current_level, challenge_id, int(time.time() - time_start))}
+        ]
+        report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=0)
+        
+        order = 0
+        chosen_id = 0
+        rival_answer = None
+        rival_escaped = False
+        my_answer = None
+        right_answer = None
+        current_time = 10000
+        my_score = 0
+        score_delta = 0
+        rival_score = 0
+        penalty = 0 # 对于过分快对手，提高速度
+        my_penalty = 0 # 对于自己打错的，不计入分差
+        topic_id = 0
+        time_start = time.time()
+        while order < puzzle_count: # 最后一题作答完毕之后，退出
+            try:
+                # https://pk.baicizhan.com/api/rankpk/challenge/heartbeat?activity_id=0
+                # {"challenge_id":421585,"submit":null,"session_id":40}
+                url = f'https://{pk_get_headers["Host"]}/api/rankpk/challenge/heartbeat?activity_id=0'
+                content = {
+                    "challenge_id": challenge_id,
+                    "submit": None,
+                    "session_id": session_id
+                }
+                content_str = json.dumps(content)
+                while True:
+                    response = http2_client_obj.send_http2_request('POST', url, pk_post_headers, content_str)
+                    time.sleep(0.5)
+                    data = response.json()['data']
+                    if data['order'] != order:
+                        break
+                # 报告上一题
+                if order > 0: # 第一题时，order还未赋值
+                    score_str = f'{my_score}' if order > 1 else ''
+                    payload = [
+                        {"index": 43, "extra_info": "{\"trace\":\"together_tab\",\"session_id\":\"%d\",\"pk_rank\":\"%d\",\"topic_id\":%d,\"challenge_id\":%d,\"puzzle_order\":%d,\"score\":\"%s\",\"challenge_type\":\"排位赛\",\"cost_time\":%d}"% (session_id, current_level, topic_id, challenge_id, order, score_str, int(time.time() - time_start))}
+                    ]
+                    report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=0)
+                    time_start = time.time()
+                order = data['order']
+                chosen_id, msg = word_lookup_puzzle_solver(data['puzzle'])
+                topic_id = data['puzzle']['topicId']
+                rival_escaped = data['rivalEscaped']
+                rival_answer = data['rival']['answer']
+
+                yield f'第{order}题 {msg}<br>'
+                if unique_id in whitelist:
+                    penalty = 0
+                else:
+                    penalty = rival_score - 186 * (order - 1)
+                lb = 7100
+                if rival_score + 32 <= my_score:
+                    lb -= min((my_score - rival_score - 32) * 20, 1500) # 5600
+                elif my_score < rival_score + 32:
+                    lb += min((rival_score + 32 - my_score) * 40, 500) # 7600
+                ub = max(lb + 500, 8600 - chosen_id * 300 + min(0, rival_score - my_score) * 40)
+                target_time = random.randint(lb, ub) # 分数=答对100+剩余时间/100，每题满分200
+                if penalty > 0:
+                    target_time = min(8600 + penalty*200, 9999)
+                    lb = ub = target_time
+                    yield '[AC]'
+                yield f'目标{int(100 + target_time/100)}({lb}-{ub})delta{max(penalty*1, 0)}<br>'
+                
+                current_time = data['puzzle']['cd']
+                
+                # {"challenge_id":421585,"nvcVal":"","submit":{"order":1,"answer":3},"session_id":40}
+                content = {
+                    "challenge_id": challenge_id,
+                    "nvcVal": "",
+                    "submit": {
+                        "order": order,
+                        "answer": chosen_id
+                    },
+                    "session_id": session_id
+                }
+                content_ans_str = json.dumps(content)
+                modem_simulate = (random.randint(1, 5) == 1)
+
+                while True:
+                    response = http2_client_obj.send_http2_request('POST', url, pk_post_headers, content_str)
+                    data = response.json()['data']
+                    current_time = data['puzzle']['cd']
+                    rival_answer = data['rival']['answer']
+                    rival_escaped = data['rivalEscaped']
+                    
+                    if current_time < target_time or (rival_answer is not None and rival_answer == chosen_id):
+                        # if modem_simulate and penalty < 3:  # 模拟网络意外延时，反挂除外
+                            # time.sleep(0.5)
+                        break
+                    if current_time - 500 <= target_time and current_time < 10000:
+                        time.sleep((current_time - target_time) / 1000)
+                        break
+                    time.sleep(0.4)
+                
+
+                response = http2_client_obj.send_http2_request('POST', url, pk_post_headers, content_ans_str)
+                time.sleep(0.2)
+                response = http2_client_obj.send_http2_request('POST', url, pk_post_headers, content_ans_str)
+                time.sleep(0.2)
+                data = response.json()['data']
+                my_answer = data['me']['answer']
+                fail_cnt = 0
+                while my_answer is None:
+                    response = http2_client_obj.send_http2_request('POST', url, pk_post_headers, content_ans_str)
+                    time.sleep(0.2)
+                    data = response.json()['data']
+                    my_answer = data['me']['answer']
+                    me_escaped = data['meEscaped']
+                    fail_cnt += 1
+                    if me_escaped or fail_cnt > 5:
+                        yield f'<font color="red">掉线，本轮结束</font><br>'
+                        return
+                score_delta = data['me']['score'] - my_score
+                my_score = data['me']['score']
+                right_answer = data['puzzle']['right_answer']
+                if my_answer == right_answer:
+                    yield f'✓{my_score}(+{score_delta})/'
+                else:
+                    my_penalty += 175
+                    yield f'×{my_score}(+{score_delta})/'
+                rival_answer = data['rival']['answer']
+                rival_escaped = data['rivalEscaped']
+                content = {
+                    "challenge_id": challenge_id,
+                    "submit": None,
+                    "session_id": session_id
+                }
+                content_str = json.dumps(content)
+                while rival_answer is None and not rival_escaped and current_time > 0:
+                    response = http2_client_obj.send_http2_request('POST', url, pk_post_headers, content_str)
+                    time.sleep(0.5)
+                    data = response.json()['data']
+                    rival_answer = data['rival']['answer']
+                    rival_escaped = data['rivalEscaped']
+                    current_time = data['puzzle']['cd']
+                score_delta = data['rival']['score'] - rival_score
+                rival_score = data['rival']['score']
+                if rival_escaped:
+                    yield f'对手逃跑<br>'
+                    score_delta = -1
+                elif rival_answer is None:
+                    yield f'未作答<br>'
+                    score_delta = -1
+                else:
+                    if rival_answer == right_answer:
+                        yield f'✓{rival_score}(+{score_delta})<br>'
+                    else:
+                        my_penalty -= 150
+                        yield f'×{rival_score}(+{score_delta})<br>'
+                word_lookup_patcher(data['puzzle'], right_answer, topic_id, rank_name_en, score_delta)
+                # 等待直到current_time为0
+                while True:
+                    response = http2_client_obj.send_http2_request('POST', url, pk_post_headers, content_str)
+                    time.sleep(0.5)
+                    data = response.json()['data']
+                    current_time = data['puzzle']['cd']
+                    rival_escaped = data['rivalEscaped']
+                    if current_time == 0 or order != data['order']:
+                        break
+            except:
+                yield traceback.format_exc()
+                break # 有可能是睡眠导致比赛异常，退出即可
+        # 最后一题作答完毕
+        score_str = f'{my_score}' if order > 1 else ''
+        payload = [
+            {"index": 43, "extra_info": "{\"trace\":\"together_tab\",\"session_id\":\"%d\",\"pk_rank\":\"%d\",\"topic_id\":%d,\"challenge_id\":%d,\"puzzle_order\":%d,\"score\":\"%s\",\"challenge_type\":\"排位赛\",\"cost_time\":%d}"% (session_id, current_level, topic_id, challenge_id, order, score_str, int(time.time() - time_start))}
+        ]
+        report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=0)
+        payload = [
+            {"index": 44, "extra_info": "{\"trace\":\"together_tab\",\"session_id\":\"%d\",\"pk_rank\":\"%d\",\"challenge_type\":\"排位赛\",\"challenge_id\":%d}" % (session_id, current_level, challenge_id)}
+        ]
+        report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=0)
+        # https://pk.baicizhan.com/api/rankpk/challenge/result?challenge_id=421585&side=left&time=1728962287864&activity_id=0&session_id=40
+        url = f'https://{pk_get_headers["Host"]}/api/rankpk/challenge/result?challenge_id={challenge_id}&side={side}&time={time_long}&activity_id=0&session_id={session_id}'
+        response = http2_client_obj.send_http2_request('GET', url, pk_get_headers, None)
+        data = response.json()['data']
+        incr_score = data['incrScore']
+        limited = data['limited']
+        yield f'学习得分+{incr_score}'
+        if limited:
+            yield f' 达上限 '
+        my_score = data['me']['score']
+        rival_score = data['rival']['score']
+        yield f' {my_score} - {rival_score} - '
+        if my_score > rival_score:
+            yield f'<font color="green">WIN</font><br>'
+            total_win_round += 1
+        elif my_score < rival_score:
+            yield f'<font color="red">LOSE</font><br>'
+        else:
+            yield f'<font color="yellow">DRAW</font><br>'
+        payload = [
+            {"index": 45, "without_login": True, "extra_info": "{\"trace\":\"together_tab\",\"session_id\":\"%d\",\"pk_rank\":\"%d\"}" % (session_id, current_level)} # pk结束
+        ]
+        report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=0)
+        yield "<br><br>"
+        delay = random.randint(3,6)
+        for i in range(delay):
+            yield f'.'
+            time.sleep(1)
+
+    return
+
+def yzdd(user_cookie, user_config):
+    '''一站到底'''
+    # 2024.12.2已经结束
+    return
+    # 如果是星期日，跳过
+    if datetime.datetime.now().weekday() == 6:
+        return "$星期日，跳过"
+    # https://pkonline2.baicizhan.com/api/contest/2024/one_fight/get_exam_question?bczId=0&day=
+    time_long = int(time.time() * 1000)
+    headers = getHeaders("$pkonline2", user_cookie, int(time.time()), index=1)
+    url = f'https://{headers["Host"]}/api/contest/2024/one_fight/get_exam_question?bczId=0&day='
+    response = http2_client_obj.send_http2_request('GET', url, headers, None)
+    data = response.json()['data']
+
+    conn = sqlite3.connect('yzdd.db')
+    cursor = conn.cursor()
+    cursor.execute('''CREATE TABLE IF NOT EXISTS yzdd (
+        INDEX_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+        QID INTEGER,
+        IMAGE TEXT,
+        TITLE TEXT,
+        ANSWER TEXT,
+        OPTION_2 TEXT,
+        OPTION_3 TEXT,
+        OPTION_4 TEXT,
+        DETAIL TEXT)
+    ''')
+    conn.commit()
+
+    qid = data['qid']
+
+    answered = True if (data.get('answer', 1) > 0) else False
+    if not answered:
+        # qid 查询数据库
+        # https://pkonline2.baicizhan.com/api/contest/2024/one_fight/submit_exam
+        # Content-Type: application/json; charset=UTF-8
+        time.sleep(random.randint(2000, 4000) / 1000)
+        headers = getHeaders("$pkonline2", user_cookie, int(time.time()), index=1)
+        headers['Content-Type'] = 'application/json; charset=UTF-8'
+        url = f'https://{headers["Host"]}/api/contest/2024/one_fight/submit_exam'
+        payload = {
+            "qid": data['qid'],
+            "answer": random.randint(1, 4)
+        }
+        response = http2_client_obj.send_http2_request('POST', url, headers, json.dumps(payload))
+        time.sleep(0.9)
+
+        # 重新请求题目
+        # https://pkonline2.baicizhan.com/api/contest/2024/one_fight/get_exam_question?bczId=0&day=
+        headers = getHeaders("$pkonline2", user_cookie, int(time.time()), index=1)
+        url = f'https://{headers["Host"]}/api/contest/2024/one_fight/get_exam_question?bczId=0&day='
+        response = http2_client_obj.send_http2_request('GET', url, headers, None)
+        data = response.json()['data']
+
+
+    
+    title = data['title']
+    answer_id = data['answer']
+    image = data['image']
+    detail = data['detail']
+    options = []
+    options.append(data['options'][answer_id-1]['content'])
+    for i, option in enumerate(data['options']):
+        if i != answer_id - 1:
+            options.append(option['content'])
+    cursor.execute('''SELECT * FROM yzdd WHERE QID == ?''', (qid, ))
+    result = cursor.fetchone()
+    if not result:
+        cursor.execute('''INSERT INTO yzdd (QID, TITLE, IMAGE, ANSWER, OPTION_2, OPTION_3, OPTION_4, DETAIL) VALUES (?,?,?,?,?,?,?,?)''', (qid, title, image, options[0], options[1], options[2], options[3],detail))
+        conn.commit()
+    conn.close()
+    return f'$今日题目:{title}:<img src="{image}" width="100px" height="100px"><br>正确答案:{options[0]}<br>选项1:{options[1]}<br>选项2:{options[2]}<br>选项3:{options[3]}<br>'
+
+def deskmate_pk(cookie, config, http2_client_obj: http2_client):
+    '''同桌PK'''
+    
+    data = {}
+
+    name = config['name']
+    # random_delay = random.randint(0, random_delay_thresh)
+    # while random_delay > 0:
+        # yield (f'{name} 等待{random_delay}秒')
+        # time.sleep(1)
+        # random_delay -= 1
+
+    # https://social.baicizhan.com/api/deskmate/game/start_word_match_game
+    time_long = int(time.time() * 1000)
+    headers = getHeaders('$social', cookie, time_long, index = 1)
+    headers['Content-Type'] = 'application/json'
+    response = http2_client_obj.send_http2_request('POST',f'https://{headers["Host"]}/api/deskmate/game/start_word_match_game', headers, '{}')
+    yield (f'{name} 开始每周双人战{response.json()}<br>')
+    if response.json()['code'] == 100:
+        yield f'出现问题，请检查<br>'
+        return
+    
+    
+    
+    while True:
+        # https://social.baicizhan.com/api/deskmate/game/get_word_match_info
+        time_long = int(time.time() * 1000)
+        headers = getHeaders('$social', cookie, time_long, index = 1)
+        headers['Content-Type'] = 'application/json'
+        response = http2_client_obj.send_http2_request('GET',f'https://{headers["Host"]}/api/deskmate/game/get_word_match_info', headers, None)
+        data = response.json()['data']
+        if data.get('needCompletedTopicList', None) is not None:
+            break
+        time.sleep(1)
+
+    if data['newUserGuide']['status'] == 0:
+        yield ('播放新手指南4s')
+        # https://social.baicizhan.com/api/deskmate/game/finish_new_user_guide
+        time_long = int(time.time() * 1000)
+        headers = getHeaders('$social', cookie, time_long, index = 1)
+        headers['Content-Type'] = 'application/json'
+        time.sleep(4)
+        response = http2_client_obj.send_http2_request('POST',f'https://{headers["Host"]}/api/deskmate/game/finish_new_user_guide', headers, '{}')
+
+    finish_all = False
+    if time.localtime().tm_wday in [5,6]:
+        finish_all = True
+
+    while True:
+        try:
+            cnt = data['mine']['finishCount']
+            deskmate_cnt = data['deskmate']['finishCount']
+            # yield (cnt, deskmate_cnt)
+            if finish_all and cnt + deskmate_cnt >= 100:
+                break
+            elif not finish_all and cnt >= 50:
+                break
+            topic_list = data['needCompletedTopicList']
+            deskmate_completed_list = data['deskmate']['completedTopicList']
+            my_completed_list = data['mine']['completedTopicList']
+            finished_topic_ids = [t['topicId'] for t in deskmate_completed_list]
+            finished_topic_ids.extend([t['topicId'] for t in my_completed_list])
+            # 找第一个同桌未完成的题目
+            found = - random.randint(0, 2)
+            topic_id = -1
+            
+            for topic in topic_list:
+                if topic['topicId'] not in finished_topic_ids:
+                    found += 1
+                    topic_id = topic['topicId']
+                    topic_option = topic['topicOption']
+                    if found > 0:
+                        break
+            if topic_id == -1:
+                raise f'{name} 没有找到未完成的题目'
+
+            time.sleep(random.randint(3000, 4000) / 1000)
+
+            # https://social.baicizhan.com/api/deskmate/game/word_match
+            # {"topicId":45,"topicOption":"疼痛"}
+            time_long = int(time.time() * 1000)
+            headers = getHeaders('$social', cookie, time_long, index = 1)
+            headers['Content-Type'] = 'application/json'
+            response = http2_client_obj.send_http2_request('POST',f'https://{headers["Host"]}/api/deskmate/game/word_match', headers, json.dumps({"topicId":topic_id,"topicOption":topic_option}, ensure_ascii=False))
+            response_json = response.json()['data']
+            # 刷新
+            while True:
+                # https://social.baicizhan.com/api/deskmate/game/get_word_match_info
+                time_long = int(time.time() * 1000)
+                headers = getHeaders('$social', cookie, time_long, index = 1)
+                response = http2_client_obj.send_http2_request('GET',f'https://{headers["Host"]}/api/deskmate/game/get_word_match_info', headers, None)
+                data = response.json()['data']
+                if data['needCompletedTopicList'] is not None:
+                    break
+                time.sleep(1)
+            
+            cnt = data['mine']['finishCount']
+            yield (f'完成第{cnt}次{response_json} <br>')
+            if response_json['credit'] > 0:
+                yield (f'铜板+{response_json["credit"]} <br>')
+                time.sleep(0.5)
+        except Exception as e:
+            yield (f'{name} {e}')
+    yield (f'{name} 每周双人战结束 <br>')
+
+    if data['status'] == 3:# 结束
+        if data['wordMatchReward']['status'] == 0:
+            # https://social.baicizhan.com/api/deskmate/game/send_word_match_reward
+            time_long = int(time.time() * 1000)
+            headers = getHeaders('$social', cookie, time_long, index = 1)
+            headers['Content-Type'] = 'application/json'
+            response = http2_client_obj.send_http2_request('POST',f'https://{headers["Host"]}/api/deskmate/game/send_word_match_reward', headers, '{}')
+
+            # 检验是否领取成功
+            # https://social.baicizhan.com/api/deskmate/game/get_word_match_info
+            time_long = int(time.time() * 1000)
+            headers = getHeaders('$social', cookie, time_long, index = 1)
+            response = http2_client_obj.send_http2_request('GET',f'https://{headers["Host"]}/api/deskmate/game/get_word_match_info', headers, None)
+            data = response.json()['data']
+            if data['wordMatchReward']['status'] == 1:
+                yield ('00 每周双人战奖励领取成功 <br>')
+            else:
+                yield ('01 领取失败 <br>')
+        else:
+            yield ('02 奖励已领取 <br>')
+    else:
+        yield ('03 等待同桌完成 <br>')
+
+
+def get_class_range(user_config, total_user_cnt = 18, max_rank_cnt = 1000):
+    user_index = int(user_config['user_index'])
+    total_user_cnt = total_user_cnt
+    # 获取今日日期
+    today = datetime.datetime.now().strftime('%Y%m%d')
+    # 获取日期最后一位
+    # date_last_num = int(today[-1])
+    # date_last_num = 0
+    # 将这100个班级分成total_user_cnt份
+    cnt = max_rank_cnt / total_user_cnt
+    num_start = int(cnt * (user_index) + 1)
+    num_end = int(cnt * (user_index + 1) )
+    if user_index == total_user_cnt - 1:
+        num_end = max_rank_cnt - 1
+    # 组成班级范围
+    # num_start += date_last_num * 100
+    # num_end += date_last_num * 100
+    # 限制班级范围防止一次性获取过多
+    if num_end - num_start > 30:
+        num_end = num_start + 30
+    return num_start, num_end
+
+def task_center(user_cookie, user_config, http2_client_obj: http2_client, word_cnt=10, react_wait_seconds=1):
+    # 获取不断电和学习分排行榜
+    client_date = int(datetime.datetime.now().strftime('%Y%m%d'))
+    def daily_summary_desc(client_date):
+        # https://learn.baicizhan.com/api/study/win-streak/dailySummary?clientDate=20240817
+        time_long = int(time.time() * 1000)
+        headers = getHeaders("$learn", user_cookie, int(time.time()), index=1)
+        response = http2_client_obj.send_http2_request('GET', f'https://{headers["Host"]}/api/study/win-streak/dailySummary?clientDate={client_date}', headers, None)
+        return response.json()
+    
+    
+    data = daily_summary_desc(client_date)['data']
+    score = data['score']
+    if score is None:
+        yield '还未打卡'
+        score = 0
+    rank = data['rank']
+    win_streak_days = data['winStreakDays']
+    if rank is None:
+        raise Exception('学习记录异常')
+    rank = rank['level']
+    level_in_rank = 1
+    for person in data['rank']['rankList']:
+        if person.get('score', 0) > score:
+            level_in_rank += 1
+
+    yield f'{win_streak_days}天<br>学习分{score}排{rank}段第{level_in_rank}名'
+    time.sleep(react_wait_seconds)
+
+    def get_monthly_task_desc():
+        # https://social.baicizhan.com/api/task/v2/getOneUnEndTask
+        time_long = int(time.time() * 1000)
+        headers = getHeaders("$social", user_cookie, int(time.time()), index=1)
+        response = http2_client_obj.send_http2_request('GET', f'https://{headers["Host"]}/api/task/v2/getOneUnEndTask', headers, None)
+        return response.json()
+    
+    monthly_task_data = get_monthly_task_desc()['data']
+    if monthly_task_data is None:
+        progress = total = 'null'
+    else:
+        progress = monthly_task_data.get('progress', 'null')
+        total = monthly_task_data.get('actionCnt', 'null')
+    
+    # yield f' 新任务{progress}/{total}'
+
+
+    # 前往任务中心领取奖励
+    def get_award(user_task_id, task_award_list):
+        # https://social.baicizhan.com/api/task/v2/getAward?userTaskId=1631594
+        time_long = int(time.time() * 1000)
+        headers = getHeaders("$social", user_cookie, int(time.time()), index=1)
+        headers['Content-Type']= 'application/json'
+        response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/api/task/v2/getAward?userTaskId={user_task_id}', headers, content = '{}')
+        data = response.json()
+        if data.get('code', 0) == 1:
+            return get_award_str(task_award_list)
+        else:
+            return f'失败{data.get("msg", "")}'
+        
+    def get_award_str(award_list):
+        award_str = ''
+        for award in award_list:
+            award_str += f'{award["type"]}+{award["cnt"]} '
+        return award_str
+
+    def get_task_center_reward_desc(user_cookie, user_config):
+        # https://social.baicizhan.com/api/task/v2/home
+        user_study_ = user_study(http2_client_obj)
+        time_long = int(time.time() * 1000)
+        headers = getHeaders("$social", user_cookie, int(time.time()), index=1)
+        response = http2_client_obj.send_http2_request('GET', f'https://{headers["Host"]}/api/task/v2/home', headers, None)
+        data = response.json()['data']
+        yield "任务中心：<br>"
+        for task in data['taskList']:
+            task_id = task['userTaskId']
+            task_name = task['taskName']
+            task_type = task['taskType']
+            task_progress = task['progress']
+            task_action_cnt = task['actionCnt']
+            yield f'#{task_type}.{task_name}{task_progress}/{task_action_cnt} '
+            payload = [
+                {"index": 28, "extra_info": "{\"task_id\":%d}" % task_id}
+            ]
+            report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=1)
+            
+            if task['status'] == 1:
+                yield f"领取{get_award(task['userTaskId'], task['awardList'])}<br>"
+            elif task['status'] == 0:
+                if task_name == '加量学5个单词':
+                    time.sleep(1.5)
+                    user_study_.user_study_upload_task_action(user_cookie=user_cookie, user_config=user_config, task_upload_req_list=[['learnMore', 5]])
+                    time.sleep(3)
+                    yield f"领取{get_award(task['userTaskId'], task['awardList'])}<br>"
+                elif '单词PK' in task_name and '3' in task_name:
+                    for msg in pkonline2(user_cookie, user_config, http2_client_obj, max_round=8, max_win_round=3):
+                        yield msg
+                    time.sleep(1.5)
+                    yield f"领取{get_award(task['userTaskId'], task['awardList'])}<br>"
+                elif '单词PK' in task_name and '1' in task_name:
+                    for msg in pkonline2(user_cookie, user_config, http2_client_obj, max_round=8, max_win_round=1):
+                        yield msg
+                    time.sleep(1.5)
+                    yield f"领取{get_award(task['userTaskId'], task['awardList'])}<br>"
+                elif task_name == '单词速听复习10个单词':
+                    time.sleep(1.5)
+                # elif task_name == '完成今日学习计划':
+
+                # elif taskname == '完成1局单词消消练':
+                # 因为要花费50铜板，因此不做处理
+                else:
+                    yield '<br>'
+            else:
+                yield '<br>'
+                # 其他还没记录，先返回描述供开发
+            # status == 2：任务已完成，奖励已领取
+    
+    
+    if progress != 'null' and total != 'null':
+        # 前往任务中心领取奖励
+        time.sleep(react_wait_seconds)
+        for msg in get_task_center_reward_desc(user_cookie, user_config):
+            yield msg
+
+
+    payload=[
+        {"index": 16, "extra_info": "{\"word_num\":%d,\"experience\":%d}" % (word_cnt, score)} # 数据上传完成标志
+    ]
+    report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=1)
+
+def sleep_actual(sleep_seconds):
+    sleep_seconds *= 0.9
+    index = random.randint(1, 100)
+    if index < 5:
+        time.sleep(sleep_seconds * index)
+    time.sleep(sleep_seconds + index * 0.001)
+    return
+
+def learn_words(user_cookie, user_config, http2_client_obj: http2_client, react_wait_seconds=1, word_count=5):
+    unique_id = user_config['unique_id']
+    
+    yield f'{user_config["book_id"]}书'
+    client_date = int(datetime.datetime.now().strftime('%Y%m%d'))
+    user_study_ = user_study(http2_client_obj)
+
+    def get_credit_status_desc(client_date):
+        time_long = int(time.time() * 1000)
+        headers = getHeaders("$learn", user_cookie, int(time.time()), index=1)
+        url = f'https://{headers["Host"]}/api/study/xMode/getCreditStatus?date={client_date}'
+        response = http2_client_obj.send_http2_request('GET', url, headers, None)
+        result = response.json()
+        if result['code'] == 1:
+            return result['data']['inExperiment'], result['data']['studyCreditObtained'], result['data']['reviewCreditObtained']
+        return False, False, False
+    
+    iE, sCO, rCO = get_credit_status_desc(client_date)
+    if not iE:
+        yield '没有拼写奖励 '
+    elif sCO and rCO:
+        yield '所有拼写奖励已领取 '
+        
+    # if (iE and (not sCO or not rCO)) or not today_daka:
+    # 开始新学5个单词
+    book_finished = False
+    book_id = user_config['book_id']
+    learnt_list = get_learnt_list(unique_id)
+    learn_list = getRandomWordIDInBook('lookup.db', book_id, word_count, learnt_list)
+    if (len(learn_list) < word_count):
+        if len(learnt_list) == 0:
+            yield '<p style="color:red;background-color:yellow">没有书本数据，请添加或更换书本</p>切换到#410'
+            book_id = 410
+            learn_list = getRandomWordIDInBook('lookup.db', book_id, word_count, [])
+            word_count = len(learn_list)
+        else:
+            yield '<p style="color:red;background-color:yellow">新词不足 重新学习本书或更换书本</p>'
+            clear_learnt_list(unique_id)
+            yield '已完成并清空本账号学习记录<br>'
+            book_finished = True
+            learn_list = getRandomWordIDInBook('lookup.db', book_id, word_count, [])
+            word_count = len(learn_list)
+    yield f'本次{word_count}个词<br>'
+
+    add_learnt_list(unique_id, learn_list)
+    
+    learnt_count = 0
+    yield f'完成新学轮数：'
+    for strategy_id in range(1, 4): # 图选、英选中、中选英
+        for i in range(word_count):
+            
+            
+            '''choice_topic_id -1斩,null拼写,其他正常'''
+            payload = [
+                {"index": 7, "extra_info": "{\"topic_id\":%d,\"strategy_id\":\"q%d\",\"plan_type\":\"XModelNewStudy\"}" % (learn_list[i], strategy_id)},
+            ]
+            report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=0)
+            sleep_actual(1)
+            
+            # 选择单词
+            payload = [
+                {"index": 8, "extra_info": "{\"topic_id\":%d,\"strategy_id\":\"q%d\",\"choice_topic_id\":%d,\"is_right\":1,\"plan_type\":\"XModelNewStudy\"}" % (learn_list[i], strategy_id, learn_list[i])},
+            ]
+            report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=0)
+            learnt_count += 1
+            if learnt_count == 5:
+                # 上传win_streak_status
+                yield str(user_study_.user_study_submit_win_streak_records(user_cookie=user_cookie, user_config=user_config, client_date=client_date))
+                # 疑似bug：user_study_submit_win_streak_records的client_date有默认值，但这个默认值可能是程序启动时的时间，导致跨天的打卡失败
+            sleep_actual(react_wait_seconds)
+            if strategy_id == 1:
+                payload = [
+                    {"index": 9, "extra_info": "{\"topic_id\":%d,\"book_id\":%d,\"channel\":\"study_mainstream\",\"plan_type\":\"XModelNewStudy\"}" % (learn_list[i], user_config['book_id'])}
+                ]
+                report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=0)
+                # 学习单词
+                sleep_actual(1)
+            yield '.'
+        yield f'{strategy_id}'
+
+    def daka_desc(word_count: int, unique_id: str, client_date: str):
+        # 根据用户unique_id计算一个固定的timedelta，范围-1000s到0
+        time_long = int(time.time() * 1000) - (int(hashlib.md5(str(unique_id).encode('utf-8')).hexdigest(), 16) % 1000000)
+        headers = getHeaders("$learn", user_cookie, int(time.time()), index=1)
+        headers['Content-Type']= 'application/x-www-form-urlencoded'
+        http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/api/study/xMode/daka', headers, f'date={client_date}&count={word_count}')
+        
+    daka_desc(word_count, unique_id, client_date)
+    # 拼写
+    payload = [
+        {"index": 10}# 开始拼写标志
+    ]
+    report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=0)
+    for i in range(word_count):
+        payload = [
+            {"index": 7, "extra_info": "{\"topic_id\":%d,\"strategy_id\":\"q%d\",\"plan_type\":\"XModelNewStudy\"}" % (learn_list[i], 4)},
+        ]
+        report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=0)
+        sleep_actual(3.6)
+        payload = [
+            {"index": 8, "extra_info": "{\"topic_id\":%d,\"strategy_id\":\"q%d\",\"choice_topic_id\":null,\"is_right\":1,\"plan_type\":\"XModelNewStudy\"}" % (learn_list[i], 4)},
+        ]
+        report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=0)
+        time.sleep(react_wait_seconds)
+        yield '.'
+        
+    def receive_credit_desc(type: int, client_date: str):# 1 新学，2 复习
+        type_str = 'study' if type == 1 else 'review'
+        time_long = int(time.time() * 1000)
+        headers = getHeaders("$learn", user_cookie, int(time.time()), index=1)
+        response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/api/study/xMode/receiveCredit?date={client_date}&type={type_str}', headers, None)
+        result = response.json()
+        return result['data']
+    
+    if iE and not sCO:
+        yield f'拼写铜板x{receive_credit_desc(1, client_date)}<br>'
+    else:
+        yield '拼写完成<br>'
+
+    payload=[
+        {"index": 11}# 拼写完成标志
+    ]
+    report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=0)
+    payload=[
+        {"index": 12}# 复习过渡页
+    ]
+    report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=0)   
+    time.sleep(react_wait_seconds)
+    payload=[
+        {"index": 13}# 复习过渡页点击
+    ]
+    report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=0)
+
+    # 复习列表是今天学过的+昨天的单词，昨天的复习时斩掉
+    yield '开始复习 '
+
+    yesterday_list = get_history_learnt_list(unique_id, delta=1)
+    the_day_before_list = get_history_learnt_list(unique_id, delta=2)
+    review_count = len(yesterday_list)+len(the_day_before_list)
+    yield f'共{review_count}个单词<br>'
+
+    review_wrong_cnt = 0
+    if review_count > 0:
+        payload=[
+            {"index": 14}# 复习开始
+        ]
+        report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=0)
+        
+        # 复习选择题
+        yield '复习选择'
+        for word in yesterday_list:
+            # 昨天的单词：复习
+            payload = [
+                {"index": 7, "extra_info": "{\"topic_id\":%d,\"strategy_id\":\"q%d\",\"plan_type\":\"XModelNewStudy\"}" % (word, 2)},
+            ]
+            report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=0)
+            sleep_actual(1)
+            payload = [
+                {"index": 8, "extra_info": "{\"topic_id\":%d,\"strategy_id\":\"q%d\",\"choice_topic_id\":%d,\"is_right\":1,\"plan_type\":\"XModelNewStudy\"}" % (word, 2, word)},
+            ]
+            report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=0)
+            time.sleep(react_wait_seconds)
+            yield '.'
+        
+        yield ' 前天'
+        for word in the_day_before_list:
+            # 前天的单词：斩掉
+            payload = [
+                {"index": 7, "extra_info": "{\"topic_id\":%d,\"strategy_id\":\"q%d\",\"plan_type\":\"XModelNewStudy\"}" % (word, 2)},
+            ]
+            report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=0)
+            sleep_actual(1)
+            payload = [
+                {"index": 8, "extra_info": "{\"topic_id\":%d,\"strategy_id\":\"q%d\",\"choice_topic_id\":-1,\"is_right\":1,\"plan_type\":\"XModelNewStudy\"}" % (word, 2)},
+            ]
+            report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=0)
+            time.sleep(react_wait_seconds)
+            yield '.'
+
+        # 复习拼写
+        def save_study_record_desc(topic_id: int, book_id: int, sleep_time_ms: int, wrong=False):
+            time_long = int(time.time() * 1000)
+            headers = getHeaders("$learn", user_cookie, int(time.time()), index=1)
+            headers['Content-Type']= 'application/json'
+            payload = {}
+            if wrong:
+                payload = {
+                    "bookId": int(book_id),
+                    "topicId": int(topic_id),
+                    "spellWrongTimes" : 1
+                }
+            else:
+                payload = {
+                    "bookId": int(book_id),
+                    "topicId": int(topic_id),
+                    "costMilliseconds": int(sleep_time_ms)
+                }
+            response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/api/study/xMode/saveStudyRecord', headers, content=json.dumps(payload))
+            
+        yield ' 复习拼写'
+        for word in yesterday_list:
+            # 昨天的单词：拼写
+            payload = [
+                {"index": 7, "extra_info": "{\"topic_id\":%d,\"strategy_id\":\"q%d\",\"plan_type\":\"XModelNewStudy\"}" % (word, 4)},
+            ]
+            report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=0)
+            sleep_time = (random.randint(3000, 6000) / 1000)
+            if random.randint(1, 5) == 1:
+                # 错题
+                review_wrong_cnt += 1
+                time.sleep(sleep_time)
+                save_study_record_desc(word, user_config['book_id'], sleep_time * 1000, wrong=True)
+                yield '`'
+                extra_sleep_time = random.randint(3000, 5000) / 1000
+                time.sleep(extra_sleep_time)
+                save_study_record_desc(word, user_config['book_id'], (extra_sleep_time + sleep_time) * 1000)
+            else:
+                time.sleep(sleep_time)
+                save_study_record_desc(word, user_config['book_id'], sleep_time * 1000)
+            payload = [
+                {"index": 8, "extra_info": "{\"topic_id\":%d,\"strategy_id\":\"q%d\",\"choice_topic_id\":null,\"is_right\":1,\"plan_type\":\"XModelNewStudy\"}" % (word, 4)},
+            ]
+            report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=0)
+            time.sleep(react_wait_seconds)
+            yield '.'
+
+        # 复习完成
+        daka_desc(word_count + review_count, unique_id, client_date)
+        if iE and not rCO:
+            yield f' 复习铜板x{receive_credit_desc(2, client_date)} '
+        else:
+            yield ' 复习完成 '
+        payload=[
+            {"index": 15}# 复习完成标志
+        ]
+        report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=0)
+    
+    def win_streak_status_desc() -> bool:
+        # https://learn.baicizhan.com/api/study/win-streak/status
+        time_long = int(time.time() * 1000)
+        headers = getHeaders("$learn", user_cookie, int(time.time()), index=1)
+        response = http2_client_obj.send_http2_request('GET', f'https://{headers["Host"]}/api/study/win-streak/status', headers, None)
+        return response.json()['data']
+    
+
+    if win_streak_status_desc():
+        yield  '连胜'
+    else:
+        yield '连胜上传失败'
+    
+    def report_finish_daily_plan_desc(book_id, new_words_count, total_words_count, book_finished):
+        # https://learn.baicizhan.com/api/study/reportFinishDailyPlan
+        time_long = int(time.time() * 1000)
+        payload = {
+            "bookId": int(book_id),
+            "totalWordsCount": int(total_words_count),
+            "newWordsCount": int(new_words_count),
+            "bookFinished": 'true' if (book_finished) else 'false'
+        }
+        headers = getHeaders("$learn", user_cookie, int(time.time()), index=1)
+        headers['Content-Type']= 'application/json'
+        response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/api/study/reportFinishDailyPlan', headers, content = json.dumps(payload))
+        return response.json()
+    
+    report_finish_daily_plan_desc(user_config['book_id'], word_count, word_count + review_count, book_finished)
+
+    word_done_data = {}
+    for i in learn_list:
+        word_done_data[i] = {
+            "current_score": 3,
+            "span_days": 0,
+            "used_time": 0,
+            "done_times": 4,
+            "wrong_times": 0,
+            "is_first_do_at_today": 1,
+            "tag_id": 0,
+            "spell_score": 3,
+            "listening_score": 4,
+            "chn_score": 3,
+            "review_round": 0
+        }
+    # 数据收集非常水，span_days等等好几个字段都是废弃的
+    for i in yesterday_list:
+        word_done_data[i] = {
+            "current_score": 5,
+            "span_days": 0,
+            "used_time": 0,
+            "done_times": 4,
+            "wrong_times": 0,
+            "is_first_do_at_today": 0,
+            "tag_id": 0,
+            "spell_score": 3,
+            "listening_score": 7,
+            "chn_score": 3,
+            "review_round": 0
+        }
+    for i in the_day_before_list:
+        word_done_data[i] = {
+            "current_score": 6,
+            "span_days": 0,
+            "used_time": 0,
+            "done_times": 4,
+            "wrong_times": 0,
+            "is_first_do_at_today": 0,
+            "tag_id": 0,
+            "spell_score": 3,
+            "listening_score": 7,
+            "chn_score": 3,
+            "review_round": 0
+        }
+    user_study_.user_study_submit_experience_record(user_cookie=user_cookie, user_config=user_config, word_count=word_count, wrong_count=0, review_count=review_count, review_wrong_count=review_wrong_cnt)
+    user_study_.user_study_update_done_data(user_cookie=user_cookie, user_config=user_config, done_data=word_done_data)
+    user_study_.user_study_user_daka_v2(user_cookie=user_cookie, user_config=user_config)
+
+
+    time.sleep(react_wait_seconds)
+    yield ' 分享中.'
+    # 返回首页去打卡
+    report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=0)
+    # 获取打卡背景图
+    result = user_study_.get_daka_background_datas(learn_list, user_cookie=user_cookie, user_config=user_config)
+    poster_id = result.category_info[0].image_ids[0]
+    
+
+    payload=[
+        {"index": 17},# 点击去打卡
+        {"index": 18, "extra_info": "{\"daka_type\":\"poster\",\"daka_poster_id\":\"%d\"}" % poster_id},# 访问打卡页面
+        {"index": 0}# heartbeat
+    ]
+    report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=0)
+    time.sleep(react_wait_seconds)
+    yield '.'
+    
+    payload=[
+        {"index": 19},# 点击分享到微信
+        {"index": 20, 'extra_info': "{\"daka_type\":\"poster\",\"daka_poster_id\":\"%d\", \"share_channel\":\"weixin\"}" % poster_id}# 点击打卡
+    ]
+    report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=0)
+    time.sleep(react_wait_seconds)
+    yield '.'
+    if social_send_share_success(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, channel=1):
+        yield '分享成功'
+    result = user_study_.user_study_share_bonus(user_cookie=user_cookie, user_config=user_config)
+    yield f'奖励+{result.coinCount}'
+    time.sleep(react_wait_seconds)
+
+    # 返回主页
+    payload=[
+        {"index": 21, "extra_info": "{\"daka_type\":\"poster\",\"daka_poster_id\":\"%d\",\"share_channel\":\"weixin\"}" % poster_id}# 返回首页
+    ]
+    report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=0)
+    yield ' 学习结束<br>'
+
+    for msg in task_center(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, word_cnt=word_count + review_count):
+        yield msg
+
+def get_leader_info(members):
+    for member in members:
+        if member['leader'] == True:
+            return member['uniqueId'], member['nickname']
+    return None, None
+
+def save_member_info(group_id, members, cursor: sqlite3.Cursor, today_date: int): # today_date必须是今天0点的时间戳，避免重复插入
+    # 保存成员信息
+    for member in members:
+        # member["uniqueId"]=int
+        # 选取同一天、同一用户的最早打卡时间
+        recorded_time = cursor.execute(
+            f'SELECT COMPLETED_TIME FROM MEMBERS WHERE USER_ID = ? AND TODAY_DATE = ? ORDER BY COMPLETED_TIME',
+            (member['uniqueId'], today_date)
+        ).fetchone()
+        if recorded_time and recorded_time[0]!='' :
+            recorded_time = int(recorded_time[0])
+            if recorded_time != 0 and recorded_time < member['completedTime']:
+                member['completedTime'] = recorded_time
+            # 可能加入新的小班后，会产生更晚的时间，以早的为准
+
+        # 选取同一用户的最早头像
+        member['avatar'] = None # 暂时不需要头像
+
+        # 选取同一用户的最早昵称
+        nickname = cursor.execute(
+            f'SELECT NICKNAME FROM USER_NAME WHERE USER_ID = ?',
+            (member['uniqueId'],)
+        ).fetchone()
+        # 如果没有这个用户
+        if nickname is None:
+            cursor.execute(
+                f'INSERT INTO USER_NAME (USER_ID, NICKNAME) VALUES (?,?)',
+                (member['uniqueId'], member['nickname'])
+            )
+        elif nickname[0]!= member['nickname']: # 如果昵称发生变化
+            cursor.execute(
+                f'UPDATE USER_NAME SET NICKNAME = ? WHERE USER_ID = ?',
+                (member['uniqueId'], member['nickname'])
+            )
+
+        # 这个地方性能低下，要优化
+        # 获取书本的HASH_ID
+        hash_id = cursor.execute(
+            f'SELECT HASH_ID FROM BOOK_NAME WHERE BOOK_NAME = ?',
+            (member['bookName'],)
+        ).fetchone()
+        if hash_id is not None:
+            member['bookName'] = hash_id[0]
+        else:
+            # 插入新的书本
+            cursor.execute(
+                f'INSERT INTO BOOK_NAME (BOOK_NAME) VALUES (?)',
+                (member['bookName'],)
+            )
+            hash_id = cursor.execute(
+                f'SELECT last_insert_rowid() FROM BOOK_NAME'
+            ).fetchone()
+            member['bookName'] = hash_id[0]
+
+        cursor.execute(
+            f'INSERT INTO MEMBERS (USER_ID, TODAY_DATE, GROUP_ID, COMPLETED_TIME, WORD_COUNT, STUDY_CHEAT, COMPLETED_TIMES, DURATION_DAYS, BOOK_NAME) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(USER_ID, TODAY_DATE, GROUP_ID) DO UPDATE SET '
+            'COMPLETED_TIME = excluded.COMPLETED_TIME, '
+            'WORD_COUNT = excluded.WORD_COUNT, '
+            'STUDY_CHEAT = excluded.STUDY_CHEAT, '
+            'COMPLETED_TIMES = excluded.COMPLETED_TIMES, '
+            'DURATION_DAYS = excluded.DURATION_DAYS, '
+            'BOOK_NAME = excluded.BOOK_NAME ',
+            (
+                member['uniqueId'],# *
+                today_date, # *
+                group_id, # *
+                member['completedTime'],
+                member['todayWordCount'],
+                member['todayStudyCheat'],
+                member['completedTimes'],
+                member['durationDays'],
+                member['bookName']
+                # None, # group_name，可以在notice表中根据group_id获取
+                # None # data_time，对定时记录冷储存数据库无用
+            )
+        )
+
+def check_study_cheat(date_str, members, user_cookie, http2_client_obj: http2_client, daka_list: daka_list_class) -> bool:
+    need_recheck = False
+    for member in members:
+        if member['todayStudyCheat']:
+            daka_list.track_cheat_user(date_str, member['uniqueId'], member['todayWordCount'], member['completedTime'], 1) # 1表示刷词，0表示认真学
+            continue
+        if member['todayWordCount'] >= 500: # 如果用户已被跟踪，则已经举报过，证明是认真学的
+            if daka_list.user_tracked(member['uniqueId']):
+                # 已经举报过，证明不是刷词
+                print(f'用户{member["uniqueId"]}\033[1;32m已举报过，不是刷词\033[0m')
+                continue
+            # https://group.baicizhan.com/group/user_report
+            # {"reportModule":203,"reportReason":4,"reportTarget":{"uniqueId":...}}
+            payload = {
+                "reportModule": 203,
+                "reportReason": 4,
+                "reportTarget": {
+                    "uniqueId": member['uniqueId']
+                }
+            }
+            headers = getHeaders("$group", user_cookie, int(time.time()), index=1)
+            headers['Content-Type']= 'application/json'
+            time.sleep(random.randint(14, 28)/10)
+            response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/group/user_report', headers, content=json.dumps(payload))
+            print(f'用户{member["uniqueId"]}\033[1;33m疑似刷词{member["todayWordCount"]}个\033[0m，已举报')
+            daka_list.track_cheat_user(date_str, member['uniqueId'], member['todayWordCount'], member['completedTime'], 0)
+            need_recheck = True
+    return need_recheck
+
+def notice_and_rank(user_cookie, user_config, http2_client_obj: http2_client, total_user_cnt, daka_list: daka_list_class, target_rank):
+    '''获取公告和排名'''
+    VERBOSE = True
+    yield str(target_rank)
+    if DEBUG:
+        if user_config['user_index'] >= DEBUG_SIZE:
+            time.sleep(10)
+            return
+    # https://group.baicizhan.com/group/get_group_rank?rank=7
+    target_class_list = daka_list.get_class_list(target_rank, user_cookie)
+
+    # https://group.baicizhan.com/group/information?shareKey=
+    class_rank_start, class_rank_end = get_class_range(user_config, total_user_cnt, len(target_class_list))
+    if DEBUG:
+        lock.acquire()
+        # class_rank_end = class_rank_start
+        yield '⚠️ WARNING: DEBUG MODE (only the first class will be obtained)<br>'
+
+    data_list = []
+    recheck_data_index = []
+    date_str = datetime.datetime.now().strftime('%Y-%m-%d')
+    for i in range(class_rank_start, class_rank_end + 1):
+        headers = getHeaders("$group", user_cookie, int(time.time()), index=1)
+        try:
+            share_key = target_class_list[i - 1]['shareKey']
+            response_json = http2_client_obj.send_http2_request('GET', f'https://{headers["Host"]}/group/information?shareKey={share_key}', headers, None, True)
+            group_info = response_json['data']['groupInfo']
+            group_info['members'] = response_json['data']['members']
+
+            if not DEBUG and check_study_cheat(date_str, group_info['members'], user_cookie, http2_client_obj, daka_list):
+                # （调试模式不检查，防止重复举报）如果有新的刷词记录，则需要一段时间后重新检查
+                recheck_data_index.append(i)
+
+            # 下面进行预处理，减少在lock过程中的时间
+            group_info['score'] = target_class_list[i - 1].get('score')
+            if group_info['notice'] is None or group_info['notice'] == '':
+                group_info['notice'] = '(空)'
+            # group_info['hash_value'] = hashlib.md5(group_info['notice'].encode('utf-8')).hexdigest()
+            group_info['leader_id'], group_info['leader_name'] = get_leader_info(group_info['members'])
+            data_list.append(group_info)
+            if VERBOSE:
+                print(f'{target_rank}.{i}.{group_info["name"]}<br>')
+            if DEBUG:
+                print(f'WARNING: DEBUG MODE<br>')
+        except Exception as e:
+            print(f'❌ → 获取到排名{target_rank}的班级列表失败，请检查网络或排名是否存在')
+            print(f'({class_rank_start}, {class_rank_end}, {len(target_class_list)})')
+            print(traceback.format_exc())
+            yield (f'❌ → 获取到排名{target_rank}的班级列表失败，请检查网络或排名是否存在')
+            yield f'({class_rank_start}, {class_rank_end}, {len(target_class_list)})'
+            yield traceback.format_exc()
+        time.sleep(random.randint(20, 30) / 10)
+
+    time.sleep(2)
+    for i in recheck_data_index:
+        # 重新检查刷词记录
+        headers = getHeaders("$group", user_cookie, int(time.time()), index=1)
+        try:
+            share_key = target_class_list[i - 1]['shareKey']
+            response_json = http2_client_obj.send_http2_request('GET', f'https://{headers["Host"]}/group/information?shareKey={share_key}', headers, None, True)
+            group_info = response_json['data']['groupInfo']
+            group_info['members'] = response_json['data']['members']
+            if not DEBUG and check_study_cheat(date_str, group_info['members'], user_cookie, http2_client_obj, daka_list):
+                # （调试模式不检查，防止重复举报）如果有新的刷词记录，则需要一段时间后重新检查
+                recheck_data_index.append(i)
+            group_info['score'] = target_class_list[i - 1].get('score')
+            # 下面进行预处理，减少在lock过程中的时间
+            if group_info['notice'] is None or group_info['notice'] == '':
+                group_info['notice'] = '(空)'
+            # group_info['hash_value'] = hashlib.md5(group_info['notice'].encode('utf-8')).hexdigest()
+            group_info['leader_id'], group_info['leader_name'] = get_leader_info(group_info['members'])
+            data_list[i - class_rank_start] = group_info
+            if VERBOSE:
+                print(f'2> {target_rank}.{i}.{group_info["name"]}<br>')
+        except :
+            yield (f'❌ → (二次获取)获取到排名{target_rank}的班级列表失败，请检查网络或排名是否存在')
+            yield f'({class_rank_start}, {class_rank_end}, {len(target_class_list)})'
+        time.sleep(random.randint(20, 30) / 10)
+
+    if VERBOSE:
+        print(f'🌟 → 开始储存数据')
+    
+    data_time = int(datetime.datetime.now().timestamp())
+    today_date = int(datetime.datetime.now().strftime('%m%d'))
+    # 暂不再保存班级排名信息
+    # if rank_type == 7 or rank_type == 6:
+    #     # 对第六段位，只保存前100名
+    #     if rank_type == 6:
+    #         class_list = class_list[:100]
+    #     for i, class_item in enumerate(class_list):
+    #         class_share_key = class_item['shareKey']
+    #         class_name = class_item['groupName']
+    #         class_score = class_item['score']
+    #         cursor.execute(f"INSERT OR IGNORE INTO notice (SHARE_KEY, NAME, RANK_TYPE, RANK, HASH_VALUE, CONTENT, DATE, SCORE) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    #                             (class_share_key, class_name, rank_type, i + 1, '', '', time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()), class_score))
+    #     if VERBOSE:
+    #         print(f'★ → 获取到排名{rank_type}的班级列表\n')  
+    #     yield f'★{rank_type}'
+
+    current_rank = target_rank * 1000 + class_rank_start
+    for i, group_info in enumerate(data_list):
+        class_name = group_info['name']
+        group_id = group_info['id']
+        content = group_info['notice']
+        introduction = group_info['introduction']
+        share_key = group_info['shareKey']
+        avatar = group_info['avatar']
+        score = group_info['score']
+        members = group_info['members']
+        leader_id, leader_name = group_info['leader_id'], group_info['leader_name']
+        for member in members:
+            daka_list.store_member(today_date, member['uniqueId'], group_id, member['completedTime'], today_date, member['todayWordCount'], member['todayStudyCheat'], member['completedTimes'], member['durationDays'], member['bookName'], member['nickname'], member['avatar'])
+
+        # hash_value = group_info['hash_value']
+        # 检查GROUP_NAME表中是否有这个班级
+        daka_list.store_group_info(group_id, share_key, leader_id, class_name, introduction, avatar)
+        status = daka_list.store_notice(group_id, current_rank, content, data_time, score)
+        if status == 0:
+            if VERBOSE:
+                print(f'🤔 → 检查！排名{i + class_rank_start}的班级{class_name}的公告被清空')
+            yield '+'
+        elif status == -1:
+            if VERBOSE:
+                print(f'😒 → 偷懒，排名{i + class_rank_start}的班级{class_name}的公告还是空的')
+            yield '-'
+        elif status == -2:
+            if VERBOSE:
+                print(f'😓 → 可惜，排名{i + class_rank_start}的班级{class_name}的公告被清空，但没有记录')
+        elif status == 1:
+            if VERBOSE:
+                print(f'❤️ → 获取到排名{i + class_rank_start}的班级{class_name}的通知')
+            yield '.'
+        elif status == 2:
+            if VERBOSE:
+                print(f'🙈 → 排名{i + class_rank_start}的班级{class_name}的通知已存在数据库，跳过')
+            yield '`'
+        
+        current_rank += 1
+
+    if DEBUG:
+        lock.release()
+
+
+def watch_daily_sentences(user_cookie, user_config, http2_client_obj):
+    '''观看每日句子精讲'''
+    # https://learn.baicizhan.com/api/activity/sentence/list
+    headers = getHeaders("$learn", user_cookie, int(time.time()), index=1)
+    headers['Content-Type']= 'application/json'
+    response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/api/activity/sentence/list', headers, '{"size":20}')
+    data = response.json()['data']['data']
+    for sentence in data:
+        sentence_id = sentence['id']
+        daka_num = sentence['dakaNum']
+        cn = sentence['sentence']['cn']
+        en = sentence['sentence']['en']
+        sentence_source = sentence['sentenceSource']
+        yield f'句子精讲 #{sentence_id} {daka_num}打卡'
+        if user_config['user_index'] == 0:
+            yield f'<br>{cn}<br>{en}<br>{sentence_source}'
+        # https://learn.baicizhan.com/api/activity/sentence/sentence_daka
+        headers = getHeaders("$learn", user_cookie, int(time.time()), index=1)
+        headers['Content-Type']= 'application/json'
+        response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/api/activity/sentence/sentence_daka', headers, content = f'{{"sentenceId":{sentence_id}}}')
+        if response.json()['code'] == 1:
+            yield ' 打卡成功 '
+        # https://learn.baicizhan.com/api/activity/sentence/detail?sentenceId=882
+        headers = getHeaders("$learn", user_cookie, int(time.time()), index=1)
+        response = http2_client_obj.send_http2_request('GET', f'https://{headers["Host"]}/api/activity/sentence/detail?sentenceId={sentence_id}', headers, None)
+        if response.json()['code'] == 1:
+            yield '获取详情成功<br>'
+        break
+    return
+
+# imported from shadlc_BCZ_Group_Manager/src/bcz.py
+def getGroupInfo(share_key: str, user_cookie, http2_client_obj:http2_client) -> dict:
+    '''获取【班内主页】信息group/information'''
+    # https://group.baicizhan.com/group/information
+    headers = getHeaders("$group", user_cookie, int(time.time()), index=1)
+    main_response = http2_client_obj.send_http2_request('GET', f'https://{headers["Host"]}/group/information?shareKey={share_key}', headers, None)
+    if main_response.status_code != 200 or main_response.json().get('code') != 1:
+        msg = f'使用主授权令牌获取分享码为{share_key}的小班信息失败! 小班不存在或主授权令牌无效'
+        print(f'{msg}\n{main_response.text}')
+        return {
+            'share_key': share_key,
+            'exception': main_response.text,
+        }
+    return main_response.json()['data']
+    
+# imported from shadlc_BCZ_Group_Manager/src/bcz.py
+def setGroupOnlyInviteCodeJoin(share_key: str, user_cookie: str, http2_client_obj:http2_client) -> str:
+    '''设置小班仅允许邀请码加入'''
+    if getGroupInfo(share_key, user_cookie, http2_client_obj)['groupInfo']['onlyPublicKeyJoin']:
+        return '已设置仅邀请<br>'
+
+    headers = getHeaders('$group', user_cookie, int(time.time()), index=1)
+    headers['Content-Type'] = 'application/json; charset=UTF-8'
+    # https://group.baicizhan.com/group/set_only_public_key_join?shareKey=
+    response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/group/set_only_public_key_join?shareKey={share_key}', content='{}', headers=headers)
+    if response.json().get("code",0) != 1:
+        return (f"切换小班是否仅允许邀请码加入失败，请检查{response.json()}<br>")
+    return (f"<span style='color:green'>切换小班是否仅允许邀请码加入成功</span><br>")
+
+def notice_checker(daka_list: daka_list_class, user_cookie, user_config, http2_client_obj:http2_client):
+    '''检查通知'''
+    message_str = ''
+    for group_share_key in user_config.get('own_groups',[]):
+        # 设置小班仅允许邀请码加入，防止被检查公告泄露
+        message_str += setGroupOnlyInviteCodeJoin(group_share_key, user_cookie, http2_client_obj)
+        # 获取一个待检测的通知
+        while True:
+            item = daka_list.get_check_notice()
+            if item == None:
+                yield message_str + '没有待检测的通知<br>'
+                return
+            check_result = daka_list.check_notice(item['content']) # (posA, posB, result_str)
+            if check_result[0] > -1:
+                message_str += f'[已知][{item["group_id"]}][{item["date"]}] {check_result}<br>'
+                item['content'] = check_result[2]
+                item['cursorA'] = check_result[0]
+                item['cursorB'] = check_result[1]
+                item['checked'] = 2
+                daka_list.patch_check_notice(item)
+            else:
+                break
+        
+
+        content = item['content']
+        message_str += f'待检测的通知：{item["group_id"]}-{item["date"]}<br>{content[:16]}<br>'
+        yield message_str
+        time_long = int(time.time() * 1000)
+        headers = getHeaders('$group', user_cookie, time_long, index = 1)
+        headers['Content-Type'] = 'application/json; charset=UTF-8'
+        payload = {
+            "shareKey": group_share_key,
+            "notice": content
+        }
+        # https://group.baicizhan.com/group/set_notice
+        response_json = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/group/set_notice', content=json.dumps(payload, ensure_ascii=False), headers=headers).json()
+        if response_json['message'] == None:
+            message_str += f'通知发送成功<br>'
+            yield message_str
+            item['checked'] = 2
+            daka_list.patch_check_notice(item)
+        elif response_json['message'] == '小班公告每天只能修改一次':
+            message_str += f'通知发送失败，{group_share_key}的公告每天只能修改一次<br>'
+            yield message_str
+            daka_list.patch_check_notice(item, modified=False)
+        elif response_json['message'] == '小班公告内容涉嫌违规，请修改':
+            acceptable = False
+            content_accept_part = ''
+            check_part = ''
+            if item['checked'] == 0: # 倒找
+                message_str += '小班公告内容涉嫌违规，请修改<br>'
+                pace = 10
+                while not acceptable:
+                    # 将content最后的pace个字符加入到check_part
+                    # if check_part == content[-pace:]: # 因为有可能重复字符是违规的，这样会概率跳过
+                    #     content_accept_part = check_part + content_accept_part
+                    #     content = content[:-pace]
+                    #     continue
+                    content_accept_part = check_part + content_accept_part
+                    check_part = content[-pace:]
+                    content = content[:-pace]
+                    if re.sub(NoticeParser.pattern, '', check_part) == '': # 全是无效字符
+                        continue
+                    yield message_str + f'{content}<u>{check_part}</u><s>{content_accept_part}</s>'
+                    # 发送content
+                    payload = {
+                        "shareKey": group_share_key,
+                        "notice": content
+                    }
+                    headers = getHeaders('$group', user_cookie, time_long, index = 1)
+                    headers['Content-Type'] = 'application/json; charset=UTF-8'
+                    response_json = http2_client_obj.send_http2_request('POST', f'https://group.baicizhan.com/group/set_notice', content=json.dumps(payload, ensure_ascii=False), headers=headers).json()
+                    if response_json['message'] == None:
+                        message_str += f'{response_json["message"]}<br>{content}<u>{check_part}</u><s>{content_accept_part}</s><br>'
+                        yield message_str
+                        acceptable = True
+                        break
+                    elif response_json['message'] != '小班公告内容涉嫌违规，请修改':
+                        message_str += f'通知发送失败{response_json["message"]}<br>{content}<u>{check_part}</u><s>{content_accept_part}</s><br>'
+                        yield message_str
+                        break
+                    # 随机延迟
+                    time.sleep(random.randint(700, 1200) / 1000)
+                if acceptable:
+                    item['content'] = content + check_part # 可能还有问题的部分
+                    item['cursorB'] = len(content) + pace # 记录当前位置
+                    item['checked'] = 1
+                    daka_list.patch_check_notice(item)
+                else:
+                    daka_list.patch_check_notice(item, modified=False)
+            else:
+                # 从前面往后找
+                message_str += '小班公告内容涉嫌违规，请修改_reversed<br>'
+                pace = 10
+                while not acceptable:
+                    # 将content最前的pace个字符加入到check_part
+                    content_accept_part += check_part
+                    if len(content) < pace*2: # 即将结束，缩小步长
+                        pace = 1
+                    check_part = content[:pace]
+                    content = content[pace:]
+                    yield message_str + f'<s>{content_accept_part}</s><u>{check_part}</u>{content}'
+                    # 发送content
+                    payload = {
+                        "shareKey": group_share_key,
+                        "notice": content
+                    }
+                    headers = getHeaders('$group', user_cookie, time_long, index = 1)
+                    headers['Content-Type'] = 'application/json; charset=UTF-8'
+                    response_json = http2_client_obj.send_http2_request('POST', f'https://group.baicizhan.com/group/set_notice', content=json.dumps(payload, ensure_ascii=False), headers=headers).json()
+                    if response_json['message'] == None:
+                        message_str += f'{response_json["message"]}<br><s>{content_accept_part}</s><u>{check_part}</u>{content}<br>'
+                        yield message_str
+                        acceptable = True
+                        break
+                    elif response_json['message'] != '小班公告内容涉嫌违规，请修改':
+                        message_str += f'通知发送失败{response_json["message"]}<br><s>{content_accept_part}</s><u>{check_part}</u>{content}<br>'
+                        yield message_str
+                        break
+                    # 随机延迟
+                    time.sleep(random.randint(700, 1200) / 1000)
+                if acceptable:
+                    item['content'] = check_part + content # 可能还有问题的部分
+                    item['checked'] = 2
+                    item['cursorA'] = len(content_accept_part) # 记录当前位置
+                    daka_list.patch_check_notice(item)
+                else:
+                    daka_list.patch_check_notice(item, modified=False)
+        else:
+            message_str += f'通知发送失败{response_json["message"]}<br><br>'
+            daka_list.patch_check_notice(item, modified=False)
+            yield message_str
+        time.sleep(1)
+
+
+lock = threading.Lock()
+def daka(daka_list: daka_list_class, user_cookie, user_config, http2_client_obj: http2_client, total_user_cnt=18, only_rank_and_notice=-1):
+    '''为用户打卡'''
+    response_wait_second = 0.3
+    react_wait_second = 0.9
+    time_start = time.time()
+    unique_id = user_config['unique_id']
+    
+    if daka_list.query(unique_id):
+        return
+    daka_list.add(unique_id)
+    message_str = '#'
+    client_date = int(datetime.datetime.now().strftime('%Y%m%d'))
+
+    threading.Thread(target=heartbeat_demon, args=(daka_list, user_cookie, user_config, http2_client_obj)).start()
+
+    # 临时函数放这里
+    # for msg in notice_checker(daka_list, user_cookie, user_config,  http2_client_obj):
+    #     yield msg
+    # only_rank_and_notice = 0
+    # for msg in pkonline(user_cookie=user_cookie, user_config=user_config):
+    #     message_str += msg
+        # yield message_str
+
+    # daka_list.remove(unique_id)
+    # return 
+    # 临时函数放这里
+
+    if only_rank_and_notice > -1:
+        for msg in notice_and_rank(user_cookie, user_config, http2_client_obj, total_user_cnt, daka_list, only_rank_and_notice):
+            message_str += msg
+            yield message_str
+        daka_list.remove(unique_id)
+        return 
+    
+    for msg in watch_daily_sentences(user_cookie, user_config, http2_client_obj):
+        message_str += msg
+        yield message_str
+    time.sleep(react_wait_second)
+
+    for msg in deskmate_pk(cookie=user_cookie, config=user_config, http2_client_obj=http2_client_obj):
+        message_str += msg
+        yield message_str
+    time.sleep(react_wait_second)
+
+    # pk # 1
+    if random.randint(0, 1) == 1:
+        for msg in pkonline(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, max_round=3):
+            message_str += msg
+            yield message_str
+        time.sleep(react_wait_second)
+
+    yield yzdd(user_cookie=user_cookie, user_config=user_config)
+    if user_config.get('only_yzdd', "False") == "True":
+        return
+    
+    message_str += '<br>开始背单词<br>'
+    yield message_str
+    word_count = int((user_config.get('user_index', 0) / 10 + 1) * 2.5)
+    for msg in learn_words(user_cookie, user_config, http2_client_obj, react_wait_second, word_count):
+        message_str += msg
+        yield message_str
+    time.sleep(react_wait_second)
+
+    
+
+    # 前往一起背领取打卡奖励
+    def get_task_status_desc():
+        
+        # https://social.baicizhan.com/api/task/accept_task
+        headers = getHeaders("$social", user_cookie, int(time.time()), index=1)
+        headers['Content-Type'] = 'application/json; charset=UTF-8'
+        response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/api/task/accept_task', headers, '{}')
+
+        # https://social.baicizhan.com/api/task/finish_task # 发一次空接收、完成请求以完成签到
+        headers = getHeaders("$social", user_cookie, int(time.time()), index=1)
+        headers['Content-Type'] = 'application/json; charset=UTF-8'
+        response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/api/task/finish_task', headers, '{}')
+        
+        #  https://group.baicizhan.com/group/study_words_together_home_page
+        headers = getHeaders("$group", user_cookie, int(time.time()), index=1)
+        response = http2_client_obj.send_http2_request('GET', f'https://{headers["Host"]}/group/study_words_together_home_page', headers, None)
+        data = response.json()['data']
+
+        # https://social.baicizhan.com/api/task/get_task_list
+        headers = getHeaders("$social", user_cookie, int(time.time()), index=1)
+        response = http2_client_obj.send_http2_request('GET', f'https://{headers["Host"]}/api/task/get_task_list', headers, None)
+        tasklist = response.json()['data']['taskInfoVoList']
+        state = 0
+        daily_reward_obtained = True
+        for task in tasklist:
+            if task['showPriority'] == 1 and task['state'] == 1:
+                daily_reward_obtained = False
+            elif task['state'] == 1:
+                    state += 1
+
+        # https://social.baicizhan.com/api/deskmate/home_page
+        headers = getHeaders("$social", user_cookie, int(time.time()), index=1)
+        response = http2_client_obj.send_http2_request('GET', f'https://{headers["Host"]}/api/deskmate/home_page', headers, None)
+        deskmate_data = response.json()['data']
+        if deskmate_data is None or deskmate_data['deskmate'] is None:
+            deskmate_daka_today = False
+        else:
+            deskmate_daka_today = deskmate_data['deskmate']['dakaToday']
+
+        
+        return data['haveDeskmate'], data['haveGroup'], data['haveOrdinaryGroup'], data['todayDaka'], data['receivedGroupRankRewards'], data['receivedGroupDailyRewards'], state, deskmate_daka_today, daily_reward_obtained
+    
+    have_deskmate, have_group, have_ordinary_group, today_daka, received_group_rank_rewards, received_group_daily_rewards, task_state, deskmate_daka_today, daily_reward_obtained = get_task_status_desc()
+    if not today_daka:
+        message_str += '打卡未同步 '
+        time.sleep(5)
+        have_deskmate, have_group, have_ordinary_group, today_daka, received_group_rank_rewards, received_group_daily_rewards, task_state, deskmate_daka_today, daily_reward_obtained = get_task_status_desc()
+        if not today_daka:
+            raise '打卡未同步'
+        
+    if task_state > 0:
+        message_str += f'{task_state}任务请手领 '
+        yield message_str
+
+    def get_task_reward_desc(client_date):# 签到奖励
+
+        # https://social.baicizhan.com/api/task/get_task_reward {"taskId":1,"receptionTime":20240817}
+        headers = getHeaders("$social", user_cookie, int(time.time()), index=1)
+        headers['Content-Type'] = 'application/json; charset=UTF-8'
+        payload = {"taskId": 1, "receptionTime": client_date}
+        response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/api/task/get_task_reward', headers, json.dumps(payload))
+        return response.json()
+    
+    if not daily_reward_obtained and get_task_reward_desc(client_date)['code'] == 1:
+        message_str += '签到+5 '
+        yield message_str
+        time.sleep(react_wait_second)
+
+    
+    def deskmate_daka_reward_desc(type):# 同桌打卡奖励
+        # https://social.baicizhan.com/api/deskmate/daka_reward?type=1
+        # 0自己；1同桌
+
+        payload=[
+            {"index": 22},# 点击领取同桌奖励(自己、同桌分别发送)
+        ]
+        report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=0)
+
+        time_long = int(time.time() * 1000)
+        headers = getHeaders("$social", user_cookie, int(time.time()), index=1)
+        headers['Content-Type'] = 'application/json; charset=UTF-8'
+        response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/api/deskmate/daka_reward?type={type}', headers, '{}')
+        return response.json()['data']
+
+
+    if have_deskmate:
+        
+        message_str += f'自己份+{deskmate_daka_reward_desc(0)} '
+        yield message_str
+        time.sleep(react_wait_second)
+
+        if deskmate_daka_today:
+            message_str += f'同桌份+{deskmate_daka_reward_desc(1)} '
+            yield message_str
+            time.sleep(react_wait_second)
+        
+    def class_reward_desc(type):# 班级奖励
+        payload=[
+            {"index": 23 + type},# 点击领取班级奖励
+        ]
+        report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=0)
+
+        time_long = int(time.time() * 1000)
+        headers = getHeaders("$group", user_cookie, int(time.time()), index=1)
+        headers['Content-Type'] = 'application/json; charset=UTF-8'
+        if type == 0:
+            # https://group.baicizhan.com/group/open_box?surprise=0
+            response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/group/open_box?surprise=0', headers, None)
+        else:
+            # https://group.baicizhan.com/group/receive_group_rank_award
+            response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/group/receive_group_rank_award', headers, None)
+        return response.json()['data']['count']
+
+    if have_group and not received_group_daily_rewards:
+        message_str += f'班级日签+{class_reward_desc(0)} '
+        yield message_str
+        time.sleep(react_wait_second)
+        if have_ordinary_group and not received_group_rank_rewards:
+            message_str += f'班级段位+{class_reward_desc(1)} '
+            yield message_str
+            time.sleep(react_wait_second)
+
+    # 商城日奖
+
+
+
+    def get_daily_shop_reward_desc(client_date, daka_list: daka_list_class):
+        # https://learn.baicizhan.com/api/mall/proxy/homepage/get_home_page_info
+        # 获取今日是否已领日奖
+        time_long = int(time.time() * 1000)
+        headers = getHeaders("$learn", user_cookie, int(time.time()), index=1)
+        response = http2_client_obj.send_http2_request('GET', f'https://{headers["Host"]}/api/mall/proxy/homepage/get_home_page_info', headers, None)
+        try:
+            daily_credit_status = response.json()['data']['dailyCreditStatus']
+        except:
+            daka_list.add_warning(f'{user_config.get("name", "未知")} 获取今日是否已领日奖失败{response.text}')
+            daily_credit_status = True
+
+        # https://learn.baicizhan.com/api/mall/proxy/creditmall/get_credit
+        # 获取当前铜板数
+        time_long = int(time.time() * 1000)
+        headers = getHeaders("$learn", user_cookie, int(time.time()), index=1)
+        response = http2_client_obj.send_http2_request('GET', f'https://{headers["Host"]}/api/mall/proxy/creditmall/get_credit', headers, None)
+        balance = response.json()['data']
+        
+        if not daily_credit_status:
+            # https://learn.baicizhan.com/api/mall/proxy/homepage/get_daily_reward
+            time_long = int(time.time() * 1000)
+            headers = getHeaders("$learn", user_cookie, int(time.time()), index=1)
+            response = http2_client_obj.send_http2_request('GET', f'https://{headers["Host"]}/api/mall/proxy/homepage/get_daily_reward', headers, None)
+            return balance, response.json()['data']['credit']
+        else:
+            return balance, 0
+    
+
+    balance, daily_shop_reward_data = get_daily_shop_reward_desc(client_date, daka_list)
+    message_str += f'<br>商城日奖+{daily_shop_reward_data} 现有{balance + daily_shop_reward_data} '
+    yield message_str
+    time.sleep(react_wait_second)
+    user_config['cooper'] = balance + daily_shop_reward_data
+    daka_list.update_user_dict({"cookie": user_cookie, "config": user_config})
+
+    payload=[
+        {"index": 25},# 点击
+        {"index": 26} # 加载商城
+    ]
+    report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=0)
+    payload=[
+        {"index": 27},# heartbeat
+    ]
+    report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=1)
+    time.sleep(react_wait_second)
+    report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=1)
+
+    # pk # 2
+    for msg in pkonline(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, max_round=3):
+        message_str += msg
+        yield message_str
+
+    # 前往个人中心
+    user_study_ = user_study(http2_client_obj)
+    result = user_study_.user_study_credit_task_center(user_cookie=user_cookie, user_config=user_config)
+    message_str += f'今日+{result.daily_inc_credit} '
+    yield message_str
+
+    msg = ""
+    for msg in notice_checker(daka_list, user_cookie, user_config, http2_client_obj):
+        yield message_str + msg
+    message_str += msg
+
+
+    # 删除daka_list中的unique_id
+    daka_list.remove(unique_id)
+
+    message_str += f'耗时{time.time() - time_start:.2f}s'
+    yield message_str
+
+from src.gen import generate_random, exponential_with_constant, square_gaussian_with_constant
+segments = [
+    {"range": (0.0, 0.2), "function": exponential_with_constant, "params": [435, -65]},
+    {"range": (0.2, 0.45), "function": square_gaussian_with_constant, "params": [888, 0.2972, 0.0205, -7624, 5541, -828]},
+    {"range": (0.45, 0.65), "function": square_gaussian_with_constant, "params": [738, 0.5279, 0.0195, 746, -1003, 426]},
+    {"range": (0.65, 0.85), "function": square_gaussian_with_constant, "params": [465, 0.7770, 0.0322, 22537, -27939, 8726]},
+    {"range": (0.85, 1.0), "function": square_gaussian_with_constant, "params": [105, 0.9155, 0.0145, -195883, 353421, -157605]},
+]
+def daka_headless(daka_list: daka_list_class, user_cookie, user_config, http2_client_obj, user_cnt, only_rank_and_notice, random_delay=1800):
+    # 获取到今天0点的秒数
+    today_seconds = (datetime.datetime.now() - datetime.datetime.combine(datetime.date.today(), datetime.time(0, 0, 0))).total_seconds()
+    delay = int(generate_random(today_seconds / 86400, random_delay / 86400, segments) * 86400 - today_seconds) + random.randint(0, 100) / 10
+    name = user_config.get('name', '未知')
+    unique_id = user_config.get('unique_id', '未知')
+    if name == "奶芋" or name == "星烛":
+        delay = random_delay / 2
+    message = ""
+    print(f"开始打卡:{name}，延迟{delay}s")
+    time.sleep(delay)
+    try:
+        for msg in daka(daka_list, user_cookie, user_config, http2_client_obj, total_user_cnt=user_cnt, only_rank_and_notice=only_rank_and_notice):
+            message = msg
+    except Exception as e:
+        err_str = traceback.format_exc()
+        message += f'$打卡失败{e}{err_str}'
+        print(err_str)
+        daka_list.remove(unique_id)
+    message = F"延迟{delay}s后打卡\n" + message
+    date_str = datetime.datetime.now().strftime('%Y-%m-%d %H-%M-%S')
+    message = message.replace('<br>', '\n')
+    daka_list.add_log(date_str, name, unique_id, message)
+
+def delete_old_logs():
+    '''删除35天前的日志文件'''
+    today = datetime.date.today()
+    for file_name in os.listdir('./logs/'):
+        if file_name.endswith('.txt'):
+            try:
+                file_date_str = file_name.split('_')[1].split(' ')[0]
+                file_date = datetime.datetime.strptime(file_date_str, '%Y-%m-%d').date()
+                if (today - file_date).days > 35:
+                    os.remove(f'./logs/{file_name}')
+                    print(f'删除{file_name}')
+            except:
+                print(f'文件名{file_name}格式错误')
+                pass
+
+def daka_all_headless(daka_list: daka_list_class, http2_client_obj, only_rank_and_notice, user_dict_list=[], random_delay=1800):
+    delete_old_logs()
+    if user_dict_list == []:
+        user_dict_list = daka_list.get_user_dict_list()
+    user_cnt = len(user_dict_list)
+    for user_dict in user_dict_list:
+        if only_rank_and_notice == -1 and user_dict['config'].get('can_daka') == 0:
+            continue
+        threading.Thread(target=daka_headless, args=(daka_list, user_dict['cookie'], user_dict['config'], http2_client_obj, user_cnt, only_rank_and_notice, random_delay)).start()
+
+
