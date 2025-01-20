@@ -12,7 +12,6 @@ try:
     from src.thriftAPI.ttypes import *
     from src.thriftAPI import *
     from src.get_headers import getHeaders, bcz_info, get_device_str
-    from append import append_user_data
 except:
     from thriftAPI.ttypes import *
     from thriftAPI import *
@@ -32,12 +31,12 @@ import threading
 class user_dict:
     user_cookie_path = "user_cookie.json"
     def __init__(self):
-        while True:
+        try:
             with open(user_dict.user_cookie_path, 'r', encoding='utf-8') as f:
                 self.__user_dict_list = json.load(f)
-            if len(self.__user_dict_list) > 0:
-                break
+        except:
             print("账号信息为空，请访问/append/添加账号信息！")
+            self.__user_dict_list = []
 
         self.modified = False
         # 给用户分配索引（从0开始）
