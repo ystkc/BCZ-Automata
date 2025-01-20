@@ -105,6 +105,14 @@ class Iface(object):
         """
         pass
 
+    def bcz_login(self, args_):
+        """
+        Parameters:
+         - args_
+
+        """
+        pass
+
     def get_books_replace_info(self):
         pass
 
@@ -596,6 +604,42 @@ class Client(Iface):
             raise result.boom
         return
 
+    def bcz_login(self, args_):
+        """
+        Parameters:
+         - args_
+
+        """
+        self.send_bcz_login(args_)
+        return self.recv_bcz_login()
+
+    def send_bcz_login(self, args_):
+        self._oprot.writeMessageBegin('bcz_login', TMessageType.CALL, self._seqid)
+        args = bcz_login_args()
+        args.args_ = args_
+        args.write(self._oprot)
+        self._oprot.writeMessageEnd()
+        self._oprot.trans.flush()
+
+    def recv_bcz_login(self):
+        iprot = self._iprot
+        (fname, mtype, rseqid) = iprot.readMessageBegin()
+        if mtype == TMessageType.EXCEPTION:
+            x = TApplicationException()
+            x.read(iprot)
+            iprot.readMessageEnd()
+            raise x
+        result = bcz_login_result()
+        result.read(iprot)
+        iprot.readMessageEnd()
+        if result.success is not None:
+            return result.success
+        if result.bomb is not None:
+            raise result.bomb
+        if result.boom is not None:
+            raise result.boom
+        raise TApplicationException(TApplicationException.MISSING_RESULT, "bcz_login failed: unknown result")
+
     def get_books_replace_info(self):
         self.send_get_books_replace_info()
         return self.recv_get_books_replace_info()
@@ -741,6 +785,7 @@ class Processor(Iface, TProcessor):
         self._processMap["user_limit_info_v2"] = Processor.process_user_limit_info_v2
         self._processMap["win_streak_status"] = Processor.process_win_streak_status
         self._processMap["submit_win_streak_records"] = Processor.process_submit_win_streak_records
+        self._processMap["bcz_login"] = Processor.process_bcz_login
         self._processMap["get_books_replace_info"] = Processor.process_get_books_replace_info
         self._processMap["get_main_page_js"] = Processor.process_get_main_page_js
         self._processMap["user_daka_v2"] = Processor.process_user_daka_v2
@@ -1163,6 +1208,35 @@ class Processor(Iface, TProcessor):
             msg_type = TMessageType.EXCEPTION
             result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
         oprot.writeMessageBegin("submit_win_streak_records", msg_type, seqid)
+        result.write(oprot)
+        oprot.writeMessageEnd()
+        oprot.trans.flush()
+
+    def process_bcz_login(self, seqid, iprot, oprot):
+        args = bcz_login_args()
+        args.read(iprot)
+        iprot.readMessageEnd()
+        result = bcz_login_result()
+        try:
+            result.success = self._handler.bcz_login(args.args_)
+            msg_type = TMessageType.REPLY
+        except TTransport.TTransportException:
+            raise
+        except LogicException as bomb:
+            msg_type = TMessageType.REPLY
+            result.bomb = bomb
+        except SystemException as boom:
+            msg_type = TMessageType.REPLY
+            result.boom = boom
+        except TApplicationException as ex:
+            logging.exception('TApplication exception in handler')
+            msg_type = TMessageType.EXCEPTION
+            result = ex
+        except Exception:
+            logging.exception('Unexpected exception in handler')
+            msg_type = TMessageType.EXCEPTION
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+        oprot.writeMessageBegin("bcz_login", msg_type, seqid)
         result.write(oprot)
         oprot.writeMessageEnd()
         oprot.trans.flush()
@@ -3270,6 +3344,155 @@ class submit_win_streak_records_result(object):
 all_structs.append(submit_win_streak_records_result)
 submit_win_streak_records_result.thrift_spec = (
     None,  # 0
+    (1, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 1
+    (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
+)
+
+
+class bcz_login_args(object):
+    """
+    Attributes:
+     - args_
+
+    """
+
+
+    def __init__(self, args_=None,):
+        self.args_ = args_
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.STRUCT:
+                    self.args_ = bcz_login_args()
+                    self.args_.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('bcz_login_args')
+        if self.args_ is not None:
+            oprot.writeFieldBegin('args_', TType.STRUCT, 1)
+            self.args_.write(oprot)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+all_structs.append(bcz_login_args)
+bcz_login_args.thrift_spec = (
+    None,  # 0
+    (1, TType.STRUCT, 'args_', [bcz_login_args, None], None, ),  # 1
+)
+
+
+class bcz_login_result(object):
+    """
+    Attributes:
+     - success
+     - bomb
+     - boom
+
+    """
+
+
+    def __init__(self, success=None, bomb=None, boom=None,):
+        self.success = success
+        self.bomb = bomb
+        self.boom = boom
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 0:
+                if ftype == TType.STRUCT:
+                    self.success = UserLoginResult()
+                    self.success.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 1:
+                if ftype == TType.STRUCT:
+                    self.bomb = LogicException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.STRUCT:
+                    self.boom = SystemException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('bcz_login_result')
+        if self.success is not None:
+            oprot.writeFieldBegin('success', TType.STRUCT, 0)
+            self.success.write(oprot)
+            oprot.writeFieldEnd()
+        if self.bomb is not None:
+            oprot.writeFieldBegin('bomb', TType.STRUCT, 1)
+            self.bomb.write(oprot)
+            oprot.writeFieldEnd()
+        if self.boom is not None:
+            oprot.writeFieldBegin('boom', TType.STRUCT, 2)
+            self.boom.write(oprot)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+all_structs.append(bcz_login_result)
+bcz_login_result.thrift_spec = (
+    (0, TType.STRUCT, 'success', [UserLoginResult, None], None, ),  # 0
     (1, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 1
     (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
 )

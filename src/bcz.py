@@ -9,10 +9,16 @@ import httpx
 import random
 from thrift.transport import TTransport
 from thrift.protocol import TCompactProtocol
-
-from src.thriftAPI.ttypes import UserSelectedBookInfo, select_book_args, update_done_data_args, login_with_phone_args, send_sms_verify_code_args
-from src.thriftAPI.UserStudyApiService import UserDoneWordRecord, UserBookListInfo, UserBasicInfoPlusV2
-from src.thriftAPI.UnifiedUserService import PhoneLoginRequest, PhoneVerifyCodeRequest, UserLoginResult
+try:
+    from src.thrift_utils import print_thrift_object
+    from src.thriftAPI.ttypes import UserSelectedBookInfo, select_book_args, update_done_data_args, login_with_phone_args, send_sms_verify_code_args, bcz_login_args, BczLoginRequest
+    from src.thriftAPI.UserStudyApiService import UserDoneWordRecord, UserBookListInfo, UserBasicInfoPlusV2
+    from src.thriftAPI.UnifiedUserService import PhoneLoginRequest, PhoneVerifyCodeRequest, UserLoginResult
+except:
+    from thrift_utils import print_thrift_object
+    from thriftAPI.ttypes import UserSelectedBookInfo, select_book_args, update_done_data_args, login_with_phone_args, send_sms_verify_code_args, bcz_login_args, BczLoginRequest
+    from thriftAPI.UserStudyApiService import UserDoneWordRecord, UserBookListInfo, UserBasicInfoPlusV2
+    from thriftAPI.UnifiedUserService import PhoneLoginRequest, PhoneVerifyCodeRequest, UserLoginResult
 
 class ProcessError(Exception):
     def __init__(self, message):
@@ -289,6 +295,69 @@ def loginWithPhone(phone_number: str, code: str) -> UserLoginResult:
     except:
         chs_result = re.findall('[\u4e00-\u9fa5]', content)
         raise ProcessError(''.join(chs_result))
+    
+def loginWithPassword(username: str, password: str) -> UserLoginResult:
+    """用户名密码登陆
+    Args:
+        username (str): 用户名
+        password (str): 密码
+        device (str): 设备信息
+        code (str): 验证码=None
+    Returns:
+        UserLoginResult: 登陆结果
+    """    
+    timestamp = round(time.time())
+    timestamp_long = round(time.time()*1000)
+    url = f"https://passport.baicizhan.com/rpc/unified_user_service/bcz_login/{timestamp_long}"
+    device = "DCO-AL00-HUAWEI-8d946f2ddaf90f18"
+    code = None
+    device_id = hashlib.md5(str(timestamp).encode()).hexdigest()[:16]
+    serial = hashlib.md5(str(timestamp).encode()).hexdigest()[:24]
+    headers = {
+        "Accept": "application/x-thrift",
+        "Accept-Encoding": "gzip",
+        "Connection": "Keep-Alive",
+        "Compress-Type": "gzip",
+        "Content-Type": "application/x-thrift",
+        "User-Agent": "bcz_app/android/7.6.5",
+        "Host": "passport.baicizhan.com",
+        "Cookie": (
+            f"app_name=7050502; channel=download; version=12;  client_time={timestamp}; "
+            f"device_name=android%2FV2218A-vivo; device_id={device_id}; serial={serial};"
+        ),
+    }
+    password_md5 = hashlib.md5(password.encode()).hexdigest()[12:21].upper()
+    args = bcz_login_args(
+        param=BczLoginRequest(
+            account=username,
+            password=password_md5,
+            device=device,
+            code=code
+        )
+    )
+    transport = TTransport.TMemoryBuffer()
+    protocol = TCompactProtocol.TCompactProtocol(transport)
+    args.write(protocol)
+    thrift_data = transport.getvalue()
+    thrift_data = b"\x82\x21\x01\x09" + b"bcz_login" + thrift_data
+    length_data = struct.pack("!i", len(thrift_data))
+    thrift_data = length_data + thrift_data
+    compressed_data = gzip.compress(thrift_data)
+    response = requests.post(url, headers=headers, data=compressed_data)
+    content = response.content.decode(errors='ignore')
+    if response.status_code != 200:
+        raise ProcessError(f'{response.status_code} {content}')
+    header_len = len('bcz_login') + 10
+    transport = TTransport.TMemoryBuffer(response.content[header_len:])
+    protocol = TCompactProtocol.TCompactProtocol(transport)
+    result = UserLoginResult()
+    try:
+        result.read(protocol)
+        return result
+    except:
+        chs_result = re.findall('[\u4e00-\u9fa5]', content)
+        raise ProcessError(''.join(chs_result))
+
 
 def userBasicInfo(token: str, httpx_client: httpx.Client = None) -> UserBasicInfoPlusV2:
     """获取用户基本信息
@@ -446,13 +515,8 @@ def getRandomWordIDInBook(db_path: str, book_id: int, count: int, word_learnt: l
 
 if __name__ == "__main__":
     ...
-    # token = ""
+    
+    
 
-    # book_id = getCurrentBook(token)
-    # print(updateDoneData(token, book_id, getRandomWordIDInBook('lookup.db', book_id, count)))
-
-    # print(daka(token, '20240829', 5))
-
-    # print(getAllBooks(token))
-    # print(sendSmsVerifyCode(""))
-    # print(loginWithPhone("", ""))
+    # 邮箱令牌
+    

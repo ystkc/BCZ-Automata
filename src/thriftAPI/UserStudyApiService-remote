@@ -38,6 +38,7 @@ if len(sys.argv) <= 1 or sys.argv[1] == '--help':
     print('  UserLimitInfoV2 user_limit_info_v2()')
     print('  WinStreakStatus win_streak_status(i32 client_date)')
     print('  void submit_win_streak_records(i32 client_date,  win_streak_dates)')
+    print('  UserLoginResult bcz_login(bcz_login_args args_)')
     print('   get_books_replace_info()')
     print('  MainPageJS get_main_page_js()')
     print('  UserDakaShareInfo user_daka_v2(user_daka_v2_args args_)')
@@ -204,6 +205,12 @@ elif cmd == 'submit_win_streak_records':
         print('submit_win_streak_records requires 2 args')
         sys.exit(1)
     pp.pprint(client.submit_win_streak_records(eval(args[0]), eval(args[1]),))
+
+elif cmd == 'bcz_login':
+    if len(args) != 1:
+        print('bcz_login requires 1 args')
+        sys.exit(1)
+    pp.pprint(client.bcz_login(eval(args[0]),))
 
 elif cmd == 'get_books_replace_info':
     if len(args) != 0:

@@ -2,7 +2,7 @@
 '''【独立工具】导出指定账号的铜板数'''
 import pyperclip
 
-print("格式：can_daka(0/1)\tunique_id\tname\tword_count(新学词数)\tcooper(None)\tcan_pk(0/1)\tarbitor(0/1,是否允许PK反挂)\ttidal_group_limit(可用班位数)")
+print("格式：can_daka(0/1)\tunique_id\tname\tword_count(新学词数)\tcooper(None)\n后面的字段会保留")
 input("请拷贝 需要导出的账号 数据表格。按回车继续。")
 template = {
         "cookie": {

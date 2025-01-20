@@ -529,7 +529,21 @@ struct TaskUploadReq{
     1: string action,
     2: i32 cnt
 }
-
+## bcz_login
+struct bcz_login_args{
+    1: BczLoginRequest param,
+}
+struct BczLoginRequest{
+    1: string account,
+    2: string password
+    3: string device,
+    4: string code,
+}
+struct bcz_login_result{
+    1: UserLoginResult success,
+    2: SystemException boom,
+    3: LogicException bomb
+}
 
 service UserStudyApiService {
     UserSelectedBookInfo select_book(1: select_book_args args_)
@@ -549,6 +563,7 @@ service UserStudyApiService {
     WinStreakStatus win_streak_status(1: i32 client_date) throws (1: LogicException bomb, 2: SystemException boom)
     # None
     void submit_win_streak_records(1: i32 client_date, 2: list<i32> win_streak_dates) throws (1: LogicException bomb, 2: SystemException boom)
+    UserLoginResult bcz_login(1: bcz_login_args args_) throws (1: LogicException bomb, 2: SystemException boom)
     # C
     list<BookReplaceInfo> get_books_replace_info() throws (1: LogicException bomb, 2: SystemException boom)
     MainPageJS get_main_page_js() throws (1: LogicException bomb, 2: SystemException boom)

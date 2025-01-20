@@ -1,0 +1,157 @@
+<html>
+<head><meta charset="utf-8"><title>订阅</title></head>
+<style>
+.container {
+    display: flex;
+    flex-direction: column;
+    margin: 20px;
+    gap: 15px;
+}
+.item {
+    display: grid;
+    grid-template-columns: 200px auto; /* 设置nickname的宽度为200px，squares自动调整 */
+    grid-gap: 10px;
+    margin-bottom: 10px;
+}
+.my-reply
+.monitor-reply {
+    font-size: 18px;
+    margin-bottom: 20px;
+}
+.nickname {
+    font-size: 12px;
+    margin-right: 20px;
+    white-space: nowrap; /* 防止nickname换行 */
+}
+.group-nickname { /* 缩进 */
+    font-size: 15px;
+    margin-left: 20px;
+}
+.squares {
+    display: grid;
+    grid-template-columns: repeat(7, 20px);
+    grid-gap: 3px;
+}
+.square {
+    width: 18px;
+    height: 18px;
+}
+.green {
+    background-color: green;
+}
+.gray {
+    background-color: gray;
+}
+.transparent {
+    background-color: transparent;
+}
+</style>
+<body>
+用户<span id="user_name"></span>(<span id="unique_id"></span>)[<span id="group_share_key"></span>]的组：<span id="group_name"></span>(<span id="group_id"></span>)<br>
+介绍：<span id="introduction"></span><br>
+剩余<span id="remain_count"></span>订阅<br><br>
+<span id="notice">获取中，请稍候...</span><br>(<span id="notice_hash" style="color:grey;"></span>)<br>
+<div class="container" id="data-container">
+</div>
+<input placeholder="回复" id="reply_content" type="text"><br>
+<button onclick="reply()">收到并回复</button>
+<button onclick="reply(false)">标记已读</button>
+<script>
+// const data = {
+//     my_reply: "这是我的回复内容",
+//     group_nickname: [
+//         {nickname: "张三", group_nickname:"组1",  completed_times: 5, duration_days: 10, two_week_daka_dates: [1, 0, 1, -1, 0, 1, 0,1, 0, 1, -1, 0, 1, 0]},
+//         {nickname: "李四", group_nickname:"2", completed_times: 3, duration_days: 7, two_week_daka_dates: [1, 1, -2, 0, 0, 0, 1,1, 0, 1, -1, 0, 1, 0]}
+//     ]
+// };
+
+function createSquare(value) {
+    let className = 'square';
+    if (value === 1) {
+        className += ' green';
+    } else if (value === 0) {
+        className += ' gray';
+    } else {
+        className += ' transparent';
+    }
+    return `<div class="${className}"></div>`;
+}
+function displayData(data) {
+    const container = document.getElementById('data-container');
+
+    data = data.data;
+    for (var i in data.group_nickname) {
+        const item = data.group_nickname[i];
+        let squaresHtml = '';
+        item.two_week_daka_dates.forEach((date, index) => {
+            squaresHtml += createSquare(date);
+        });
+
+        container.innerHTML += `
+            <div class="item">
+                <div class="nickname">${item.nickname}: (${item.completed_times}/${item.duration_days})<br><span class="group-nickname">${item.group_nickname}</span></div>
+                <div class="squares">${squaresHtml}</div>
+            </div>
+        `;
+    };
+    container.innerHTML += `<div class="my-reply">我：${data.my_reply}</div><br>`;
+    container.innerHTML += `<div class="monitor-reply">组长：${data.monitor_reply}</div>`;
+}
+function load_data() {
+    fetch(window.location.href + "/data")
+   .then(function(response) {
+        return response.json();
+    })
+   .then(function(data) {
+        document.getElementById("user_name").innerHTML = data.user_name;
+        document.getElementById("unique_id").innerHTML = data.unique_id;
+        document.getElementById("group_name").innerHTML = data.group_name;
+        document.getElementById("group_id").innerHTML = data.group_id;
+        document.getElementById("introduction").innerHTML = data.introduction;
+        document.getElementById("notice").innerHTML = data.notice;
+        document.getElementById("notice_hash").innerHTML = data.notice_hash;
+        document.getElementById("group_share_key").innerHTML = data.group_share_key;
+        document.getElementById("remain_count").innerHTML = data.remain_count;
+        if (data.unique_id == -1)
+            return;
+        fetch(window.location.href + "/get_nickname?unique_id=" + data.unique_id + "&group_share_key=" + data.group_share_key)
+        .then(function(response) {
+            return response.json();
+        })
+        .then(function(data) {
+            displayData(data);
+        });
+    });
+}
+window.onload = load_data;
+function reply(correspond=true) {
+var content = document.getElementById("reply_content").value;
+if (content == "") {
+    if (confirm("只收到不回复？") == false)
+        return;
+}
+user_id = document.getElementById("unique_id").innerHTML;
+class_id = document.getElementById("group_id").innerHTML;
+group_share_key = document.getElementById("group_share_key").innerHTML;
+notice_hash = document.getElementById("notice_hash").innerHTML;
+content = {"reply_content": content, correspond: correspond};
+url = window.location.href + "/reply?unique_id=" + user_id + "&group_id=" + class_id + "&notice_hash=" + notice_hash + "&group_share_key=" + group_share_key;
+
+fetch(url, {
+    method: "POST",
+    headers: {
+        "Content-Type": "application/json"
+    },
+    body: JSON.stringify(content)
+}).then(function(response) {
+    if (response.ok) {
+        alert("成功");
+        location.reload();
+    } else {
+        alert("失败");
+    }
+});
+}
+</script>
+</body>
+</html>

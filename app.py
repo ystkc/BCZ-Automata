@@ -34,7 +34,6 @@ import certifi
 import random
 import datetime
 import traceback
-import threading
 
 from flask import Flask, Response, render_template, jsonify, request
 from flask_socketio import SocketIO, emit
@@ -42,157 +41,98 @@ from flask_socketio import SocketIO, emit
 
 from src import bcz
 from src.config import Config
-import src.thrift_utils as thrift_utils
-from src.thrift_utils import user_dict, daka_list_class
-from src.thrift_utils import getHeaders, send_http2_request, get_http2_client
-from src.notice_parser import update_notice, member_storage_class
+import src.daka_utils as daka_utils
+from src.daka_utils import daka_list_class, notice_subscriber
+from src.daka_utils import getHeaders, daka_headless
+from src.thrift_utils import http2_client
+from append import append_user_data
+
+
+from src.notice_parser import member_storage_class
+
 from src.schedule import Schedule
-
-
-daka_list_obj = daka_list_class()
-
 
 logging.basicConfig(
     format='%(asctime)s [%(name)s][%(levelname)s] %(message)s',
     level=level
 )
+config = Config()
 
+logger = logging.getLogger('BCZ-Automata')
+logger.setLevel(level)
+
+http2_client_obj = http2_client()
+daka_list_obj = daka_list_class(logger, http2_client_obj, config)
 
 app = Flask(__name__, static_folder='static', static_url_path='/')
 app.json.ensure_ascii = False
 socketio = SocketIO(app, async_mode='gevent', logger=True)
 
+notice_subscriber_obj = notice_subscriber(logger, http2_client_obj, config)
 
-
-config = Config()
-user_dict_obj = user_dict()
-
-
-
-def daka_sse(unique_id):
-    global daka_cnt
-    daka_cnt += 1
-    index, user_dict = user_dict_obj.find(unique_id)
-    user_dict['config']['user_index'] = index
-    user_dict_list = user_dict_obj.user_dict_list
-    user_cnt = len(user_dict_list)
-    # yield f' {unique_id} 开始打卡{daka_cnt}<br>\n\n'
-    # time.sleep(1)
-    # yield f' {unique_id} 开始打卡{daka_cnt}<br>.\n\n'
-    # time.sleep(1)
-    # yield f' {unique_id} 开始打卡{daka_cnt}<br>..\n\n'
-    # time.sleep(1)
-    # yield f' {unique_id} 开始打卡{daka_cnt}<br>...\n\n'
-    # time.sleep(1)
-    # yield f' {unique_id} 开始打卡{daka_cnt}<br>....\n\n'
-    for msg in thrift_utils.daka(daka_list_obj, user_cookie = user_dict['cookie'], user_config = user_dict['config'], total_user_cnt=user_cnt):
-        yield f'{msg}\n\n'
-    daka_cnt -= 1
-            
 @socketio.on('daka')
 def daka(data):
     '''打卡'''
     try:
-        # request_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         unique_id = data
         if not unique_id:
             return restful(400, '调用方法异常Σ(っ °Д °;)っ')
-        for msg in daka_sse(unique_id):
+        user_dict = daka_list_obj.get_user_dict(unique_id)
+        user_cnt = daka_list_obj.get_user_cnt()
+        for msg in daka_headless(daka_list_obj, user_dict['cookie'], user_dict['config'], http2_client_obj, user_cnt, -1, 0, True):
             emit('msg', msg)
     except Exception as e:
         err_str = traceback.format_exc()
-        # with open(f'error_{unique_id}_{int(time.time())}.txt', 'w', encoding='utf-8') as f:
-        #     f.write(str(e))
-        #     f.write(err_str)
-        emit('error', f'$打卡失败{e}{err_str}')
-        print(err_str)
+        emit('error', f'打卡api出现错误{e}\n{err_str}')
+        daka_list_obj.add_warning(f'打卡api出现错误{e}\n{err_str}')
 
 @app.route('/get_bad_words', methods=['GET'])
 def get_bad_words():
     '''获取坏词'''
-    return restful(daka_list_obj.get_bad_words())
+    return restful(200, daka_list_obj.get_bad_words())
 
-@app.route('/preserved_daka', methods=['GET'])
-def preserved_daka():
-    '''预约打卡，懒人选项，不设参数'''
-    if not os.path.exists('./logs'):
-        os.mkdir('./logs')
-    user_dict_list = user_dict_obj.user_dict_list
-    user_cnt = len(user_dict_list)
-    if user_cnt == 0:
-        print('没有可预约的打卡用户')
-        return restful(400, '没有可预约的打卡用户')
-    # 预约明天早上4:30打卡，大概5点打完
-    Schedule("* 4-7 * * * daka_schedule", lambda: thrift_utils.daka_all_headless(daka_list_obj, only_patch=False))
-    # Schedule("* 6 * * * patch_schedule", lambda: thrift_utils.daka_all_headless(daka_list_obj, only_patch=True))
-    # 目前来说，应该是服务器app会被休眠，但是Schedule类可以一直运行，即便合上电脑也不会停止。
-    return restful(200, '预约成功.请插电并主动锁定设备')
-
-
+@app.route('/clear_bad_words', methods=['GET'])
+def clear_bad_words():
+    '''清空坏词'''
+    daka_list_obj.clear_bad_words()
+    daka_list_obj.close()
+    return restful(200, '清空成功')
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
-proxy_token = ''
-@app.route('/proxy_token', methods=['POST'])
-def proxy_token():
-    global proxy_token
-    try:
-        token = request.json.get('token', '')
-        if not token:
-            return restful(400, '调用方法异常Σ(っ °Д °;)っ')
-        proxy_token = token
-        return restful(200, '设置成功')
-    except Exception as e:
-        return restful(400, f'{e}')
-    
+@app.route('/reload', methods=['GET'])
+def reload_http2():
+    http2_client_obj.reload_http2_client()
+    return restful(200, '成功')
 
-@app.route('/proxy', methods=['CONNECT', 'GET', 'POST', 'OPTIONS'])
-def proxy():
-    try:
-        print('p')
-        print(request.url)
-        if request.method == 'CONNECT':  # 处理https请求
-            # 发送connection established
-            return Response(status=200)
-        elif request.method == 'OPTIONS':  # 直接发送options请求，不做处理
-            return send_http2_request(request.method, request.url, headers=request.headers, data=request.data)
-        elif request.method == 'GET':
-            if proxy_token != '':
-                print('a')
-                cookie = request.headers['Cookie'].split('; ')
-                cookie['access_token'] = proxy_token
-                headers = request.headers.copy()
-                headers['Cookie']= '; '.join(cookie),
-                return send_http2_request(request.method, request.url, headers=headers, data=request.data)
-            return send_http2_request(request.method, request.url, headers=request.headers, data=request.data)
-        elif request.method == 'POST':
-            if proxy_token != '':
-                print('b')
-                cookie = request.headers['Cookie'].split('; ')
-                cookie['access_token'] = proxy_token
-                headers = request.headers.copy()
-                headers['Cookie']= '; '.join(cookie),
-                return send_http2_request(request.method, request.url, headers=headers, data=request.data)
-            return send_http2_request(request.method, request.url, headers=request.headers, data=request.data)
-        else:
-            return restful(400, '调用方法异常Σ(っ °Д °;)っ')
-    except Exception as e:
-        return restful(400, f'{e}')
-        
 
+@app.route('/save', methods=['GET'])
+def save_config():
+    daka_list_obj.close()
+    return restful(200, '保存成功')
+
+@app.route('/check_daka', methods=['GET'])
+def check_daka():
+    '''检查打卡'''
+    return restful(200, daka_list_obj.check_not_daka_users(include_not_daka=request.args.get('include_not_daka', 'false') == 'true'))
+
+# member_storage = member_storage_class(logger)
+def parse_notice_online(only_raw_notice=True):
+    logger.info('开始更新违禁词库...')
+    conn = sqlite3.connect('../BCZ-Notice-Examiner/bcz_notice.db')
+    daka_list_obj.notice_parser.update_notice(conn, only_raw_notice=only_raw_notice) # 根据现有公告数据库自动更新
+    conn.close()
 
 def parse_notice_offline():
     try:
-        logger.info('开始更新...')
+        logger.info('开始更新成员库...')
         member_storage = member_storage_class(logger)
+        return
         member_storage.update_member_infos(logger, NO_EXCEL=False)
 
-        logger.info('开始更新违禁词库...')
-        conn = sqlite3.connect('../BCZ-Notice-Examiner/bcz_notice.db')
-        update_notice(conn) # 根据现有公告数据库自动更新
-        conn.close()
+        parse_notice_online(only_raw_notice=False)
     except Exception as e:
         traceback.print_exc()
 
@@ -203,19 +143,7 @@ def parse_notice():
     if time.time() - status < 10:
         return restful(200, '已更新过')
     try:
-        logger.info('开始更新...')
-        arg = request.args.get('no_excel', '1')
-        no_excel = True
-        if arg == '0':
-            logger.info('导出Excel')
-            no_excel = False
-        member_storage = member_storage_class(logger)
-        member_storage.update_member_infos(logger, NO_EXCEL=no_excel)
-
-        logger.info('开始更新违禁词库...')
-        conn = sqlite3.connect('../BCZ-Notice-Examiner/bcz_notice.db')
-        update_notice(conn) # 根据现有公告数据库自动更新
-        conn.close()
+        parse_notice_online(only_raw_notice=False)
         
         status = time.time()
         return restful(200, '更新成功')
@@ -226,59 +154,20 @@ def parse_notice():
 @app.route('/accounts', methods=['GET'])
 def accounts():
     return render_template('accounts.html')
+
 @app.route('/api/reply_and_ack', methods=['POST'])
 def reply_and_ack():
-    '''回复公告+收到'''
-
+    unique_id = request.json.get('unique_id', '')
+    group_share_key = request.json.get('group_share_key', '')
+    content = request.json.get('content', '')
+    if not unique_id or not group_share_key or not content:
+        return restful(400, '调用方法异常Σ(っ °Д °;)っ')
+    user_dict = daka_list_obj.get_user_dict(unique_id)
     try:
-        unique_id = request.json.get('unique_id', '')
-        group_share_key = request.json.get('group_share_key', '')
-        content = request.json.get('content', '')
-        if not unique_id or not group_share_key or not content:
-            print(unique_id, group_share_key, content)
-            return restful(400, '调用方法异常Σ(っ °Д °;)っ')
-        _, user_dict = user_dict_obj.find(unique_id)
-        client = httpx.Client(http2=True, verify=certifi.where())
-        time_long = int(time.time() * 1000)
-        payload = {
-            'shareKey': group_share_key,
-            'nickname': content,
-        }
-        headers = getHeaders('$group', user_dict['cookie'], time_long, index = 1)
-        headers['Content-Type'] = 'application/json; charset=UTF-8'
-        response_json = client.post(f'https://group.baicizhan.com/group/set_nickname', headers=headers, content = json.dumps(payload, ensure_ascii=False)).json()
-        result_str = ''
-        if response_json['code'] == 1:
-            result_str = '回复成功<br>'
-        else:
-            result_str = f'回复失败{response_json["message"]}<br>'
-        time_long = int(time.time() * 1000)
-        response_json = client.get(f'https://group.baicizhan.com/group/information?shareKey={group_share_key}', headers=getHeaders('$group', user_dict['cookie'], time_long, index = 1)).json()
-        if response_json['code'] == 1:
-            group_info = response_json['data']['groupInfo']
-            group_id = group_info['id']
-            members = response_json['data']['members']
-            for member in members:
-                if member['uniqueId'] == unique_id:
-                    result_str += f'现在名字{member["nickname"]}<br>'
-                    break
-            # 收到
-            time_long = int(time.time() * 1000)
-            headers = getHeaders('$group', user_dict['cookie'], time_long, index = 1)
-            headers['Content-Type'] = 'application/json; charset=UTF-8'
-            response_json = client.post(f'https://group.baicizhan.com/group/receive_notice?groupId={group_id}', content='{}', headers=headers).json()
-            if response_json['code'] == 1:
-                result_str += '收到成功<br>'
-            else:
-                result_str += f'收到失败{response_json["message"]}<br>'
-        else:
-            result_str += f'获取群组信息失败{response_json["message"]}<br>'
-        client.close()
+        result_str, _ = notice_subscriber_obj.reply_and_ack(unique_id, user_dict, group_share_key, content)
         return restful(200, result_str)
     except Exception as e:
-        raise e
         return restful(400, f'{e}')
-    
 
 @app.route('/api/quit_group', methods=['POST'])
 def quit_group():
@@ -289,7 +178,7 @@ def quit_group():
 
         if not unique_id or not group_share_key:
             return restful(400, '调用方法异常Σ(っ °Д °;)っ')
-        _, user_dict = user_dict_obj.find(unique_id)
+        user_dict = daka_list_obj.get_user_dict(unique_id)
         
         time_long = int(time.time() * 1000)
         headers = getHeaders('$group', user_dict['cookie'], time_long, index = 1)
@@ -313,7 +202,7 @@ def join_group():
         if not unique_id or (not group_share_key and not group_invite_key):
             print(unique_id, group_share_key, group_invite_key)
             return restful(400, '调用方法异常Σ(っ °Д °;)っ')
-        _, user_dict = user_dict_obj.find(unique_id)
+        user_dict = daka_list_obj.get_user_dict(unique_id)
         time_long = int(time.time() * 1000)
         headers = getHeaders('$group', user_dict['cookie'], time_long, index = 1)
         headers['Content-Type'] = 'application/json; charset=UTF-8'
@@ -341,12 +230,25 @@ def join_group():
         raise e
         return restful(400, f'{e}')
 
+@app.route('/append', methods=['GET'])
+def append_accounts():
+    '''添加或更新用户配置信息（用excel表格导入）'''
+    return render_template('append.html')
+
+@app.route('/append/submit', methods=['POST'])
+def append_accounts_submit():
+    try:
+        text = request.json.get('content', '')
+        if not text:
+            return restful(400, '调用方法异常Σ(っ °Д °;)っ')
+        return restful(200, append_user_data(text))
+    except Exception as e:
+        return restful(400, f'{e}{traceback.format_exc()}')
+
 @app.route('/accounts/reload', methods=['GET'])
 def accounts_reload():
     '''重新加载用户列表'''
-    global user_dict_obj
-    del user_dict_obj
-    user_dict_obj = user_dict()
+    daka_list_obj.reload_user_dict()
     return accounts_list()
 
 
@@ -355,7 +257,7 @@ def accounts_list():
     '''获取用户列表'''
     try:
         result = []
-        user_dict_list = user_dict_obj.user_dict_list
+        user_dict_list = daka_list_obj.get_user_dict_list()
         if debug:
             # 只获取3个用户
             user_dict_list = user_dict_list[:3]
@@ -365,28 +267,24 @@ def accounts_list():
                 'name': user['config']['name'],
                 'unique_id': user['config']['unique_id'],
                 'device_id': user['cookie']['device_id'],
-                'access_token': user['cookie']['access_token']
+                'access_token': user['cookie']['access_token'],
+                'can_daka': user['config']['can_daka']
             })
         return restful(200, '获取用户列表成功', result)
     except Exception as e:
-        return restful(400, f'{e}')
+        return restful(400, f'{e}{traceback.format_exc()}')
     
 notice_list = []
-pace = 6
+pace = config.check_notice_pace
 def change_notice_sse_func(unique_id, group_share_key, content, mentioned_ids, group_id):
     for event in change_notice_sse_func_(unique_id, group_share_key, content, mentioned_ids, group_id):
         target = event.replace('\n', '<br>')
         target = target.replace('\r', '<br>')
         target = target.replace('<br><br>', '<br>')
-        # print(target)
         yield f"data: {target}\n\n"
 def change_notice_sse_func_(unique_id, group_share_key, content, mentioned_ids, group_id):
-    # print(content)
-    # print(mentioned_ids)
-    # yield f'{content}{mentioned_ids}'
-    # return
     message_str = ""
-    _, user_dict = user_dict_obj.find(unique_id)
+    user_dict = daka_list_obj.get_user_dict(unique_id)
     time_long = int(time.time() * 1000)
     headers = getHeaders('$group', user_dict['cookie'], time_long, index = 1)
     headers['Content-Type'] = 'application/json; charset=UTF-8'
@@ -513,12 +411,38 @@ def change_notice():
         content = request.json.get('content', '')
         mentioned_ids = request.json.get('mentioned_ids', '')
         if not unique_id or not group_share_key or not content:
-            print(unique_id, group_share_key, content)
             return restful(400, '调用方法异常Σ(っ °Д °;)っ')
         notice_list.append({'unique_id': unique_id, 'group_share_key': group_share_key, 'content': content, 'mentioned_ids': mentioned_ids})
         return restful(200, '通知已收到')
     except Exception as e:
         return restful(400, f'{e}')
+    
+@app.route('/subscribe', methods=['GET'])
+def subscribe():
+    '''生成html页面，供用户查看公告(一个)'''
+    return render_template('subscribe.html')
+
+@app.route('/subscribe/data', methods=['GET'])
+def subscribe_data():
+    top_notice = notice_subscriber_obj.get_top_notice(daka_list_obj)
+    top_notice['introduction'] = top_notice['introduction'].replace('\n', '<br>')
+    top_notice['notice'] = top_notice['notice'].replace('\n', '<br>')
+    return jsonify(top_notice)
+
+@app.route('/subscribe/reply', methods=['POST'])
+def subscribe_reply():
+    unique_id = request.args.get('unique_id', '')
+    group_id = request.args.get('group_id', '')
+    group_share_key = request.args.get('group_share_key', '')
+    notice_hash = request.args.get('notice_hash', '')
+    # 从content中获取reply_content
+    reply_content = request.json.get('reply_content', '')
+    correspond = request.json.get('correspond', True)
+    if not unique_id or not group_id or not group_share_key or not notice_hash:
+        return restful(400, '调用方法异常Σ(っ °Д °;)っ')
+    user_dict = daka_list_obj.get_user_dict(unique_id)
+    code, result_str = notice_subscriber_obj.read_reply_and_ack(unique_id, user_dict, group_share_key, group_id, notice_hash, reply_content, correspond)
+    return restful(code, result_str)
     
 @app.route("/own_groups", methods=['GET'])
 def own_groups():
@@ -527,10 +451,10 @@ def own_groups():
         unique_id = request.args.get('unique_id', '')
         if not unique_id:
             return restful(400, '调用方法异常Σ(っ °Д °;)っ')
-        _, user_dict = user_dict_obj.find(unique_id)
+        user_dict = daka_list_obj.get_user_dict(unique_id)
         time_long = int(time.time() * 1000)
         headers=getHeaders('$group', user_dict['cookie'], time_long, index = 1)
-        response = send_http2_request('GET', 'https://group.baicizhan.com/group/own_groups?uniqueId=0', headers=headers, content=None) # 我的小班
+        response = http2_client_obj.send_http2_request('GET', 'https://group.baicizhan.com/group/own_groups?uniqueId=0', headers=headers, content=None) # 我的小班
         response_json = response.json()
 
         
@@ -564,25 +488,29 @@ def own_groups():
         #  https://group.baicizhan.com/group/study_words_together_home_page
         time_long = int(time.time() * 1000)
         headers = getHeaders('$group', user_dict['cookie'], time_long, index = 1)
-        response = send_http2_request('GET', 'https://group.baicizhan.com/group/study_words_together_home_page', headers=headers, content=None)
+        response = http2_client_obj.send_http2_request('GET', 'https://group.baicizhan.com/group/study_words_together_home_page', headers=headers, content=None)
         response_json = response.json()
         today_daka = '1已打卡' if response_json['data']['todayDaka'] else '0未打卡'
 
         # 'https://group.baicizhan.com/group/get_group_user_info'
-        response = send_http2_request('GET', 'https://group.baicizhan.com/group/get_group_user_info', headers=headers, content=None)
+        response = http2_client_obj.send_http2_request('GET', 'https://group.baicizhan.com/group/get_group_user_info', headers=headers, content=None)
         data = response.json()['data']
 
-        result = bcz.userBasicInfo(user_dict['cookie']['access_token'], get_http2_client())
+        result = bcz.userBasicInfo(user_dict['cookie']['access_token'], http2_client_obj.get_http2_client())
         daka_timestamp = result.learn_info.last_sync_done_score_time
         user_dict['config']['book_id'] = result.user_info.current_word_level_id
+        user_ip_desc = result.user_info.ip_desc
+        # user_school_name = result.user_info.user_education_info.school_name
         
 
         date = datetime.datetime.fromtimestamp(daka_timestamp).strftime('%Y-%m-%d %H:%M:%S')
         user_dict['config']['grade'] = data['grade']
+        cooper = user_dict['config'].get('cooper', -1)
+        daka_list_obj.update_user_dict(user_dict)
         groups.append({
-            'name': f'用户年级组{data["grade"]}书本{user_dict["config"]["book_id"]}',
+            'name': f'用户年级{data["grade"]}书本{user_dict["config"]["book_id"]}/{user_ip_desc}',
             'share_key': '',
-            'rank': f'{today_daka}于{date}',
+            'rank': f'{today_daka}于{date}<br>+<span class="cooper">{cooper}</span>',
             'introduction': data["groupLimiteNumber"],
             'notice': f'授权上限{data["groupAuthorizationLimiteNumber"]}',
             'group_nickname': ''
@@ -590,109 +518,102 @@ def own_groups():
 
         return restful(200, '获取用户群组成功', groups)
     except Exception as e:
-        raise e
-    #     return restful(400, f'{e}')
+        return restful(400, traceback.format_exc())
 
 
-daka_cnt = 0
-@app.route('/api/mm', methods=['GET'])
-def mm():
-    import pyautogui
-    # 不断以正方形移动鼠标
-    while daka_cnt == 0:
-        time.sleep(1)
-    while daka_cnt > 0:
-        pyautogui.moveTo(100, 100, duration=0.5)
-        pyautogui.moveTo(300, 100, duration=0.5)
-        pyautogui.moveTo(300, 300, duration=0.5)
-        pyautogui.moveTo(100, 300, duration=0.5)
-        time.sleep(3)
-    
-    
+def get_nickname(main_token, http2_client_obj: http2_client, unique_id, group_share_key, user_dict):
+    '''返回班内昵称和打卡情况
+    my_reply: str
+    group_nickname[unique_id]: {
+    "group_nickname": "xxx",
+    "nickname": "xxx",
+    "two_week_daka_dates": [-2, -2, -2, -2, -2, -2, -2, 1, 1, 0, 0, 1, -1, -1],
+    "completed_times": 3,
+    "duration_days": 5,
+    }'''
+    last_monday = datetime.datetime.now() - datetime.timedelta(days=datetime.datetime.now().weekday() + 7)
+    # 1.从https://group.baicizhan.com/group/get_week_rank?shareKey=xxx&week=1/2获取班内昵称，1本周
+    time_long = int(time.time() * 1000)
+    headers = getHeaders('$group', user_dict['cookie'], time_long, index = 1)
+    # rank = requests.get(f'https://group.baicizhan.com/group/get_week_rank?shareKey={group_share_key}&week=1', headers=headers)
+    rank = http2_client_obj.send_http2_request('GET', f'https://group.baicizhan.com/group/get_week_rank?shareKey={group_share_key}&week=1', headers=headers, content=None)
+    # last_week_rank = requests.get(f'https://group.baicizhan.com/group/get_week_rank?shareKey={group_share_key}&week=2', headers=headers)
+    last_week_rank = http2_client_obj.send_http2_request('GET', f'https://group.baicizhan.com/group/get_week_rank?shareKey={group_share_key}&week=2', headers=headers, content=None)
+    member_list = rank.json()['data']['list']
+    last_week_member_list = last_week_rank.json()['data']['list']
+    group_nickname = {}
+    my_reply = ""
+    monitor_reply = ""
+    wd = datetime.datetime.now().weekday()
+    for member in member_list:
+        unique_id = member['uniqueId']
+        nickname = member['nickname']
+        duration_days = member['durationDays']
+        week_daka_dates = member['weekDakaDates']
+        if member['leader'] == 1:
+            monitor_reply = nickname
+        if unique_id == user_dict['config']['unique_id']:
+            my_reply = nickname
+        # two_week_daka_dates是14个0、1，表示两周内每天的打卡情况
+        two_week_daka_dates = [0] * 14
+        # 如果duration_days不够两周，后面的标记-2
+        if duration_days < 8 + wd:
+            for i in range(8 + wd - duration_days):
+                two_week_daka_dates[i] = -2
+        # 将本周未到达的日期设置为-1
+        for i in range(6-wd):
+            two_week_daka_dates[-1-i] = -1
+        for date in week_daka_dates:
+            # 计算距离上周一的天数
+            delta = (datetime.datetime.strptime(date, '%Y-%m-%d') - last_monday).days + 1
+            two_week_daka_dates[delta] = 1
+
+        group_nickname[unique_id] = {
+            "group_nickname": nickname,
+            "two_week_daka_dates": two_week_daka_dates
+        }
+
+    # 2.再获取默认昵称https://group.baicizhan.com/group/information?shareKey=xxx
+    main_cookie = user_dict['cookie'].copy()
+    main_cookie['access_token'] = main_token
+    headers = getHeaders('$group', main_cookie, time_long, index = 1)
+    response = requests.get(f'https://group.baicizhan.com/group/information?shareKey={group_share_key}', headers=headers)
+    response_json = response.json()
+    group_member_list = response_json['data']['members']
+    # 遍历，如果有人的default_nickname和昵称相同，则是没改过昵称。
+    for member in group_member_list:
+        unique_id = member['uniqueId']
+        if unique_id in group_nickname:
+            if group_nickname[unique_id]['group_nickname'] == member['nickname']:
+                del group_nickname[unique_id]
+            else:
+                group_nickname[unique_id]['nickname'] = member['nickname']
+                group_nickname[unique_id]['completed_times'] = member['completedTimes']
+                group_nickname[unique_id]['duration_days'] = member['durationDays']
 
 
-
-
-    
-        
-@app.route('/api/get_nickname', methods=['GET'])
-def notice():
-    '''（改公告时）获取班内改昵称的列表'''
-    try:
-        last_monday = datetime.datetime.now() - datetime.timedelta(days=datetime.datetime.now().weekday() + 7)
-        unique_id = request.args.get('unique_id', '')
-        group_share_key = request.args.get('group_share_key', '')
-        _, user_dict = user_dict_obj.find(unique_id)
-
-
-        # 1.从https://group.baicizhan.com/group/get_week_rank?shareKey=xxx&week=1/2获取班内昵称，1本周
-        time_long = int(time.time() * 1000)
-        headers = getHeaders('$group', user_dict['cookie'], time_long, index = 1)
-        rank = requests.get(f'https://group.baicizhan.com/group/get_week_rank?shareKey={group_share_key}&week=1', headers=headers)
-        last_week_rank = requests.get(f'https://group.baicizhan.com/group/get_week_rank?shareKey={group_share_key}&week=2', headers=headers)
-        member_list = rank.json()['data']['list']
-        last_week_member_list = last_week_rank.json()['data']['list']
-        group_nickname = {}
-        my_reply = ""
-        for member in member_list:
-            unique_id = member['uniqueId']
-            nickname = member['nickname']
-            duration_days = member['durationDays']
-            week_daka_dates = member['weekDakaDates']
-            # 从本周一遍历
-            if unique_id == user_dict['config']['unique_id']:
-                my_reply = nickname
-            # two_week_daka_dates是14个0、1，表示两周内每天的打卡情况
-            two_week_daka_dates = [0] * 14
-            wd = datetime.datetime.now().weekday()
-            # 如果duration_days不够两周，后面的标记-2
-            if duration_days < 7 + wd:
-                for i in range(7 + wd - duration_days):
-                    two_week_daka_dates[i] = -2
-            # 将本周未到达的日期设置为-1
-            for i in range(wd):
-                two_week_daka_dates[-1-i] = -1
-            for date in week_daka_dates:
+    # 3.补全上周打卡情况
+    for member in last_week_member_list:
+        unique_id = member['uniqueId']
+        if unique_id in group_nickname:
+            last_week_daka_dates = member['weekDakaDates']
+            two_week_daka_dates = group_nickname[unique_id]['two_week_daka_dates']
+            for date in last_week_daka_dates:
                 # 计算距离上周一的天数
                 delta = (datetime.datetime.strptime(date, '%Y-%m-%d') - last_monday).days + 1
                 two_week_daka_dates[delta] = 1
+    return my_reply, monitor_reply, group_nickname
 
-            group_nickname[unique_id] = {
-                "group_nickname": nickname,
-                "two_week_daka_dates": two_week_daka_dates
-            }
-
-        # 2.再获取默认昵称https://group.baicizhan.com/group/information?shareKey=xxx
-        main_cookie = user_dict['cookie'].copy()
-        main_cookie['access_token'] = config.main_token
-        headers = getHeaders('$group', main_cookie, time_long, index = 1)
-        response = requests.get(f'https://group.baicizhan.com/group/information?shareKey={group_share_key}', headers=headers)
-        response_json = response.json()
-        group_member_list = response_json['data']['members']
-        # 遍历，如果有人的default_nickname和昵称相同，则是没改过昵称。
-        for member in group_member_list:
-            unique_id = member['uniqueId']
-            if unique_id in group_nickname:
-                if group_nickname[unique_id]['group_nickname'] == member['nickname']:
-                    del group_nickname[unique_id]
-                else:
-                    group_nickname[unique_id]['nickname'] = member['nickname']
-                    group_nickname[unique_id]['completed_times'] = member['completedTimes']
-                    group_nickname[unique_id]['duration_days'] = member['durationDays']
-
-
-        # 3.补全上周打卡情况
-        for member in last_week_member_list:
-            unique_id = member['uniqueId']
-            if unique_id in group_nickname:
-                last_week_daka_dates = member['weekDakaDates']
-                two_week_daka_dates = group_nickname[unique_id]['two_week_daka_dates']
-                for date in last_week_daka_dates:
-                    # 计算距离上周一的天数
-                    delta = (datetime.datetime.strptime(date, '%Y-%m-%d') - last_monday).days + 1
-                    two_week_daka_dates[delta] = 1
-
-        return restful(200, '获取班内改昵称的列表成功', {'my_reply': my_reply, 'group_nickname': group_nickname})
+@app.route('/subscribe/get_nickname', methods=['GET'])
+@app.route('/api/get_nickname', methods=['GET'])
+def get_nickname_():
+    '''（改公告时）获取班内改昵称的列表'''
+    try:
+        unique_id = request.args.get('unique_id', '')
+        group_share_key = request.args.get('group_share_key', '')
+        user_dict = daka_list_obj.get_user_dict(unique_id)
+        my_reply, monitor_reply, group_nickname = get_nickname(config.main_token, http2_client_obj, unique_id, group_share_key, user_dict)
+        return restful(200, '获取班内改昵称的列表成功', {'my_reply': my_reply, 'monitor_reply': monitor_reply, 'group_nickname': group_nickname})
     except Exception as e:
         traceback.print_exc()
         return restful(400, f'{e}')
@@ -721,7 +642,7 @@ def more_groups():
         unique_id = request.json.get('unique_id', '')
         if not unique_id:
             return restful(400, '调用方法异常Σ(っ °Д °;)っ')
-        _, user_dict = user_dict_obj.find(unique_id)
+        user_dict = daka_list_obj.get_user_dict(unique_id)
         time_long = int(time.time() * 1000)
         headers = getHeaders('$group', user_dict['cookie'], time_long, index = 1)
         headers['Content-Type'] = 'application/json; charset=UTF-8'
@@ -738,8 +659,6 @@ def more_groups():
 # from src.thrift_utils import send_http2_request
 @app.route('/login', methods=['GET'])
 def login():
-    # response = send_http2_request('GET', 'https://www.baidu.com', headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36'}, content=None)
-    # return response.content.decode('utf-8')
     return render_template('login.html')
 
 @app.route('/user', methods=['GET'])
@@ -796,11 +715,13 @@ def user_login():
         return restful(400, f'{e}')
     
 def shutdown():
+    if not config.local: # 仅本地模式（呃，懒？）
+        return
     try:
         logger.info('BCZ-Automata 关闭中...')
+        os.system('shutdown -s -t 120')
     except:
         pass
-    os.system('shutdown -s -t 120')
 
 
 def restful(code: int, msg: str = '', data: dict = {}) -> Response:
@@ -816,47 +737,86 @@ def restful(code: int, msg: str = '', data: dict = {}) -> Response:
 
 def prevent_sleep():
     '''防止系统进入休眠'''
-    path = "start ../shadlc-BCZ-Group-Manager/timeout.exe"
-    os.system(path)
+    # 注意：对于笔记本电脑，还需要手动设置关上盖子不睡眠
+    os.system(config.prevent_sleep_command)
 
 def allow_sleep():
     '''允许系统进入休眠'''
-    path = "start ../shadlc-BCZ-Group-Manager/timeout_reversed.exe"
-    os.system(path)
+    os.system(config.allow_sleep_command)
+
+def shutdown_sallow_unotice_getuv(): # 在每天的59 23 * * 运行，根据星期执行不同的功能
+    '''关闭系统/允许休眠/升级通知/获取总uv'''
+    weekday = datetime.datetime.now().weekday()
+    user_dict = daka_list_obj.get_user_dict(0) # 获取一个默认用户令牌
+    # 星期一：parse_notice_offline()
+    if weekday == 6: # 星期日晚上
+        ...
+        # parse_notice_offline()
+    # 星期二-星期日：allow_sleep()、shutdown()、parse_notice_online()
+    elif weekday >= 0 and weekday <= 5: # 星期一到星期六晚上
+        allow_sleep()
+        # parse_notice_online(only_raw_notice=True)
+        shutdown()
+
+def buka():
+    not_daka_users = daka_list_obj.check_not_daka_users(include_not_daka=True)
+    print(f"正在为{len(not_daka_users)}人补卡")
+    if len(not_daka_users) > 0: # -1 正常打卡，-2 补卡
+        daka_utils.daka_all_headless(daka_list_obj, http2_client_obj, only_rank_and_notice=-2, user_dict_list=not_daka_users, random_delay=180)
+
+def sync_and_subscribe():
+    '''同步和订阅服务'''
+    # 同步服务
+    try:
+        for comm in config.sync_command:
+            os.system(comm)
+        # path = os.path.dirname(os.path.abspath(__file__)).split('BCZ-Automata')[0]
+        # spliter = path[-1]
+        # path = f"explorer.exe /select,\"{path}BCZ-Notice-Examiner{spliter}bcz_notice.db\""
+        # os.system(path)
+    except Exception as e:
+        logger.error(f"执行同步命令失败：{e}")
+    # 订阅服务(仅本地模式，服务器模式请访问/subscribe/)
+    if config.local:
+        ...
+        
     
 if __name__ == '__main__':
-    
     for name in logging.Logger.manager.loggerDict.keys():
-        logger = logging.getLogger(name)
         if 'httpx' in name: # 输出http2多路请求的日志，如需要requests的日志，则加入'urllib3' in name
-            logger.setLevel(logging.DEBUG)
+            tlogger = logging.getLogger(name)
+            tlogger.setLevel(logging.DEBUG)
 
-    logging.info('BCZ-Automata 启动中...')
+    logger.info('BCZ-Automata 启动中...')
     if debug:
         # app.run(debug=True, host='127.0.0.1', port=8850, request_handler=MyRequestHandler)
-        socketio.run(app, debug=True, host='127.0.0.1', port=8850)
+        socketio.run(app, debug=True, host=config.host, port=config.port)
     else:
         if '--static' not in sys.argv:
-            logger.info('若未充满电，请设置屏幕关闭和睡眠时间为3小时以上')
-            Schedule("* 0-1 * * 0 update_notice", lambda: parse_notice_offline())
-            Schedule("20-59 4-8 * * 0 daka_schedule", lambda: thrift_utils.daka_all_headless(daka_list_obj,-1))
-            Schedule("* 5-8 * * 1-6 daka_schedule", lambda: thrift_utils.daka_all_headless(daka_list_obj,-1))
-            Schedule("* 21-23 * * 0-6 prevent_sleep", lambda: prevent_sleep())
-            Schedule("* 0-1 * * 1-6 shutdown", lambda: shutdown())
-            Schedule("* 0-1 * * 1-6 allow_sleep", lambda: allow_sleep())
+            Schedule("58-59 23 * * 0-6 shutdown_sallow_unotice_getuv", lambda: shutdown_sallow_unotice_getuv())
 
-            Schedule("15-59 23 * * * rank_and_notice_bronze", lambda: thrift_utils.daka_all_headless(daka_list_obj, only_rank_and_notice=1))
-            Schedule("20-59 23 * * * rank_and_notice_silver", lambda: thrift_utils.daka_all_headless(daka_list_obj, only_rank_and_notice=2))
-            Schedule("25-59 23 * * * rank_and_notice_gold", lambda: thrift_utils.daka_all_headless(daka_list_obj, only_rank_and_notice=3))
-            Schedule("30-59 23 * * * rank_and_notice_platinum", lambda: thrift_utils.daka_all_headless(daka_list_obj, only_rank_and_notice=4))
-            Schedule("35-59 23 * * * rank_and_notice_diamond", lambda: thrift_utils.daka_all_headless(daka_list_obj, only_rank_and_notice=5))
-            Schedule("40-59 23 * * * rank_and_notice_stellar", lambda: thrift_utils.daka_all_headless(daka_list_obj, only_rank_and_notice=6))
-            Schedule("45-59 23 * * * rank_and_notice_champion", lambda: thrift_utils.daka_all_headless(daka_list_obj, only_rank_and_notice=7))
+            Schedule("* 4-8 * * 0 daka_schedule", lambda: daka_utils.daka_all_headless(daka_list_obj,http2_client_obj,-1, random_delay=3000))
+            Schedule("* 5-8 * * 1-6 daka_schedule", lambda: daka_utils.daka_all_headless(daka_list_obj,http2_client_obj,-1, random_delay=2000))
+            Schedule("* 6-8 * * 0-6 sync_and_subscribe", lambda: sync_and_subscribe())
+            Schedule("* 4-8,21-23 * * 0-6 prevent_sleep", lambda: prevent_sleep())
+
+            if '--test' in sys.argv:
+                Schedule("* * * * * tester", lambda: daka_utils.daka_all_headless(daka_list_obj, http2_client_obj, only_rank_and_notice=6, random_delay=11))
+            Schedule("31-59 23 * * * rank_and_notice_bronze", lambda: daka_utils.daka_all_headless(daka_list_obj, http2_client_obj, only_rank_and_notice=1, random_delay=121))
+            Schedule("34-59 23 * * * rank_and_notice_silver", lambda: daka_utils.daka_all_headless(daka_list_obj, http2_client_obj, only_rank_and_notice=2, random_delay=121))
+            Schedule("37-59 23 * * * rank_and_notice_gold", lambda: daka_utils.daka_all_headless(daka_list_obj, http2_client_obj, only_rank_and_notice=3, random_delay=121))
+            Schedule("40-59 23 * * * rank_and_notice_platinum", lambda: daka_utils.daka_all_headless(daka_list_obj, http2_client_obj, only_rank_and_notice=4, random_delay=121))
+            Schedule("43-59 23 * * * rank_and_notice_diamond", lambda: daka_utils.daka_all_headless(daka_list_obj, http2_client_obj, only_rank_and_notice=5, random_delay=121))
+            Schedule("46-59 23 * * * rank_and_notice_stellar", lambda: daka_utils.daka_all_headless(daka_list_obj, http2_client_obj, only_rank_and_notice=6, random_delay=121))
+            # Schedule("* 6-8 * * * champion_dawn", lambda: daka_utils.daka_all_headless(daka_list_obj, http2_client_obj, only_rank_and_notice=7, random_delay=181))
+            Schedule("* 12-14 * * * champion_noon", lambda: daka_utils.daka_all_headless(daka_list_obj, http2_client_obj, only_rank_and_notice=7, random_delay=181))
+            Schedule("49-59 23 * * * rank_and_notice_champion", lambda: daka_utils.daka_all_headless(daka_list_obj, http2_client_obj, only_rank_and_notice=7, random_delay=121))
             # 以后可能加一个legend(doge)
-            Schedule("50-59 23 * * * rank_and_notice_official", lambda: thrift_utils.daka_all_headless(daka_list_obj, only_rank_and_notice=0))
+            Schedule("52-59 23 * * * rank_and_notice_official", lambda: daka_utils.daka_all_headless(daka_list_obj, http2_client_obj, only_rank_and_notice=0, random_delay=121))
+            Schedule("30-59 23 * * * buka", lambda: buka()) # 补卡
 
-
-
+        daka_list_obj.init_notice_storage(logger)
         # waitress.serve(app, host=config.host, port=config.port, threads=6, expose_tracebacks = True)
         http_server = WSGIServer((config.host, config.port), socketio.run(app, host=config.host, port=config.port), log=logging)
         http_server.serve_forever()
+        # 如果是服务器，要在每天早上打卡后重新加载daka_list_obj，以刷新cheat_tracker和member_list

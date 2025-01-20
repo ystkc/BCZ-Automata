@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>账号信息配置</title>
+</head>
+<body>
+    <textarea name="content" rows="50" cols="100" placeholder="请先在excel编辑好，然后粘贴到此处"></textarea>
+    <br>
+    <button onclick="submit()">提交</button>
+    <div id="result"></div>
+</body>
+<script>
+    // 监听提交事件
+    function submit() {
+        // 阻止默认行为
+        event.preventDefault();
+        // 获取用户输入的字符串
+        var content = document.querySelector('textarea[name="content"]').value;
+        // 发送请求到服务器
+        var xhr = new XMLHttpRequest();
+        url = window.location.href + '/submit';
+        xhr.open('POST', url);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.send(JSON.stringify({ content: content }));
+        xhr.onload = function() {
+            if (xhr.status === 200) {
+                alert('提交成功');
+                document.querySelector('#result').innerHTML = xhr.responseText.replace(/\\n/g, '<br>');
+            } else {
+                alert('提交失败' + xhr.status);
+            }
+        };
+    }
+</script>
+</html>

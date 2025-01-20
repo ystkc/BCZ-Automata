@@ -3,11 +3,10 @@
 import pyperclip
 import json
 
-def append_user_data():
+def append_user_data(text=None):
     '''用于导入以及更新user_cookie.json文件'''
-    print("请先拷贝账号数据表格，格式如下(无需表头，一行一个，\\t分隔)")
-    print("can_daka(0/1)\tunique_id\tname\tword_count(新学词数)\tcooper(None)\tcan_pk(0/1)\tarbitor(0/1,是否允许PK反挂)\ttidal_group_limit(可用班位数)")
-    input("然后按回车键继续。")
+    print("数据格式: can_daka(0/1)\tunique_id\tname\tword_count(新学词数)\tcooper(None)\tcan_pk(0/1)\tarbitor(0/1,是否允许PK反挂)\ttidal_group_limit(可用班位数)\t是否订阅该账户公告")
+    
     template = {
             "cookie": {
                 # "access_token": "",
@@ -35,7 +34,13 @@ def append_user_data():
                 # "grade": 3
             }
         }
-    text = pyperclip.paste()
+    pause = False
+    result_str = ""
+    if text is None:
+        pause = True
+        print("请先拷贝账号数据表格，格式如下(无需表头，一行一个，\\t分隔)")
+        input("然后按回车键继续。")
+        text = pyperclip.paste()
     text_line = text.split('\n')
     data = []
     for line in text_line:
@@ -61,7 +66,7 @@ def append_user_data():
 
     cnt = 0
     for i in data:
-        if len(i) < 9:
+        if len(i) < 10:
             continue
         unique_id = int(i[1])
         access_token = i[5]
@@ -75,7 +80,8 @@ def append_user_data():
             # "cooper": int(i[4]), # read only
             "can_pk": int(i[6]),
             "arbitor": int(i[7]), # arbitor
-            "tidal_group_limit": int(i[8])
+            "tidal_group_limit": int(i[8]),
+            "subscribe_notice": int(i[9])
         }
         user_cookie = {
             "access_token": i[5],
@@ -84,17 +90,21 @@ def append_user_data():
         if current_user_config.get(unique_id):
             cnt += 1
             print(f"User {unique_id} already exists in the database.")
+            result_str += f"User {unique_id} already exists in the database.\n"
             for key, value in user_config.items():
                 if user_config[key] != current_user_config[unique_id].get(key):
                     print(f"Updating {key} from {current_user_config[unique_id].get(key)} to {value}.")
+                    result_str += f"Updating {key} from {current_user_config[unique_id].get(key)} to {value}.\n"
                     current_user_config[unique_id][key] = value
             for key, value in user_cookie.items():
                 if user_cookie[key] != current_user_cookie[unique_id].get(key):
                     print(f"Updating {key} from {current_user_cookie[unique_id].get(key)} to {value}.")
+                    result_str += f"Updating {key} from {current_user_cookie[unique_id].get(key)} to {value}.\n"
                     current_user_cookie[unique_id][key] = value
         else:
             cnt += 1
             print(f"\033[32mAdding user {user_config['name']} to the database.\033[0m can_daka: {user_config['can_daka']}")
+            result_str += f"\033[32mAdding user {user_config['name']} to the database.\033[0m can_daka: {user_config['can_daka']}\n"
             user_cookie.update(template['cookie'])
             user_config.update(template['config'])
             current_user_config[unique_id] = user_config
@@ -126,4 +136,10 @@ def append_user_data():
 
 
     print(f"\033[32m{cnt} users added to the database.\033[0m")
-    input("Press any key to exit.")
+    result_str += f"\033[32m{cnt} users added to the database.\033[0m\n"
+    if pause:
+        input("Press any key to exit.")
+    else:
+        return result_str
+if __name__ == '__main__':
+    append_user_data()
