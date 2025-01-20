@@ -1,5 +1,5 @@
 // 页面加载后，请求账号列表
-let daka = 0, not_daka = 0; // 总账号数=daka+not_daka，总班位数=总账号数*6
+let daka = 0, not_daka = 0, not_loaded = 0; // 总账号数=daka+not_daka，总班位数=总账号数*6
 let groups_list = []; // 加入的班级列表，{name: 'xxx', count: 有多少个账号加入该班级, include_leader: true/false}
 let notice_groups_count = 0, not_notice_groups_count = 0; // 加入的青铜班级（用于更公告）数量
 let all_groups_count = 0; // 总现在开了的班位数量
@@ -7,7 +7,7 @@ String.prototype.replaceAll = function(s1, s2) {
   return this.replace(new RegExp(s1, "gm"), s2);
 }
 function refresh(btn){
-  btn.innerHTML = `已打卡${daka}，未打卡${not_daka}`;
+  btn.innerHTML = `已打卡${daka}，未打卡${not_daka}，未加载${not_loaded}`;
   var group_str = '';
   groups_list.sort(function(a, b){
     return b.count - a.count;
@@ -25,6 +25,7 @@ function reloadAll(){
   // 清空打卡计数
   daka = 0;
   not_daka = 0;
+  not_loaded = 0;
   return fetch('/accounts/reload', {
     method: 'GET',
     headers: {
@@ -368,14 +369,19 @@ function joinAll(){
   });
 
 }
-function daKaAll(button){
-  // 仅F12调用
-  
+function buKa(){ // 给未打卡的账号打卡
   buttons = document.querySelectorAll('.daka')
-  if (!confirm(`在${buttons.length*5}s内开始所有账号`)) return;
+  buttons_to_click = []
   buttons.forEach(function(button){
+    status_str = button.parentNode.parentNode.innerHtml;
+    if (status_str.indexOf('0未打卡') != -1){
+      buttons_to_click.push(button);
+    }
+  });
+  if (!confirm(`在${buttons_to_click.length*5}s内开始 未打卡 账号`)) return;
+  buttons_to_click.forEach(function(button){
     // 随机延时0-180s
-    random_secs = Math.floor(Math.random() * buttons.length * 5);
+    random_secs = Math.floor(Math.random() * buttons_to_click.length * 5);
     setTimeout(function(){
       button.click();
     }, random_secs * 1000);
@@ -394,7 +400,8 @@ function daKaAll(button){
 }
 function daKa(button, unique_id){
   // websocket链接
-  
+  button.parentNode.parentNode.querySelector('#img_frame').innerHTML = '';
+  button.parentNode.parentNode.querySelector('#nickname').innerHTML = '';
   let socket = io();
   socket.emit('daka', unique_id);
   socket.on('msg', function(data) {
@@ -524,10 +531,15 @@ function showAccountList(data, init=0) {
   let str = '';
   data = data.data;
   data.forEach(function(account) {
+    var refresh_btn_text = '刷新';
+    if (account.can_daka == 0) {
+      refresh_btn_text = '点此加载';
+      not_loaded += 1;
+    }
     str += `<div id="group${account.unique_id}">
       <li class="account-item">${account.name}(${account.unique_id})
         <button class="delete-btn" onclick="deleteAccount(${account.unique_id})">删除</button>
-        <button class="edit-btn" onclick="loadOwnGroups(${account.unique_id})">刷新</button>
+        <button class="edit-btn" onclick="loadOwnGroups(${account.unique_id})">${refresh_btn_text}</button>
         <button class="join-btn" onclick="changeToken('${account.access_token}', ${account.unique_id})">魔法账号</button>
       </li>
     </div>`;
@@ -537,14 +549,16 @@ function showAccountList(data, init=0) {
   accountList.innerHTML = str;
   data_length = data.length;
   data.forEach(function(account) {
-    if(init == 1){
-      // 给予0-6s的随机延时
-      setTimeout(function(){
+    if(account.can_daka == 1){
+      if(init == 1){
+        // 给予0-6s的随机延时
+        setTimeout(function(){
+          loadOwnGroups(account.unique_id);
+        }, Math.floor(Math.random() * data_length * 100));
+      }
+      else{
         loadOwnGroups(account.unique_id);
-      }, Math.floor(Math.random() * data_length * 100));
-    }
-    else{
-      loadOwnGroups(account.unique_id);
+      }
     }
   });
 }

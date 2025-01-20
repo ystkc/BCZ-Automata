@@ -1,5 +1,6 @@
 
 from src.thrift_utils import report_event, social_send_share_success, user_study, user_dict, http2_client
+from src.config import Config
 from src.get_headers import getHeaders
 from src.avatar import find_unique_id
 from src.notice_parser import NoticeParser
@@ -18,6 +19,10 @@ from fuzzywuzzy import process
 DEBUG = False
 DEBUG_SIZE = 1
 LOAD_MEMBER_TABLE = True # 如果要一天获取多次，请设置为True
+
+# 功能开关
+BCZ_NCSVC = False # 已于12.5结束
+YZDD = False # 2024.12.2已经结束
 
 def clear_learnt_list(unique_id):
     conn = sqlite3.connect('learnt_words.db')
@@ -72,254 +77,8 @@ def get_history_learnt_list(unique_id, delta=1):
 
 from src.bcz import getRandomWordIDInBook
 
-conn = None
-def puzzle_init(puzzle_category):
-    global conn
-    if conn is not None:
-        return
-    conn = sqlite3.connect('puzzle.db')
-    cursor = conn.cursor()
-    cursor.execute(f'''CREATE TABLE IF NOT EXISTS {puzzle_category} (
-        INDEX_ID INTEGER PRIMARY KEY AUTOINCREMENT,
-        ID INTEGER UNIQUE,
-        QUESTION TEXT,
-        CHN_MEAN TEXT,
-        ANSWER TEXT,
-        OPTIONS1 TEXT,
-        OPTIONS2 TEXT,
-        OPTIONS3 TEXT,
-        TOPIC_ID INTEGER)
-    ''')
-    conn.commit()
-
-def puzzle_solver(puzzle_dict, puzzle_category):
-    # 链接数据库
-    cursor = conn.cursor()
-    id = int(puzzle_dict['id'])
-    chn_mean = puzzle_dict['chnMean']
-    if chn_mean is None:
-        puzzle_dict['chnMean'] = ''
-    option_list = puzzle_dict['options'].copy()
-    answer = puzzle_dict['rightAnswer']
-    question = puzzle_dict['question']
-    topic_id = puzzle_dict['topicId']
-    # 查找答案
-    cursor.execute(f'''SELECT ANSWER FROM {puzzle_category} WHERE ID == ?''', (id, ))
-    result = cursor.fetchone()
-    stored = False
-    if result is not None:
-        stored = True
-        puzzle_dict['chnMean'] += 'Stored'
-        # print(id ,result, option_list)
-        if answer is None:
-            for i, option in enumerate(option_list):
-                # print(i, option, result[0], answer)
-                if option == result[0]:
-                    answer = i + 1
-                    break
-            if answer is None:
-                # print(i, option, result[0], answer, puzzle_dict['chnMean'])
-                puzzle_dict['chnMean'] += 'Expired'
-                stored = False
-                print(f'id={id} 题目过期...更新中')
-            
-    
-    # print(stored, answer, puzzle_dict['chnMean'])
-    if not stored and answer is not None:
-        answer_text = option_list[answer - 1]
-        cursor.execute(f'''INSERT OR REPLACE INTO {puzzle_category} (ID, QUESTION, CHN_MEAN, ANSWER, OPTIONS1, OPTIONS2, OPTIONS3, TOPIC_ID) VALUES (?, ?, ?, ?, ?, ?,?, ?)''', (id, question, chn_mean, answer_text, option_list[0], option_list[1], option_list[2], topic_id))
-        conn.commit()
-        puzzle_dict['chnMean'] += 'Learnt'
-    if answer is None:
-        answer = random.randint(0, 4)
-        if answer == 0:
-            answer = 1 # 干扰概率
-    return answer
-
-def puzzle_close():
-    global conn
-    if conn is None:
-        return
-    conn.close()
-    conn = None
-
-wl_conn = None
-wl_patch_conn = None
-whitelist = []
-def word_lookup_init():
-    global wl_conn
-    global wl_patch_conn
-    global whitelist
-    with open('whitelist.json', 'r', encoding='utf-8') as f:
-        whitelist = json.load(f)
-    if wl_conn is not None:
-        return
-    wl_conn = sqlite3.connect('lookup.db')
-    wl_patch_conn = sqlite3.connect('lookup_patch.db')
-    cursor = wl_patch_conn.cursor()
-    cursor.execute('''CREATE TABLE IF NOT EXISTS dict_bcz (
-        TOPIC_ID INTEGER,
-        WORD TEXT,
-        ANSWER TEXT,
-        RANK TEXT)
-    ''')
-    wl_patch_conn.commit()
-    # 默认存在，不需要创建
-    return
-
-def find_variant(word):
-    cursor = wl_conn.cursor()
-    cursor.execute(f'''SELECT origin FROM {get_variant_table_name(word)} WHERE variant == ?''', (word, ))
-    result = cursor.fetchone()
-    if result is None:
-        return word
-    return result[0]
-
-def get_variant_table_name(word):
-    if word[0] >= 'a' and word[0] <= 'b':
-        return 'variant_a_b'
-    elif word[0] == 'c':
-        return 'variant_c'
-    elif word[0] >= 'd' and word[0] <= 'f':
-        return 'variant_d_f'
-    elif word[0] >= 'g' and word[0] <= 'k':
-        return 'variant_g_k'
-    elif word[0] >= 'l' and word[0] <= 'o':
-        return 'variant_l_o'
-    elif word[0] >= 'p' and word[0] <= 'r':
-        return 'variant_p_r'
-    elif word[0] == 's':
-        return 'variant_s'
-    elif word[0] >= 't' and word[0] <= 'z':
-        return 'variant_t_z'
-    else:
-        return 'variant_t_z'
-        raise ValueError(f'word{word} not in any variant')
-
-def word_lookup(word, topic_id=None):
-    # 先尝试查找原型
-    cursor = wl_patch_conn.cursor()
-    cursor.execute(f'''SELECT ANSWER FROM dict_bcz WHERE WORD == ?''', (word, ))
-    result = cursor.fetchall()
-    if result is not None and result != []:
-        # 可能有多个，用，连接
-        return '@' + '，'.join([i[0] for i in result])
-    
-    # 尝试查找topic_id
-    if topic_id is not None:
-        cursor = wl_conn.cursor()
-        cursor.execute(f'''SELECT mean_cn FROM dict_bcz WHERE topic_id == ?''', (int(topic_id), ))
-        result = cursor.fetchone()
-        if result is not None and result[0] is not None:
-            return f'#{result[0]}'
-    
-    cursor = wl_conn.cursor()
-    cursor.execute(f'''SELECT mean_cn FROM dict_bcz WHERE word == ?''', (word, ))
-    result = cursor.fetchone()
-    if result is not None and result[0] is not None:
-        return result[0]
-    # 再尝试查找变体
-    variant = find_variant(word)
-    if variant == word:
-        return None
-    cursor.execute(f'''SELECT mean_cn FROM dict_bcz WHERE word == ?''', (variant, ))
-    result = cursor.fetchone()
-    if result is not None and result[0] is not None:
-        return '##' + result[0]
-    return None
-
-
-def word_lookup_close():
-    global wl_conn
-    if wl_conn is None:
-        return
-    wl_conn.close()
-    wl_conn = None
-    global wl_patch_conn
-    if wl_patch_conn is None:
-        return
-    wl_patch_conn.close()
-    wl_patch_conn = None
-
-replace_dict = {
-    '（':'',
-    '）':'',
-    '  ': ' ',
-    '…': '',
-    '/': '',
-    ', ': '，',
-    '…': '',
-    '.': '',
-    '；':'，'
-}
-def standardize(chn_mean):
-    if chn_mean is None:
-        return None
-    # 将大写字母转换为小写字母
-    # chn_mean = chn_mean.lower()
-    for key, value in replace_dict.items():
-        chn_mean = chn_mean.replace(key, value)
-    return chn_mean # 统一成中文逗号
-
-def word_lookup_puzzle_solver(puzzle_dict):
-    word = standardize(puzzle_dict['title'])
-    topic_id = puzzle_dict['topicId']
-    msg = word
-    chn_mean = standardize(word_lookup(word, topic_id))
-    if chn_mean is None:
-        chn_mean = ''
-        Warning(f'word_lookup_puzzle_solver: word not found: {word}')
-        msg += '<font color="red">未找到</font>'
-    options = puzzle_dict['options']
-    options_text = [standardize(option['text']) for option in options] # 统一成中文逗号
-    result = None
-    for text in options_text:
-        if text == chn_mean:
-            result = (text, 100)
-            msg += '&ltEXACT&gt'
-            break
-        elif text in chn_mean and (result is None or len(text) > len(result[0])):
-            result = (text, 95)
-            msg += '&ltIN&gt'
-    if result is None:
-        result = process.extractOne(chn_mean, options_text)
-        msg += '&ltFUZZ&gt'
-    msg += f'{options_text}match={result}<br>释义：{chn_mean}'
-    if result is None:
-        return random.randint(0, 3)
-    index = options[options_text.index(result[0])]['id']
-    return index, msg
-
-def word_lookup_patcher(puzzle_dict, answer_id, topic_id, rank, rival_score):
-    word = puzzle_dict['title']
-    for option in puzzle_dict['options']:
-        if option['id'] == answer_id:
-            answer = option['text']
-            break
-    else:
-        Warning(f'PATCHER: answer_id={answer_id} not found in options')
-        return
-    cursor = wl_patch_conn.cursor()
-    # 检查是否已经存在
-    cursor.execute(f'''SELECT RANK FROM dict_bcz WHERE WORD == ? AND ANSWER == ?''', (word, answer))
-    result = cursor.fetchone()
-    if result is None:
-        cursor.execute(f'''INSERT OR IGNORE INTO dict_bcz (TOPIC_ID, WORD, ANSWER, RANK) VALUES (?, ?, ?, ?)''', (topic_id, word, answer, rank))
-        wl_patch_conn.commit()
-    elif result[0] is None:
-        cursor.execute(f'''UPDATE dict_bcz SET RANK = ? WHERE WORD == ? AND ANSWER == ?''', (rank, word, answer))
-        wl_patch_conn.commit()
-    else:
-        recorded_rank = result[0].split(',')
-        if rank not in recorded_rank:
-            recorded_rank.append(rank)
-            cursor.execute(f'''UPDATE dict_bcz SET RANK = ? WHERE WORD == ? AND ANSWER == ?''', (','.join(recorded_rank), word, answer))
-            wl_patch_conn.commit()
-
-
-
 class daka_list_class:
-    def __init__(self, logger, http2_client_obj: http2_client):
+    def __init__(self, logger, http2_client_obj: http2_client, config: Config):
         self.http2_client_obj = http2_client_obj
         self.logger = logger
         self.daka_list = []
@@ -336,14 +95,49 @@ class daka_list_class:
         logger.info(f'加载了{self.get_user_cnt()}个用户')
 
         # 初始化数据储存信息
-        self.group_counter_dir = f'./group_counter/'
-        self.notice_and_rank_path = f'../BCZ-Notice-Examiner/bcz_notice.db'
-        self.log_dir = f'./logs/'
+        self.notice_and_rank_path = config.database_path
+        self.puzzle_path = config.puzzle_path
+        self.dict_db_path = config.dict_db_path
+        self.dict_patch_db_path = config.dict_patch_db_path
+        self.log_dir = config.log_dir
+        self.pk_blacklist = config.pk_blacklist
+        self.pk_whitelist = config.pk_whitelist
+
 
         # 读取今天的cheat_tracker
         self.load_cheat_tracker(datetime.datetime.now().strftime('%Y-%m-%d'))# 防止数据跨天
 
-        # 初始化数据库
+        # 初始化单词大赛数据库
+        if BCZ_NCSVC:
+            puzzle_conn = sqlite3.connect(self.puzzle_path)
+            cursor = puzzle_conn.cursor()
+            cursor.execute(f'''CREATE TABLE IF NOT EXISTS BCZ_NCSVC (
+                INDEX_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                ID INTEGER UNIQUE,
+                QUESTION TEXT,
+                CHN_MEAN TEXT,
+                ANSWER TEXT,
+                OPTIONS1 TEXT,
+                OPTIONS2 TEXT,
+                OPTIONS3 TEXT,
+                TOPIC_ID INTEGER)
+            ''')
+            puzzle_conn.commit()
+            puzzle_conn.close()
+        # 单词数据库
+        
+        # wl_conn = sqlite3.connect(self.dict_db_path)
+        wl_patch_conn = sqlite3.connect(self.dict_patch_db_path)
+        cursor = wl_patch_conn.cursor()
+        cursor.execute('''CREATE TABLE IF NOT EXISTS dict_bcz (
+            TOPIC_ID INTEGER,
+            WORD TEXT,
+            ANSWER TEXT,
+            RANK TEXT)
+        ''')
+        wl_patch_conn.commit()
+        wl_patch_conn.close()
+        # 公告数据库
         conn = sqlite3.connect(self.notice_and_rank_path)
         cursor = conn.cursor()
         cursor.execute('''CREATE TABLE IF NOT EXISTS notice (
@@ -414,11 +208,25 @@ class daka_list_class:
         # 创建线程来执行耗时的初始化任务
         self.__not_prepared = True
 
+    def delete_old_logs(self):
+        '''删除35天前的日志文件'''
+        today = datetime.date.today()
+        for file_name in os.listdir(self.log_dir):
+            try:
+                file_date_str = file_name.split('_')[1].split(' ')[0]
+                file_date = datetime.datetime.strptime(file_date_str, '%Y-%m-%d').date()
+                if (today - file_date).days > 35:
+                    os.remove(os.path.join(self.log_dir, file_name))
+                    print(f'删除{file_name}')
+            except:
+                print(f'文件名{file_name}格式错误')
+                pass
     
     def init_notice_storage(self, logger):
         if not self.__not_prepared:
             return
         logger.info('开始读取数据库')
+        self.load_dict_db(logger)
         conn = sqlite3.connect(self.notice_and_rank_path, uri=True)
         cursor = conn.cursor()
         # 取消阻塞
@@ -550,8 +358,9 @@ class daka_list_class:
             with open('tmp_bad_words.json', 'w', encoding='utf-8') as f:
                 json.dump(self.get_bad_words(has_mid=False), f, ensure_ascii=False, indent=4)
         # 写入日志
+        self.delete_old_logs()
         self.logger.info(f'写入了{len(self.logs)}条日志，{len(self.warnings)}条警告')
-        with open(f'{self.log_dir}log_{datetime.datetime.now().strftime("%Y-%m-%d %H-%M-%S")}.{self.latest_check_user_timestamp}.{len(self.logs)}.txt', 'w', encoding='utf-8') as f:
+        with open(f'{self.log_dir}log_{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}.{self.latest_check_user_timestamp}.{len(self.logs)}.txt', 'w', encoding='utf-8') as f:
             for msg in self.logs:
                 f.write(msg)
             for msg in self.warnings:
@@ -562,12 +371,29 @@ class daka_list_class:
         self.warnings = []
         # 写入作弊检测self.cheat_tracker结果到csv
         if len(self.cheat_tracker) > 0:
-            with open(f'{self.log_dir}cheat_tracker.{self.cheat_tracker_date_str}.csv', 'w', encoding='utf-8', newline='') as f:
+            with open(f'{self.log_dir}cheat-tracker_{self.cheat_tracker_date_str} .csv', 'w', encoding='utf-8', newline='') as f:
                 writer = csv.writer(f)
                 writer.writerow(['bcz_id', 'word_cnt', 'time','study_cheat'])
                 for user_id, (word_count, time, status) in self.cheat_tracker.items():
                     writer.writerow([user_id, word_count, time, status])
         # 写入缓冲区到数据库
+        # 写入puzzle_buffer
+        if BCZ_NCSVC and len(self.puzzle_buffer) > 0:
+            puzzle_conn = sqlite3.connect(self.puzzle_path)
+            cursor = puzzle_conn.cursor()
+            cursor.executemany('''INSERT OR REPLACE INTO BCZ_NCSVC (ID, QUESTION, CHN_MEAN, ANSWER, OPTIONS1, OPTIONS2, OPTIONS3, TOPIC_ID) VALUES (?, ?, ?, ?, ?, ?, ?, ?)''', self.puzzle_buffer)
+            puzzle_conn.commit()
+            puzzle_conn.close()
+            self.logger.info(f'写入{len(self.puzzle_buffer)}条puzzle')
+        if len(self.patch_buffer) > 0:
+            patch_conn = sqlite3.connect(self.dict_patch_db_path)
+            cursor = patch_conn.cursor()
+            cursor.executemany('''INSERT OR REPLACE INTO dict_bcz (ANSWER, WORD, TOPIC_ID, RANK) VALUES (?, ?, ?, ?)''', self.patch_buffer)
+            patch_conn.commit()
+            patch_conn.close()
+            self.logger.info(f'写入{len(self.patch_buffer)}条patch')
+
+        # 写入notice_buffer
         conn = sqlite3.connect(self.notice_and_rank_path)
         cursor = conn.cursor()
         # 删除35天前的MEMBERS和notice数据
@@ -667,6 +493,201 @@ class daka_list_class:
         self.logger.info(f'关闭倒计时结束，准备关闭')
         self.close()
 
+
+    def puzzle_solver(self, puzzle_dict): # 适用于BCZ_NCSVC
+        if not BCZ_NCSVC:
+            self.add_warning('BCZ_NCSVC未导入，无法使用puzzle_solver')
+            return None
+        id = int(puzzle_dict['id'])
+        chn_mean = puzzle_dict['chnMean']
+        if chn_mean is None:
+            puzzle_dict['chnMean'] = ''
+        option_list = puzzle_dict['options'].copy()
+        answer = puzzle_dict['rightAnswer']
+        question = puzzle_dict['question']
+        topic_id = puzzle_dict['topicId']
+        # 查找答案
+        result = self.puzzles.get(id) # 得到的是答案的文本
+        stored = False
+        if result is not None:
+            stored = True
+            puzzle_dict['chnMean'] += 'Stored'
+            # print(id ,result, option_list)
+            if answer is None: # 还未作答
+                for i, option in enumerate(option_list):
+                    # print(i, option, result[0], answer)
+                    for item in result:
+                        if option == item:
+                            answer = i + 1
+                            break
+                    if answer is not None:
+                        break
+                if answer is None:
+                    # print(i, option, result[0], answer, puzzle_dict['chnMean'])
+                    puzzle_dict['chnMean'] += '.Expired'
+                    stored = False
+                    self.add_warning(f'id={id} 题目过期...更新中')
+        
+        # print(stored, answer, puzzle_dict['chnMean'])
+        if not stored and answer is not None:
+            answer_text = option_list[answer - 1]
+            self.puzzle_buffer.append((id, question, chn_mean, answer_text, option_list[0], option_list[1], option_list[2], topic_id))
+            puzzle_dict['chnMean'] += 'Learnt'
+        if answer is None:
+            answer = random.randint(0, 4)
+            if answer == 0:
+                answer = 1 # 干扰概率
+        return answer
+
+    def load_dict_db(self, logger):
+        # 读取puzzle_path数据库
+        if BCZ_NCSVC:
+            puzzle_conn = sqlite3.connect(self.puzzle_path)
+            cursor = puzzle_conn.cursor()
+            cursor.execute('''SELECT QUESTION, ANSWER FROM BCZ_NCSVC''')
+            self.puzzles = {}
+            for row in cursor.fetchall():
+                if self.puzzles.get(row[0]) is None:
+                    self.puzzles[row[0]] = [row[1],]
+                else:
+                    self.puzzles[row[0]].append(row[1])
+            puzzle_conn.close()
+            logger.info(f'加载puzzle_path数据库{len(self.puzzles)}条')
+            self.puzzle_buffer = []
+        # 遍历self.dict_db_path中的所有表
+        dict_db_conn = sqlite3.connect(self.dict_db_path)
+        cursor = dict_db_conn.cursor()
+        cursor.execute('''SELECT name FROM sqlite_master WHERE type='table' ''')
+        tables = cursor.fetchall()
+        self.variants = {}
+        for table in tables:
+            if table[0].startswith('variant'):
+                results = cursor.execute(f'''SELECT variant, origin FROM {table[0]}''')
+                for result in results:
+                    self.variants[result[0]] = result[1]
+        self.words = {}
+        logger.info(f'加载词族{len(self.variants)}条')
+        cursor.execute('''SELECT topic_id, word, mean_cn FROM dict_bcz''')
+        for result in cursor.fetchall():
+            self.words[result[0]] = result[2]
+            self.words[result[1]] = result[2]
+        logger.info(f'加载单词词释义{len(self.words)}条')
+        dict_db_conn.close()
+        # 加载dict_patch_db_path数据库
+        dict_patch_db_conn = sqlite3.connect(self.dict_patch_db_path)
+        cursor = dict_patch_db_conn.cursor()
+        cursor.execute('''SELECT TOPIC_ID, WORD, ANSWER, RANK FROM dict_bcz''')
+        self.words_patch = {}
+        self.word_occur_ranks = {}
+        for result in cursor.fetchall():
+            if self.words_patch.get(result[0]) is None:
+                self.words_patch[result[0]] = [result[2],]
+            else:
+                self.words_patch[result[0]].append(result[2])
+            if self.words_patch.get(result[1]) is None:
+                self.words_patch[result[1]] = [result[2],]
+            else:
+                self.words_patch[result[1]].append(result[2])
+            self.word_occur_ranks[result[1]] = result[3]
+        self.patch_buffer = [] # 包括释义不完整和排名信息不完整的单词
+        logger.info(f'加载patch数据库{len(self.word_occur_ranks)}条')
+
+    def word_lookup(self, word, topic_id=None):
+        # 先尝试查找原型
+        result = self.words_patch.get(word)
+        if result is not None:
+            # 可能有多个，用，连接
+            return '@' + '，'.join([i for i in result])
+        result = self.words.get(word)
+        if result is not None: # 这个不会有多个，直接返回
+            return f'@@{result}'
+        
+        # 尝试查找topic_id
+        if topic_id is not None:
+            result = self.words_patch.get(topic_id)
+            if result is not None:
+                return '#' + '，'.join([i for i in result])
+            result = self.words.get(topic_id)
+            if result is not None:
+                return f'##{result}'
+        
+        # 再尝试查找词根
+        variant = self.variants.get(word)
+        if variant == word:
+            return None
+        result = self.words.get(variant)
+        if result is not None:
+            return '*' + result
+        return None
+
+    replace_dict = {
+        '（':'',
+        '）':'',
+        '  ': ' ',
+        '…': '',
+        '/': '',
+        ', ': '，', # 统一成中文逗号
+        '…': '',
+        '.': '',
+        '；':'，'
+    }
+    def standardize(chn_mean):
+        if chn_mean is None:
+            return None
+        # 将大写字母转换为小写字母
+        # chn_mean = chn_mean.lower()
+        for key, value in daka_list_class.replace_dict.items():
+            chn_mean = chn_mean.replace(key, value)
+        return chn_mean
+
+    def word_lookup_puzzle_solver(self, puzzle_dict):
+        word = daka_list_class.standardize(puzzle_dict['title'])
+        topic_id = puzzle_dict['topicId']
+        msg = word
+        chn_mean = daka_list_class.standardize(self.word_lookup(word, topic_id))
+        if chn_mean is None:
+            chn_mean = ''
+            self.add_warning(f'word_lookup_puzzle_solver: word not found: {word}')
+            msg += '<font color="red">未找到</font>'
+        options = puzzle_dict['options']
+        options_text = [daka_list_class.standardize(option['text']) for option in options] # 统一成中文逗号
+        result = None
+        for text in options_text:
+            if text == chn_mean:
+                result = (text, 100)
+                msg += '&ltEXACT&gt'
+                break
+            elif text in chn_mean and (result is None or len(text) > len(result[0])):
+                result = (text, 95)
+                msg += '&ltIN&gt'
+        if result is None:
+            result = process.extractOne(chn_mean, options_text)
+            msg += '&ltFUZZ&gt'
+        msg += f'{options_text}match={result}<br>释义：{chn_mean}'
+        if result is None:
+            return random.randint(0, 3)
+        index = options[options_text.index(result[0])]['id']
+        return index, msg
+
+    def word_lookup_patcher(self, puzzle_dict, answer_id, topic_id, rank, rival_score):
+        word = puzzle_dict['title']
+        for option in puzzle_dict['options']:
+            if option['id'] == answer_id:
+                answer = option['text']
+                break
+        else:
+            self.add_warning(f'PATCHER: answer_id={answer_id} not found in options{puzzle_dict}')
+            return
+        result = self.word_occur_ranks.get(word)
+        # 检查是否已经存在
+        if result is None:
+            self.patch_buffer.append((answer, word, topic_id, rank))
+        else:
+            recorded_rank = result.split(',')
+            if rank not in recorded_rank:
+                recorded_rank.append(rank)
+                self.patch_buffer.append((answer, word, topic_id, ','.join(recorded_rank)))
+
     def reset_group_counter(self):
         today_date_int = int(datetime.datetime.now().strftime('%Y%m%d'))
         if self.group_counter_date != today_date_int:
@@ -720,8 +741,8 @@ class daka_list_class:
     def load_cheat_tracker(self, cheat_tracker_date_str: str):
         self.cheat_tracker = {}
         self.cheat_tracker_date_str = cheat_tracker_date_str
-        if os.path.exists(f'{self.log_dir}cheat_tracker.{cheat_tracker_date_str}.csv'):
-            with open(f'{self.log_dir}cheat_tracker.{cheat_tracker_date_str}.csv', 'r', encoding='utf-8') as f:
+        if os.path.exists(f'{self.log_dir}cheat-tracker_{cheat_tracker_date_str} .csv'):
+            with open(f'{self.log_dir}cheat-tracker_{cheat_tracker_date_str} .csv', 'r', encoding='utf-8') as f:
                 reader = csv.reader(f)
                 next(reader) # 跳过标题
                 for row in reader:
@@ -1004,8 +1025,169 @@ class daka_list_class:
     
     def is_empty(self):
         return len(self.daka_list) == 0
+    
 
+class notice_subscriber:
+    '''公告订阅器，自动检测公告更新，提供弹窗或网页返回的方式来和班长互动'''
+    def __init__(self, logger, http2_client_obj: http2_client, config: Config):
+        self.http2_client_obj = http2_client_obj
+        self.logger = logger
+        self.log_dir = config.log_dir
+        self.last_hash = {}
+        self.latest_timestamp = 0
+        self.get_last_hash()
 
+    def get_last_hash(self):
+        '''先获取上次公告哈希值(初始化以及距离上次更新时间超过1h)'''
+        # 从log_dir中获取最近的log文件subscriber_%Y-%m-%d %H:%M:%S.timestamp.len().csv
+        latest_file_name = ''
+        ltt = 0
+        for file_name in os.listdir(self.log_dir):
+            if file_name.startswith('subscriber_'):
+                t = int(file_name.split('.')[1])
+                if t > ltt:
+                    ltt = t
+                    latest_file_name = file_name
+        if latest_file_name == '':
+            self.logger.info('没有找到订阅记录')
+            return
+        with open(os.path.join(self.log_dir, latest_file_name), 'r', encoding='utf-8') as f:
+            reader = csv.reader(f)
+            for row in reader:
+                self.last_hash[(int(row[0]), int(row[1]))] = row[2] # (unique_id, group_id) = hash
+        self.logger.info(f'加载了{len(self.last_hash)}条订阅记录')
+
+    def get_subscription(self, users):
+        # 读取最新公告，检测哪些公告需要更新
+        self.latest_timestamp = int(time.time())
+        self.new_notice = []
+        for user in users:
+            if user['config'].get('subscribe_notice', 0) == 0:
+                continue
+            unique_id = user['config']['unique_id']
+            user_name = user['config']['name']
+            self.logger.info(f'开始检测{unique_id}的订阅公告')  
+            user_cookie = user['cookie']
+            headers = getHeaders("$group", user_cookie, int(time.time()), index=1)
+            response = self.http2_client_obj.send_http2_request('GET', 'https://group.baicizhan.com/group/own_groups?uniqueId=0', headers=headers, content=None) # 我的小班
+            for group in response.json()['data']['list']:
+                if group['rank'] == 1: # 公告测试用
+                    continue
+                group_id = group['id']
+                group_share_key = group['shareKey']
+                group_name = group['name']
+                notice = group['notice']
+                introduction = group['introduction']
+                if notice is None:
+                    notice = '(空)'
+                notice_hash = hashlib.md5(notice.encode('utf-8')).hexdigest()
+                if (unique_id, group_id) not in self.last_hash or self.last_hash[(unique_id, group_id)] != notice_hash:
+                    self.logger.info(f'发现{unique_id}的{group_id}有更新(*^o^*)')
+                    self.new_notice.append({'user_name': user_name, 
+                                             'group_name': group_name, 
+                                              'notice': notice, 
+                                               'introduction': introduction, 
+                                                 'group_id': group_id, 
+                                                  'unique_id': unique_id,
+                                                   'group_share_key': group_share_key,
+                                                    'notice_hash': notice_hash})
+            time.sleep(0.5)
+
+    def get_top_notice(self, daka_list_obj: daka_list_class):
+        if int(time.time()) - self.latest_timestamp > 3600: # 超过1h，重新获取公告哈希值
+            users = daka_list_obj.get_user_dict_list()
+            random.shuffle(users)
+            self.get_subscription(users)
+        if len(self.new_notice) == 0:
+            return {'user_name': '', 'group_name': '', 'notice': '没有新的订阅～', 'introduction': '', 'group_id': -1, 'unique_id': -1, 'group_share_key': '', 'notice_hash': '', 'remain_count': 0}
+        self.new_notice[0]['remain_count'] = len(self.new_notice)
+        return self.new_notice[0]
+    
+    def read_reply_and_ack(self, unique_id, user_dict, group_share_key, group_id, notice_hash, reply_content, correspond = True):
+        '''标记已读、回复和确认'''
+        if unique_id == -1:
+            return 400, "没有订阅，不需要回复"
+        result_str = ''
+        if correspond:
+            # 回复公告并确认
+            result_str, status = self.reply_and_ack(unique_id, user_dict, group_share_key, reply_content)
+            if status == 0:
+                self.logger.error(f'出现错误，不标记已读：{result_str}')
+                return 400, '出现了错误，不标记已读'
+        # 在内存中标记
+        self.last_hash[(int(unique_id), int(group_id))] = notice_hash
+
+        self.new_notice.pop(0) # 弹出已读的公告
+        self.logger.info(f'将{unique_id}的{group_id}的公告 标记已读')
+
+        # 如果是最后一条订阅，则写入log文件
+        if len(self.new_notice) & 7 == 0:
+            self.save_log()
+            self.logger.info(f'保存了{len(self.last_hash)}条订阅 已读记录')
+
+        return 200, result_str
+    
+    def save_log(self):
+        '''保存公告哈希值到log文件'''
+        with open(os.path.join(self.log_dir, f'subscriber_{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}.{int(time.time())}.csv'), 'w', encoding='utf-8', newline='') as f:
+            writer = csv.writer(f)
+            for key, value in self.last_hash.items():
+                writer.writerow(list(key) + [value])
+        self.logger.info(f'保存了{len(self.last_hash)}条订阅记录')
+
+    def reply_and_ack(self, unique_id, user_dict, group_share_key, content):
+        '''回复公告并确认'''
+        try:
+            status_1 = 0
+            if not unique_id or not group_share_key:
+                self.logger.error(f'回复失败，参数不完整{unique_id} {group_share_key} {content}')
+                return "参数不完整"
+            time_long = int(time.time() * 1000)
+            result_str = ''
+            group_id = 0 # 后面会获取
+            headers = getHeaders('$group', user_dict['cookie'], time_long, index = 1)
+            headers['Content-Type'] = 'application/json; charset=UTF-8'
+            # 回复
+            if content != '' and content is not None:
+                payload = {
+                    'shareKey': group_share_key,
+                    'nickname': content,
+                }
+                response_json = self.http2_client_obj.send_http2_request('POST', f'https://group.baicizhan.com/group/set_nickname', headers=headers, content = json.dumps(payload, ensure_ascii=False)).json()
+                if response_json['code'] == 1:
+                    result_str = '回复成功<br>'
+                    status_1 = 1
+                else:
+                    result_str = f'回复失败{response_json["message"]}<br>'
+            else:
+                status_1 = 1
+            # 获取最新信息
+            response_json = self.http2_client_obj.send_http2_request('GET', f'https://group.baicizhan.com/group/information?shareKey={group_share_key}', headers=headers, content=None).json()
+            if response_json['code'] == 1:
+                group_info = response_json['data']['groupInfo']
+                group_id = group_info['id']
+                members = response_json['data']['members']
+                for member in members:
+                    if member['uniqueId'] == unique_id:
+                        result_str += f'现在名字{member["nickname"]}<br>'
+                        break
+            else:
+                self.logger.error(f'获取{unique_id}的{group_share_key}的公告失败{response_json["message"]}')
+                return f'获取{unique_id}的{group_share_key}的公告失败{response_json["message"]}<br>', 0
+            # 收到
+            response_json = self.http2_client_obj.send_http2_request('POST', f'https://group.baicizhan.com/group/receive_notice?groupId={group_id}', headers=headers, content='{}').json()
+            if response_json['code'] == 1:
+                result_str += '收到成功<br>'
+                status_1 &= 1
+            else:
+                result_str += f'收到失败{response_json["message"]}<br>'
+                status_1 = 0
+            self.logger.info(result_str)
+            return result_str, status_1
+        except Exception as e:
+            result_str += f'回复失败{e}{traceback.format_exc()}<br>'
+            self.logger.error(result_str)
+            return result_str, 0
 
 
 def heartbeat_demon( daka_list: daka_list_class, user_cookie, user_config, http2_client_obj: http2_client):
@@ -1017,8 +1199,6 @@ def heartbeat_demon( daka_list: daka_list_class, user_cookie, user_config, http2
         ]
         report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=0)
         time.sleep(30)
-    if daka_list.is_empty():
-        puzzle_close()
 
 
     
@@ -1038,9 +1218,10 @@ def print_puzzle(puzzle_dict):
     return result
 
 
-def pkonline(user_cookie, user_config, http2_client_obj: http2_client, max_round=3):
+def pkonline(user_cookie, user_config, http2_client_obj: http2_client, daka_list: daka_list_class, max_round=3):
     '''pkonline'''# max_round用来随机轮数，用来调用2次分散打卡时间
-    return # 已于12.5结束
+    if not BCZ_NCSVC:
+        return # 已于12.5结束
     # 领奖
     # https://pkonline1.baicizhan.com/api/contest/2024/prepare/giftMain?code=mB5AG9fCzo
     headers = getHeaders("$pkonline1", user_cookie, int(time.time()), index=1)
@@ -1062,7 +1243,6 @@ def pkonline(user_cookie, user_config, http2_client_obj: http2_client, max_round
         cnt = data['blindBox']
         time.sleep(random.randint(1, 2))
 
-    puzzle_init('BCZ_NCSVC')
     # https://pk.baicizhan.com/contest2024/sign/?code=mB5AG9fCzo
     # https://pk.baicizhan.com/contest2024/preparation/index.html?code=mB5AG9fCzo
     # https://pkonline1.baicizhan.com/api/contest/2024/tournament/status?code=mB5AG9fCzo
@@ -1187,7 +1367,7 @@ def pkonline(user_cookie, user_config, http2_client_obj: http2_client, max_round
                     time.sleep(1)
                 yield f'第{order}题'
                 rival_escaped = data['rivalEscaped']
-                ans = puzzle_solver(data['puzzle'], 'BCZ_NCSVC')
+                ans = daka_list.puzzle_solver(data['puzzle'])
                 response_thresh = 4000
                 response_delay = random.randint(2000, response_thresh)
                 start_timestamp = int(time.time() * 1000)
@@ -1222,7 +1402,7 @@ def pkonline(user_cookie, user_config, http2_client_obj: http2_client, max_round
                             break
                         time.sleep(1)
                 # 检查答案
-                puzzle_solver(data['puzzle'], 'BCZ_NCSVC')
+                daka_list.puzzle_solver(data['puzzle'])
                 right_answer = data['puzzle']['rightAnswer']
                 my_answer = '√' if data['meAnswer'] == right_answer else '×'
                 rival_answer = '已逃跑'
@@ -1257,15 +1437,15 @@ def pkonline(user_cookie, user_config, http2_client_obj: http2_client, max_round
                 current_round += 1
                 if current_round > max_round:
                     return
-                random_wait_second = random.randint(1,4)
+                time.sleep(random.randint(1,4))
 
-pkonline2_lock = threading.Lock()
-def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, max_round=3, max_win_round=3, allow_self=False):
+pkonline2_lock = threading.Lock() # 防止多账号同时开始匹配
+def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_list:daka_list_class, max_round=3, max_win_round=3, allow_self=False):
     '''单词对战''' # max_round无论输赢，但是体力值不足时，会自动退出
     if user_config.get('can_pk', True) == False:
         yield f'{user_config["name"]}不参加pk'
         return
-    word_lookup_init()
+    name = user_config['name']
     time_short = int(time.time())
     time_long = int(time.time() * 1000) # 只有report_event的cookie和url需要更新time_long，其余均不需要
     # https://pk.baicizhan.com/api/rankpk/v2/current_session?time=1728962138173
@@ -1369,8 +1549,12 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, max_roun
             yield f'对手bczId:<font color="lemonchiffon">{unique_id}</font><br>'
         else:
             yield f'未找到对手bczId<br>'
-        if unique_id in whitelist:
+        if unique_id in daka_list.pk_whitelist:
             yield f'白名单用户💖<br>'
+            daka_list.add_warning(f'{name}遇到了白名单用户{rival_name}{unique_id}')
+        elif unique_id in daka_list.pk_blacklist:
+            yield f'黑名单用户🚫<br>'
+            daka_list.add_warning(f'{name}遇到了黑名单用户{rival_name}{unique_id}')
         # yield f'共{puzzle_count}题'
         payload = [ # 匹配成功
             {"index": 40, "extra_info": "{\"trace\":\"together_tab\",\"session_id\":\"%d\",\"pk_rank\":\"%d\",\"challenge_type\":\"排位赛\",\"challenge_id\":%d,\"cost_time\":%d}"% (session_id, current_level, challenge_id, int(time.time() - time_start))}
@@ -1427,16 +1611,18 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, max_roun
                     report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=0)
                     time_start = time.time()
                 order = data['order']
-                chosen_id, msg = word_lookup_puzzle_solver(data['puzzle'])
+                chosen_id, msg = daka_list.word_lookup_puzzle_solver(data['puzzle'])
                 topic_id = data['puzzle']['topicId']
                 rival_escaped = data['rivalEscaped']
                 rival_answer = data['rival']['answer']
 
                 yield f'第{order}题 {msg}<br>'
-                if unique_id in whitelist:
+                if unique_id in daka_list.pk_whitelist:
                     penalty = 0
+                elif unique_id in daka_list.pk_blacklist:
+                    penalty = rival_score - 180 * (order - 1)
                 else:
-                    penalty = rival_score - 186 * (order - 1)
+                    penalty = rival_score - 188 * (order - 1)
                 lb = 7100
                 if rival_score + 32 <= my_score:
                     lb -= min((my_score - rival_score - 32) * 20, 1500) # 5600
@@ -1536,7 +1722,7 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, max_roun
                     else:
                         my_penalty -= 150
                         yield f'×{rival_score}(+{score_delta})<br>'
-                word_lookup_patcher(data['puzzle'], right_answer, topic_id, rank_name_en, score_delta)
+                daka_list.word_lookup_patcher(data['puzzle'], right_answer, topic_id, rank_name_en, score_delta)
                 # 等待直到current_time为0
                 while True:
                     response = http2_client_obj.send_http2_request('POST', url, pk_post_headers, content_str)
@@ -1590,10 +1776,10 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, max_roun
 
     return
 
-def yzdd(user_cookie, user_config):
+def yzdd(user_cookie, user_config, http2_client_obj: http2_client, daka_list: daka_list_class):
     '''一站到底'''
-    # 2024.12.2已经结束
-    return
+    if not YZDD:
+        return
     # 如果是星期日，跳过
     if datetime.datetime.now().weekday() == 6:
         return "$星期日，跳过"
@@ -1669,12 +1855,6 @@ def deskmate_pk(cookie, config, http2_client_obj: http2_client):
     data = {}
 
     name = config['name']
-    # random_delay = random.randint(0, random_delay_thresh)
-    # while random_delay > 0:
-        # yield (f'{name} 等待{random_delay}秒')
-        # time.sleep(1)
-        # random_delay -= 1
-
     # https://social.baicizhan.com/api/deskmate/game/start_word_match_game
     time_long = int(time.time() * 1000)
     headers = getHeaders('$social', cookie, time_long, index = 1)
@@ -1814,7 +1994,7 @@ def get_class_range(user_config, total_user_cnt = 18, max_rank_cnt = 1000):
         num_end = num_start + 30
     return num_start, num_end
 
-def task_center(user_cookie, user_config, http2_client_obj: http2_client, word_cnt=10, react_wait_seconds=1):
+def task_center(user_cookie, user_config, http2_client_obj: http2_client, daka_list_obj: daka_list_class, word_cnt=10, react_wait_seconds=1):
     # 获取不断电和学习分排行榜
     client_date = int(datetime.datetime.now().strftime('%Y%m%d'))
     def daily_summary_desc(client_date):
@@ -1908,12 +2088,12 @@ def task_center(user_cookie, user_config, http2_client_obj: http2_client, word_c
                     time.sleep(3)
                     yield f"领取{get_award(task['userTaskId'], task['awardList'])}<br>"
                 elif '单词PK' in task_name and '3' in task_name:
-                    for msg in pkonline2(user_cookie, user_config, http2_client_obj, max_round=8, max_win_round=3):
+                    for msg in pkonline2(user_cookie, user_config, http2_client_obj, daka_list_obj, max_round=8, max_win_round=3):
                         yield msg
                     time.sleep(1.5)
                     yield f"领取{get_award(task['userTaskId'], task['awardList'])}<br>"
                 elif '单词PK' in task_name and '1' in task_name:
-                    for msg in pkonline2(user_cookie, user_config, http2_client_obj, max_round=8, max_win_round=1):
+                    for msg in pkonline2(user_cookie, user_config, http2_client_obj, daka_list_obj, max_round=8, max_win_round=1):
                         yield msg
                     time.sleep(1.5)
                     yield f"领取{get_award(task['userTaskId'], task['awardList'])}<br>"
@@ -1951,7 +2131,7 @@ def sleep_actual(sleep_seconds):
     time.sleep(sleep_seconds + index * 0.001)
     return
 
-def learn_words(user_cookie, user_config, http2_client_obj: http2_client, react_wait_seconds=1, word_count=5):
+def learn_words(user_cookie, user_config, http2_client_obj: http2_client, daka_list_obj: daka_list_class, react_wait_seconds=1, word_count=5):
     unique_id = user_config['unique_id']
     
     yield f'{user_config["book_id"]}书'
@@ -2304,7 +2484,7 @@ def learn_words(user_cookie, user_config, http2_client_obj: http2_client, react_
     report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=0)
     yield ' 学习结束<br>'
 
-    for msg in task_center(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, word_cnt=word_count + review_count):
+    for msg in task_center(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, daka_list_obj=daka_list_obj, word_cnt=word_count + review_count):
         yield msg
 
 def get_leader_info(members):
@@ -2313,84 +2493,9 @@ def get_leader_info(members):
             return member['uniqueId'], member['nickname']
     return None, None
 
-def save_member_info(group_id, members, cursor: sqlite3.Cursor, today_date: int): # today_date必须是今天0点的时间戳，避免重复插入
-    # 保存成员信息
-    for member in members:
-        # member["uniqueId"]=int
-        # 选取同一天、同一用户的最早打卡时间
-        recorded_time = cursor.execute(
-            f'SELECT COMPLETED_TIME FROM MEMBERS WHERE USER_ID = ? AND TODAY_DATE = ? ORDER BY COMPLETED_TIME',
-            (member['uniqueId'], today_date)
-        ).fetchone()
-        if recorded_time and recorded_time[0]!='' :
-            recorded_time = int(recorded_time[0])
-            if recorded_time != 0 and recorded_time < member['completedTime']:
-                member['completedTime'] = recorded_time
-            # 可能加入新的小班后，会产生更晚的时间，以早的为准
-
-        # 选取同一用户的最早头像
-        member['avatar'] = None # 暂时不需要头像
-
-        # 选取同一用户的最早昵称
-        nickname = cursor.execute(
-            f'SELECT NICKNAME FROM USER_NAME WHERE USER_ID = ?',
-            (member['uniqueId'],)
-        ).fetchone()
-        # 如果没有这个用户
-        if nickname is None:
-            cursor.execute(
-                f'INSERT INTO USER_NAME (USER_ID, NICKNAME) VALUES (?,?)',
-                (member['uniqueId'], member['nickname'])
-            )
-        elif nickname[0]!= member['nickname']: # 如果昵称发生变化
-            cursor.execute(
-                f'UPDATE USER_NAME SET NICKNAME = ? WHERE USER_ID = ?',
-                (member['uniqueId'], member['nickname'])
-            )
-
-        # 这个地方性能低下，要优化
-        # 获取书本的HASH_ID
-        hash_id = cursor.execute(
-            f'SELECT HASH_ID FROM BOOK_NAME WHERE BOOK_NAME = ?',
-            (member['bookName'],)
-        ).fetchone()
-        if hash_id is not None:
-            member['bookName'] = hash_id[0]
-        else:
-            # 插入新的书本
-            cursor.execute(
-                f'INSERT INTO BOOK_NAME (BOOK_NAME) VALUES (?)',
-                (member['bookName'],)
-            )
-            hash_id = cursor.execute(
-                f'SELECT last_insert_rowid() FROM BOOK_NAME'
-            ).fetchone()
-            member['bookName'] = hash_id[0]
-
-        cursor.execute(
-            f'INSERT INTO MEMBERS (USER_ID, TODAY_DATE, GROUP_ID, COMPLETED_TIME, WORD_COUNT, STUDY_CHEAT, COMPLETED_TIMES, DURATION_DAYS, BOOK_NAME) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(USER_ID, TODAY_DATE, GROUP_ID) DO UPDATE SET '
-            'COMPLETED_TIME = excluded.COMPLETED_TIME, '
-            'WORD_COUNT = excluded.WORD_COUNT, '
-            'STUDY_CHEAT = excluded.STUDY_CHEAT, '
-            'COMPLETED_TIMES = excluded.COMPLETED_TIMES, '
-            'DURATION_DAYS = excluded.DURATION_DAYS, '
-            'BOOK_NAME = excluded.BOOK_NAME ',
-            (
-                member['uniqueId'],# *
-                today_date, # *
-                group_id, # *
-                member['completedTime'],
-                member['todayWordCount'],
-                member['todayStudyCheat'],
-                member['completedTimes'],
-                member['durationDays'],
-                member['bookName']
-                # None, # group_name，可以在notice表中根据group_id获取
-                # None # data_time，对定时记录冷储存数据库无用
-            )
-        )
 
 def check_study_cheat(date_str, members, user_cookie, http2_client_obj: http2_client, daka_list: daka_list_class) -> bool:
+    '''在获取小班信息时，检查是否有刷词嫌疑并进行举报（爆破）'''
     need_recheck = False
     for member in members:
         if member['todayStudyCheat']:
@@ -2776,9 +2881,9 @@ def daka(daka_list: daka_list_class, user_cookie, user_config, http2_client_obj:
     # for msg in notice_checker(daka_list, user_cookie, user_config,  http2_client_obj):
     #     yield msg
     # only_rank_and_notice = 0
-    # for msg in pkonline(user_cookie=user_cookie, user_config=user_config):
+    # for msg in pkonline2(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, daka_list=daka_list, max_round=1):
     #     message_str += msg
-        # yield message_str
+    #     yield message_str
 
     # daka_list.remove(unique_id)
     # return 
@@ -2803,19 +2908,19 @@ def daka(daka_list: daka_list_class, user_cookie, user_config, http2_client_obj:
 
     # pk # 1
     if random.randint(0, 1) == 1:
-        for msg in pkonline(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, max_round=3):
+        for msg in pkonline(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, daka_list = daka_list, max_round=3):
             message_str += msg
             yield message_str
         time.sleep(react_wait_second)
 
-    yield yzdd(user_cookie=user_cookie, user_config=user_config)
+    yield yzdd(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, daka_list=daka_list)
     if user_config.get('only_yzdd', "False") == "True":
         return
     
     message_str += '<br>开始背单词<br>'
     yield message_str
     word_count = int((user_config.get('user_index', 0) / 10 + 1) * 2.5)
-    for msg in learn_words(user_cookie, user_config, http2_client_obj, react_wait_second, word_count):
+    for msg in learn_words(user_cookie, user_config, http2_client_obj, daka_list, react_wait_second, word_count):
         message_str += msg
         yield message_str
     time.sleep(react_wait_second)
@@ -2997,7 +3102,7 @@ def daka(daka_list: daka_list_class, user_cookie, user_config, http2_client_obj:
     report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=1)
 
     # pk # 2
-    for msg in pkonline(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, max_round=3):
+    for msg in pkonline(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, daka_list=daka_list, max_round=3):
         message_str += msg
         yield message_str
 
@@ -3020,54 +3125,42 @@ def daka(daka_list: daka_list_class, user_cookie, user_config, http2_client_obj:
     yield message_str
 
 from src.gen import generate_random, exponential_with_constant, square_gaussian_with_constant
-segments = [
+segments = [ # 用于拟合每天各时段打卡时间分布
     {"range": (0.0, 0.2), "function": exponential_with_constant, "params": [435, -65]},
     {"range": (0.2, 0.45), "function": square_gaussian_with_constant, "params": [888, 0.2972, 0.0205, -7624, 5541, -828]},
     {"range": (0.45, 0.65), "function": square_gaussian_with_constant, "params": [738, 0.5279, 0.0195, 746, -1003, 426]},
     {"range": (0.65, 0.85), "function": square_gaussian_with_constant, "params": [465, 0.7770, 0.0322, 22537, -27939, 8726]},
     {"range": (0.85, 1.0), "function": square_gaussian_with_constant, "params": [105, 0.9155, 0.0145, -195883, 353421, -157605]},
 ]
-def daka_headless(daka_list: daka_list_class, user_cookie, user_config, http2_client_obj, user_cnt, only_rank_and_notice, random_delay=1800):
+def daka_headless(daka_list: daka_list_class, user_cookie, user_config, http2_client_obj: http2_client, user_cnt, only_rank_and_notice, random_delay=1800, generator=False):
     # 获取到今天0点的秒数
     today_seconds = (datetime.datetime.now() - datetime.datetime.combine(datetime.date.today(), datetime.time(0, 0, 0))).total_seconds()
-    delay = int(generate_random(today_seconds / 86400, random_delay / 86400, segments) * 86400 - today_seconds) + random.randint(0, 100) / 10
+    delay = 0 if random_delay <= 0 else (int(generate_random(today_seconds / 86400, random_delay / 86400, segments) * 86400 - today_seconds) + random.randint(0, 100) / 10)
     name = user_config.get('name', '未知')
     unique_id = user_config.get('unique_id', '未知')
-    if name == "奶芋" or name == "星烛":
-        delay = random_delay / 2
-    message = ""
-    print(f"开始打卡:{name}，延迟{delay}s")
-    time.sleep(delay)
+    message = f"开始打卡:{name}，延迟{delay}s"
+    print(message)
+    if generator:
+        yield message
     try:
+        if delay < 0:
+            daka_list.add_warning(f'{name} {delay} < 0')
+        else:
+            time.sleep(delay)
         for msg in daka(daka_list, user_cookie, user_config, http2_client_obj, total_user_cnt=user_cnt, only_rank_and_notice=only_rank_and_notice):
             message = msg
+            if generator:
+                yield message
     except Exception as e:
         err_str = traceback.format_exc()
-        message += f'$打卡失败{e}{err_str}'
-        print(err_str)
+        message += f'<br>${name}打卡失败{e}<br>{err_str}'
+        if generator:
+            yield message
+        daka_list.add_warning(message.replace('<br>', '\n'))
         daka_list.remove(unique_id)
-    message = F"延迟{delay}s后打卡\n" + message
-    date_str = datetime.datetime.now().strftime('%Y-%m-%d %H-%M-%S')
-    message = message.replace('<br>', '\n')
-    daka_list.add_log(date_str, name, unique_id, message)
-
-def delete_old_logs():
-    '''删除35天前的日志文件'''
-    today = datetime.date.today()
-    for file_name in os.listdir('./logs/'):
-        if file_name.endswith('.txt'):
-            try:
-                file_date_str = file_name.split('_')[1].split(' ')[0]
-                file_date = datetime.datetime.strptime(file_date_str, '%Y-%m-%d').date()
-                if (today - file_date).days > 35:
-                    os.remove(f'./logs/{file_name}')
-                    print(f'删除{file_name}')
-            except:
-                print(f'文件名{file_name}格式错误')
-                pass
+    daka_list.add_log(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), name, unique_id, f"延迟{delay}s后打卡\n{message}".replace('<br>', '\n'))
 
 def daka_all_headless(daka_list: daka_list_class, http2_client_obj, only_rank_and_notice, user_dict_list=[], random_delay=1800):
-    delete_old_logs()
     if user_dict_list == []:
         user_dict_list = daka_list.get_user_dict_list()
     user_cnt = len(user_dict_list)

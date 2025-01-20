@@ -7,10 +7,13 @@ import statistics
 import openpyxl
 from openpyxl.chart import BarChart, Reference, LineChart, ScatterChart, Series
 import json
+import time
 import os
 import re
 
 DEBUG = False
+default_notice_db_path = f'../BCZ-Notice-Examiner/bcz_notice.db?mode=ro'
+
 
 def encoder(text):
     # 转化成bytearray类型
@@ -31,274 +34,409 @@ def decoder(text):
     
     return input.decode()
 
-bad_word_path = '../BCZ-Notice-Examiner/assets/bad_words.bin'
-bad_words = []
-if os.path.exists(bad_word_path):
-    with open(bad_word_path, 'rb') as f:
-        bin_data = f.read()
-        bad_words = json.loads(decoder(bin_data))
-warn_word_path = '../BCZ-Notice-Examiner/assets/warn_words.bin'
-accept_word_path = '../BCZ-Notice-Examiner/assets/accept_words.bin'
-accept_notice_path = '../BCZ-Notice-Examiner/accept_notice.txt'
-bad_notice_path = '../BCZ-Notice-Examiner/bad_notice.txt'
-year = datetime.datetime.now().year
-member_info_path = '../BCZ-Notice-Examiner/assets/member/' # 要按照unique_id来处理
-member_name_path = '../BCZ-Notice-Examiner/assets/member_name/'
-member_info_top_rate_path = '../BCZ-Notice-Examiner/assets/js/member_info_top_rate.js'
-member_info_top_rate_screen_path = '../BCZ-Notice-Examiner/assets/js/member_info_top_rate_screen.js'
-member_info_top_name_path = "../BCZ-Notice-Examiner/assets/js/member_info_top_name.js"
-groups_path = '../BCZ-Notice-Examiner/assets/groups.bin'
-books_path = '../BCZ-Notice-Examiner/assets/books.bin'
-default_notice_db_path = f'../BCZ-Notice-Examiner/bcz_notice.db'
+class NoticeParser:
+    '''位于BCZ-Automata/src/notice_parser.py'''
+    bad_word_path = '../BCZ-Notice-Examiner/assets/bad_words.json'
+    enhanced_bad_word_path = '../BCZ-Notice-Examiner/assets/enhanced_bad_words.json'
+    warn_word_path = '../BCZ-Notice-Examiner/assets/warn_words.bin'
+    accept_word_path = '../BCZ-Notice-Examiner/assets/accept_words.bin'
+    accept_notice_path = '../BCZ-Notice-Examiner/accept_notice.txt'
+    bad_notice_path = '../BCZ-Notice-Examiner/bad_notice.txt'
 
-black_list_path = '../BCZ-Notice-Examiner/blacklist.xlsx'
-black_list_rating_path = '../BCZ-Notice-Examiner/blacklist_rating.json'
-black_list_string_assets = '../BCZ-Notice-Examiner/assets/black_list_string.bin'
+    replace_dict = {
+        '一': '1',
+        '二': '2',
+        '三': '3',
+        '四': '4',
+        '五': '5',
+        '六': '6',
+        '七': '7',
+        '八': '8',
+        '九': '9',
+        '零': '0',
+        '壹': '1',
+        '贰': '2',
+        '叁': '3',
+        '肆': '4',
+        '伍': '5',
+        '陆': '6',
+        '柒': '7',
+        '捌': '8',
+        '玖': '9',
+        '〇': '0',
+    }
+    # Chinese Characters: 4E00–9FA5
+    # Dingbats: 0x2700-0x27BF
+    # Ornamental Dingbats:  1F650–1F67F
+    # Emoticons:  1F600–1F64F
+    # Miscellaneous Symbols:  2600–26FF
+    # Miscellaneous Symbols and Pictographs:  1F300–1F5FF
+    # Supplemental Symbols and Pictographs:  1F900–1F9FF
+    # Symbols and Pictographs Extended-A:  1FA70–1FAFF
+    # Transport and Map Symbols:  1F680–1F6FF
+    # Enclosed Alphanumeric Supplement:  1F100–1F1FF
+    # Enclosed Ideographic Supplement:  1F200–1F2FF
 
-def set_invalid_storage(invalid_storage: dict, position, char, length=1):
-    for i in range(position, position+length):
-        if i not in invalid_storage:
-            invalid_storage[i] = [char]
-        else:
-            invalid_storage[i].append(char)
+    pattern = r'''[^\w\d
+    \u4e00-\u9fa5
+    \u2700-\u27BF
+    \U0001F650-\U0001F67F
+    \U0001F600-\U0001F64F
+    \u2600-\u26FF
+    \U0001F300-\U0001F5FF
+    \U0001F900-\U0001F9FF
+    \U0001FA70-\U0001FAFF
+    \U0001F680-\U0001F6FF
+    \U0001F100-\U0001F1FF
+    \U0001F200-\U0001F2FF
+    ]'''
+    
+    def __init__(self):
+        self.bad_words = []
+        if os.path.exists(self.bad_word_path):
+            with open(self.bad_word_path, 'rb') as f:
+                bin_data = f.read()
+            self.bad_words = json.loads((bin_data))
+        if os.path.exists(self.enhanced_bad_word_path):
+            with open(self.enhanced_bad_word_path, 'rb') as f:
+                bin_data = f.read()
+            self.bad_words.extend(json.loads((bin_data)))
+        self.warn_words = []
+        self.invalid_storage = {} # {[]}
+        self.notice_dict = {}
+        self.most_recent_clear_date = 0 # timestamp
+
+    def set_invalid_storage(self, position, char, length=1):
+        for i in range(position, position+length):
+            if i not in self.invalid_storage:
+                self.invalid_storage[i] = [char]
+            else:
+                self.invalid_storage[i].append(char)
 
 
-replace_dict = {
-    '一': '1',
-    '二': '2',
-    '三': '3',
-    '四': '4',
-    '五': '5',
-    '六': '6',
-    '七': '7',
-    '八': '8',
-    '九': '9',
-    '零': '0',
-    '壹': '1',
-    '贰': '2',
-    '叁': '3',
-    '肆': '4',
-    '伍': '5',
-    '陆': '6',
-    '柒': '7',
-    '捌': '8',
-    '玖': '9',
-    '〇': '0',
-}
-pattern = r'[^\w\d\u4e00-\u9fa5\U0001F601-\U0001F64F\U00002702-\U000027B0\U0001F680-\U0001F6C0\U0001F170-\U0001F251\U0001F600-\U0001F636\U0001F681-\U0001F6C5\U0001F30D-\U0001F567]'
-def slice_invalid_char(text: str):
-    # 去除并存储无效字符的位置
-    global pattern
-    # invalid_chars = [',', '.', '!', '?', ':', ';', '，', '。', '！', '？', '：', '；','\n',' ','/','"',"'",'、','‘','’','“','”','(',')','（','）','-','—','_']
-    invalid_storage = {}
-    position = 0
-    new_text = ""
-    for char in text:
+    def slice_invalid_char(self, text: str):
+        # 去除并存储无效字符的位置
+        # invalid_chars = [',', '.', '!', '?', ':', ';', '，', '。', '！', '？', '：', '；','\n',' ','/','"',"'",'、','‘','’','“','”','(',')','（','）','-','—','_']
+        self.invalid_storage = {}
+        position = 0
+        new_text = ""
+        for char in text:
+            if char in self.replace_dict:
+                self.set_invalid_storage(position, char)
+                position += 1
+                new_text += self.replace_dict[char]
+            elif re.match(self.pattern, char) is not None:
+                self.set_invalid_storage(position, char)
+            else:
+                position += 1
+                new_text += char
+        return new_text
+
+
+    def restore_invalid_char_unaccept(self, text: str):
+        # 插入无效字符
+        bad = False # 优先级从高到低
+        accept = False
+        warn = False
+        new_text = ""
+        for position in range(len(text)):
+            if position in self.invalid_storage:
+                min_char = "9"
+                min_char_cnt = 0
+                for char in self.invalid_storage[position]:
+                    if char.isdigit():
+                        if char < min_char:
+                            min_char = min(min_char, char)
+                            min_char_cnt = 1
+                        elif char == min_char:
+                            min_char_cnt += 1
+                    else:
+                        if char == "\n":
+                            new_text += char
+                if min_char == "1":
+                    continue
+                    new_text += '\033[31m'
+                    bad = True
+                elif min_char == "2" and min_char_cnt > 1: # 必须要两次接受才是真的接受（代表双向）
+                    continue
+                    new_text += '\033[32m'
+                    accept = True
+                elif min_char == "3":
+                    # new_text += '\033[33m'
+                    warn = True
+                elif bad or accept or warn:
+                    # new_text += '\033[0m'
+                    bad = False
+                    accept = False
+                    warn = False
+            if text[position] not in self.replace_dict:
+                new_text += text[position]
+        return new_text
+
+    def filter_string(self, text: str):
+        filtered_string = re.sub(self.pattern, '', text)
+
+        # 传统方式
+        # invalid_chars = [',', '.', '!', '?', ':', ';', '，', '。', '！', '？', '：', '；','\n',' ','/','"',"'",'、','‘','’','“','”','(',')','（','）','~','*','@','～','【','】','《','》','[',']','%','％','=','\\','\t','|','<','>','#','『','』','^','…']
+        invalid_chars = ['_','丨','✔','\n',' ']
+
+        for char in invalid_chars:
+            filtered_string = filtered_string.replace(char, '')
+        return filtered_string
+
+    def parse_text(self, text: str) -> list:
+        '''将文本解析长度为2的所有字串列表'''
+
+        text = self.filter_string(text)
+
+        for char in self.replace_dict:
+            text = text.replace(char, self.replace_dict[char])
+        result = []
+        for i in range(len(text)-1):
+            # result.append(text[i]) # 由于长度为1的子串意义不大，还占用空间
+            t_str = text[i] + text[i+1]
+            result.append(t_str)
+
+        # if len(text) > 0:
+        #     result.append(text[-1])
+        return result
+    
+    def check_notice(self, content: str, include_compulsory=False):
+        '''检查通知内容是否包含违规词汇（默认不包含强制违禁词）'''
+        content = self.filter_string(content)
+        for check_word in self.bad_words:
+            if not include_compulsory and (check_word[0] == '!' or check_word[0] == '?'):
+                continue
+            posA, posB, result = self.cbw(check_word, content)
+            if posA != -1:
+                return posA, posB, result
+        return -1, -1, ""
+
+
+    def verify_bad_word(self, accept_notice: str) -> str:
+        '''检查违禁词是否被包含在被接受的通知中'''
+        log = ""
+        for check_word in self.bad_words:
+            posA, posB, result = self.cbw(check_word, accept_notice)
+            if result != "":
+                log += f'{check_word} 已存在于被接受的通知中 result:{result}'
+
         
-        if char in replace_dict:
-            set_invalid_storage(invalid_storage, position, char)
-            position += 1
-            new_text += replace_dict[char]
-        elif re.match(pattern, char) is not None:
-            set_invalid_storage(invalid_storage, position, char)
-        else:
-            position += 1
-            new_text += char
-    return new_text, invalid_storage
+    def cbw(self, check_word, accept_notice):
+        if check_word[0] == '!' or check_word[0] == '?':
+            check_word = check_word[1:]
+        if check_word in accept_notice:
+            idx = accept_notice.index(check_word)
+            result = idx
+            return idx, idx + len(check_word), accept_notice[result:result+len(check_word)+20]
+        elif check_word[0] == '/': # 正则表达式
+            try:
+                s_result = re.search(check_word[1:-1], accept_notice)
+            except:
+                return -1, -1, "Invalid regular expression"
+            if s_result:
+                result = s_result.start()
+                return s_result.start(), s_result.start() + len(check_word), accept_notice[result:result+len(check_word)+20]
+        elif '|' in check_word:
+            sub_words = check_word.split('|')
+            temp_accept_notice = accept_notice
+            valid = True
+            result = []
+            result_pos = []
+            accrue = 0 # 偏移量
+            i = 0
+            while i < len(sub_words):
+                try:
+                    sub_word = sub_words[i]
+                    index = temp_accept_notice.index(sub_word)
+                    # 提取到index_new位置
+                    if i == 0 or '\\\\' not in temp_accept_notice[:index]: # 跨公告了，不算
+                        result.append(temp_accept_notice[index:index+len(check_word)+20])
+                        result_pos.append(index + accrue)
+                        temp_accept_notice = temp_accept_notice[index+len(sub_word):]
+                        accrue += index + len(sub_word)
+                        i += 1
+                    else:
+                        # 重新查找上一个sub_word的位置
+                        i -= 1
+                        result.pop()
+                        result_pos.pop()
+                        continue
+                except ValueError:
+                    valid = False
+                    break
+            if valid:
+                return result_pos[0], result_pos[-1] + len(sub_words[-1]), '|'.join(result)
+        return -1, -1, ""
 
+    def slice_accepted_text(self, text: str, accept_words: set) -> str:
+        '''将坏文本中被接受两次的词汇去除'''
+        text_set = set(self.parse_text(text))
+        # 获取同时存在于text_set和accept_words中的词汇
+        text_accept_set = text_set & accept_words
+        valid_text = self.slice_invalid_char(text)
+        for word in text_accept_set:
+            # print(f'accept word: {word}')
+            try:
+                temp_valid_input_str = valid_text
+                pos = 0
+                while True:
+                    # print(f'pos: {pos}')
+                    pos += temp_valid_input_str.index(word)
+                    temp_valid_input_str = valid_text[pos+len(word):]
+                    self.set_invalid_storage(pos, f"2", length=len(word))   # 32m
+                    pos += len(word)
+            except ValueError:
+                pass
 
-def restore_invalid_char_unaccept(text: str, invalid_storage: dict):
-    # 插入无效字符
-    bad = False # 优先级从高到低
-    accept = False
-    warn = False
-    new_text = ""
-    for position in range(len(text)):
-        if position in invalid_storage:
-            min_char = "9"
-            min_char_cnt = 0
-            for char in invalid_storage[position]:
-                if char.isdigit():
-                    if char < min_char:
-                        min_char = min(min_char, char)
-                        min_char_cnt = 1
-                    elif char == min_char:
-                        min_char_cnt += 1
-                else:
-                    if char == "\n":
-                        new_text += char
-            if min_char == "1":
-                continue
-                new_text += '\033[31m'
-                bad = True
-            elif min_char == "2" and min_char_cnt > 1: # 必须要两次接受才是真的接受（代表双向）
-                continue
-                new_text += '\033[32m'
-                accept = True
-            elif min_char == "3":
-                # new_text += '\033[33m'
-                warn = True
-            elif bad or accept or warn:
-                # new_text += '\033[0m'
-                bad = False
-                accept = False
-                warn = False
-        if text[position] not in replace_dict:
-            new_text += text[position]
-    return new_text
+        for pattern in self.bad_words:
+            try:
+                temp_valid_input_str = valid_text
+                pos = 0
+                while True:
+                    pos += temp_valid_input_str.index(pattern)
+                    temp_valid_input_str = valid_text[pos+len(pattern):]
+                    self.set_invalid_storage(pos, "1", length=len(pattern)) # 31m
+                    pos += len(pattern)
+            except ValueError:
+                pass
+        return self.restore_invalid_char_unaccept(valid_text)
+        
+    def load_notice_from_db(self, conn: sqlite3.Connection=None):
+        '''从数据库中读取所有通知'''
+        close_conn = False
+        if conn is None:
+            conn = sqlite3.connect(default_notice_db_path, detect_types=0, uri=True)
+            close_conn = True
+        # 从数据库中读取近7天的公告
+        week_ago = (datetime.datetime.now() - datetime.timedelta(days=7)).timestamp()
+        cur = conn.cursor()
+        cur.execute("SELECT GROUP_ID, CONTENT, DATE, LATEST_DATE, CHECKED FROM notice WHERE DATE >= ? OR LATEST_DATE >= ? ORDER BY DATE DESC", (week_ago, week_ago))
+        notices = cur.fetchall()
+        self.notice_dict = {}
+        self.most_recent_clear_date = 0
+        # 最多只接受两周内的公告
+        # least_valid_date = (datetime.datetime.now() - datetime.timedelta(days=14)).strftime('%Y-%m-%d 00:00:00')
+        for notice in notices:
+            group_id = notice[0]
+            notice_content = notice[1]
+            date = notice[2]
+            latest_date = notice[3]
+            checked = notice[4]
+            if latest_date is None:
+                latest_date = date
+            if group_id not in self.notice_dict:
+                self.notice_dict[group_id] = []
+            self.notice_dict[group_id].append((notice_content, latest_date, checked))
+            if notice_content.startswith('(空)') and date > self.most_recent_clear_date:
+                self.most_recent_clear_date = date # 这里使用开始而不是最新日期
+        # 遍历每个分类，找到公告被清空（以'(空)'开头）的那天
+        print(f"most_recent_clear_date: {datetime.datetime.fromtimestamp(self.most_recent_clear_date).strftime('%Y-%m-%d %H:%M:%S')}")
+        cur.close()
+        if close_conn:
+            conn.close()
+        
 
-def filter_string(text: str):
-    # \w\d\u4e00-\u9fa5 数字字母和汉字
-    global pattern
-    
-
-    filtered_string = re.sub(pattern, '', text)
-
-    # 传统方式
-    # invalid_chars = [',', '.', '!', '?', ':', ';', '，', '。', '！', '？', '：', '；','\n',' ','/','"',"'",'、','‘','’','“','”','(',')','（','）','~','*','@','～','【','】','《','》','[',']','%','％','=','\\','\t','|','<','>','#','『','』','^','…']
-    invalid_chars = ['_','丨','✔']
-
-    for char in invalid_chars:
-        filtered_string = filtered_string.replace(char, '')
-    return filtered_string
-
-def parse_text(text: str) -> list:
-    '''将文本解析长度为2的所有字串列表'''
-
-    text = filter_string(text)
-
-    for char in replace_dict:
-        text = text.replace(char, replace_dict[char])
-    result = []
-    for i in range(len(text)-1):
-        result.append(text[i])
-        result.append(text[i] + text[i+1])
-    if len(text) > 0:
-        result.append(text[-1])
-    return result
-
-def splice_accepted_text(text: str, accept_words: set, bad_words: set) -> str:
-    '''将文本中被接受两次的词汇去除'''
-    text_set = set(parse_text(text))
-    # 获取同时存在于text_set和accept_words中的词汇
-    text_accept_set = text_set & accept_words
-    valid_text, invalid_storage = slice_invalid_char(text)
-    for word in text_accept_set:
-        # print(f'accept word: {word}')
-        try:
-            temp_valid_input_str = valid_text
-            pos = 0
-            while True:
-                # print(f'pos: {pos}')
-                pos += temp_valid_input_str.index(word)
-                temp_valid_input_str = valid_text[pos+len(word):]
-                set_invalid_storage(invalid_storage, pos, f"2", length=len(word))   # 32m
-                pos += len(word)
-        except ValueError:
-            pass
-
-    for pattern in bad_words:
-        try:
-            temp_valid_input_str = valid_text
-            pos = 0
-            while True:
-                pos += temp_valid_input_str.index(pattern)
-                temp_valid_input_str = valid_text[pos+len(pattern):]
-                set_invalid_storage(invalid_storage, pos, "1", length=len(pattern)) # 31m
-                pos += len(pattern)
-        except ValueError:
-            pass
-    return restore_invalid_char_unaccept(valid_text, invalid_storage)
-    
-
-def update_notice(conn: sqlite3.Connection):
-    # 从数据库中读取所有通知
-    cur = conn.cursor()
-    cur.execute("SELECT SHARE_KEY, NAME, HASH_VALUE, CONTENT, DATE, LATEST_DATE FROM notice ORDER BY DATE DESC")
-    notices = cur.fetchall()
-    # 按照notices[][0](NAME字段)分类
-    notice_dict = {}
-    notice_date = {}
-    most_recent_clear_date = "1970-01-01 00:00:00"
-    # 最多只接受两周内的公告
-    # least_valid_date = (datetime.datetime.now() - datetime.timedelta(days=14)).strftime('%Y-%m-%d 00:00:00')
-    for notice in notices:
-        share_key = notice[0]
-        notice_content = notice[3]
-        date = notice[4]
-        latest_date = notice[5]
-        if latest_date is None:
-            latest_date = date
-        if share_key not in notice_dict:
-            notice_dict[share_key] = []
-            notice_date[share_key] = []
-        notice_dict[share_key].append(notice_content)
-        notice_date[share_key].append(latest_date)
-        if notice_content.startswith('(空)') and date > most_recent_clear_date:
-            most_recent_clear_date = date # 这里使用开始而不是最新日期
-    # 遍历每个分类，找到公告被清空（以'(空)'开头）的那天
-    print(f"most_recent_clear_date: {most_recent_clear_date}")
-    most_recent_clear_date_ymd = most_recent_clear_date.split(' ')[0]
-    warn_words = []
-    accept_words = []
-    accept_notice_list = []
-    bad_notice_list = []
-    for share_key, notice_list in notice_dict.items():
-        notice_date_list = notice_date[share_key]
-        index_time = ''
-        for notice, date in zip(notice_list, notice_date_list):
-            if date.startswith(most_recent_clear_date_ymd) and notice.startswith('(空)'): # 找到同一天的(空)的位置
-                index_time = date
-                break
-        if index_time != '':
-            for notice, date in zip(notice_list, notice_date_list):
-                if date.startswith(most_recent_clear_date_ymd):
-                    if date < index_time: # 同一天早些时候的公告
-                        warn_words.extend(parse_text(notice))
+    def update_notice(self, conn: sqlite3.Connection=None, only_raw_notice=False):
+        '''导出数据库中（或已读取的）公告的接受、警告部分'''
+        if len(self.notice_dict) == 0 or self.most_recent_clear_date == 0:
+            self.load_notice_from_db(conn)
+        warn_words = []
+        accept_words = []
+        accept_notice_list = []
+        bad_notice_list = []
+        for group_id, notice_list in self.notice_dict.items():
+            # index_time = 0
+            # for (notice, date, checked) in notice_list:
+            #     if notice.startswith('(空)'): # 找到同一天的(空)的位置
+            #         index_time = date
+            #         break
+            # if index_time != 0:
+                for (notice, date, checked) in notice_list:
+                    if checked is not None and checked < 200000000: # 同一天早些时候的公告
+                        warn_words.extend(self.parse_text(notice))
                         bad_notice_list.append(notice)
-                    elif date > index_time: # 同一天晚些时候的公告
-                        accept_words.extend(parse_text(notice))
+                    if date >= self.most_recent_clear_date: # 同一天晚些时候的公告
+                        accept_words.extend(self.parse_text(notice))
                         accept_notice_list.append(notice)
-        else:
-            # 公告都没有被清空，且是当天的公告，全部加入到accept_words中
-            for notice, date in zip(notice_list, notice_date_list):
-                if date.startswith(most_recent_clear_date_ymd):
-                    accept_words.extend(parse_text(notice))
-                    accept_notice_list.append(notice)
-    # 去重
-    warn_words = set(warn_words)
-    accept_words = set(accept_words)
-    # 从warn_words中去除accept_words
-    warn_words = warn_words - accept_words # accept_words是确定合规的
-    # 写入json文件
-    print(f'warn_words: {len(warn_words)}')
-    print(f'accept_words: {len(accept_words)}')
-    print(f"accept_notice_list: {len(accept_notice_list)}")
-    print(f"bad_notice_list: {len(bad_notice_list)}")
-    accept_fuzz = '\n\\\\\n'.join(accept_notice_list)
-    print(f'accept_fuzz: {len(accept_fuzz)}')
-    bad_fuzz = splice_accepted_text('\n'.join(bad_notice_list), accept_words, bad_words)
-    print(f'bad_fuzz: {len(bad_fuzz)}')
-    def flatten(str):
-        return str.replace(' ','')
-    with open(warn_word_path, 'wb') as f:
-        f.write(encoder(flatten("\n".join(list(warn_words)))))
-    with zipfile.ZipFile(f"{warn_word_path}.zip", 'w', zipfile.ZIP_DEFLATED) as f:
-        f.write(warn_word_path, arcname=warn_word_path)
+            # else:
+                # 公告都没有被清空，且是当天的公告，全部加入到accept_words中
+                # for (notice, date, checked) in notice_list:
+                #     if date >= self.most_recent_clear_date:
+                #         accept_words.extend(self.parse_text(notice))
+                #         accept_notice_list.append(notice)
         
-    accept_words = list(accept_words)
-    today_date = f"数据更新日期：{datetime.datetime.now().strftime('%Y-%m-%d')}"
-    accept_words.insert(0, today_date)
-    with open(accept_word_path, 'wb') as f:
-        f.write(encoder(flatten("\n".join(accept_words))))
-    with zipfile.ZipFile(f"{accept_word_path}.zip", 'w', zipfile.ZIP_DEFLATED) as f:
-        f.write(accept_word_path, arcname=accept_word_path)
-    with open(accept_notice_path, 'w', encoding='utf-8') as f:
-        f.write(accept_fuzz)
-    with open(bad_notice_path, 'w', encoding='utf-8') as f:
-        f.write(bad_fuzz)
+        print(f"accept_notice_list: {len(accept_notice_list)}")
+        print(f"bad_notice_list: {len(bad_notice_list)}")
+        # 去重
+        warn_words = set(warn_words)
+        accept_words = set(accept_words)
+        # 从warn_words中去除accept_words
+        warn_words = warn_words - accept_words # accept_words是确定合规的
+        # 写入json文件
+        print(f'warn_words: {len(warn_words)}')
+        print(f'accept_words: {len(accept_words)}')
+        accept_fuzz = '\n\\\\\n'.join(accept_notice_list)
+        print(f'accept_fuzz: {len(accept_fuzz)}')
+        bad_fuzz = self.slice_accepted_text('\n'.join(bad_notice_list), accept_words)
+        print(f'bad_fuzz: {len(bad_fuzz)}')
+        self.verify_bad_word(accept_fuzz)
+
+        with open(NoticeParser.accept_notice_path, 'w', encoding='utf-8') as f:
+            f.write(accept_fuzz)
+        with open(NoticeParser.bad_notice_path, 'w', encoding='utf-8') as f:
+            f.write(bad_fuzz)
+        
+
+        if only_raw_notice:
+            return
+
+        def flatten(str):
+            return str.replace(' ','')
+
+        with open(NoticeParser.warn_word_path, 'wb') as f:
+            f.write(encoder(flatten("\n".join(list(warn_words)))))
+        with zipfile.ZipFile(f"{NoticeParser.warn_word_path}.zip", 'w', zipfile.ZIP_DEFLATED) as f:
+            f.write(NoticeParser.warn_word_path, arcname=NoticeParser.warn_word_path)
+            
+        accept_words = list(accept_words)
+        today_date = f"数据更新日期：{datetime.datetime.now().strftime('%Y-%m-%d')}"
+        accept_words.insert(0, today_date)
+        with open(NoticeParser.accept_word_path, 'wb') as f:
+            f.write(encoder(flatten("\n".join(accept_words))))
+        with zipfile.ZipFile(f"{NoticeParser.accept_word_path}.zip", 'w', zipfile.ZIP_DEFLATED) as f:
+            f.write(NoticeParser.accept_word_path, arcname=NoticeParser.accept_word_path)
+        
 
 class member_storage_class:
+    member_info_path = '../BCZ-Notice-Examiner/assets/member/' # 要按照unique_id来处理
+    member_name_path = '../BCZ-Notice-Examiner/assets/member_name/'
+    member_info_top_rate_path = '../BCZ-Notice-Examiner/assets/js/member_info_top_rate.js'
+    member_info_top_rate_screen_path = '../BCZ-Notice-Examiner/assets/js/member_info_top_rate_screen.js'
+    member_info_top_name_path = "../BCZ-Notice-Examiner/assets/js/member_info_top_name.js"
+    groups_path = '../BCZ-Notice-Examiner/assets/groups.bin'
+    books_path = '../BCZ-Notice-Examiner/assets/books.bin'
+
+    black_list_path = '../BCZ-Notice-Examiner/blacklist.xlsx'
+    black_list_rating_path = '../BCZ-Notice-Examiner/blacklist_rating.json'
+    black_list_string_assets = '../BCZ-Notice-Examiner/assets/black_list_string.bin'
+    
+    def configure_database(self, conn: sqlite3.Connection):
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA cache_size = -65536;") # 64MB
+        cursor.execute("PRAGMA temp_store = MEMORY;")
+        cursor.execute("PRAGMA foreign_keys = OFF;")
+        cursor.execute("PRAGMA journal_mode = MEMORY;")
+        cursor.execute("PRAGMA locking_mode = EXCLUSIVE;")
+        cursor.close()
+
+    def load_database_to_memory(self, file_path) -> sqlite3.Connection:
+        file_conn = sqlite3.connect(file_path, detect_types=0, uri=True)
+        memory_conn = sqlite3.connect(":memory:")
+        file_conn.backup(memory_conn)
+        file_conn.close()
+        return memory_conn
+
     def __init__(self, logger = None):
         if logger is None:
             self.logger = logging.getLogger(__name__)
@@ -316,7 +454,8 @@ class member_storage_class:
         self.reserve_digits = 1000000 # 保留uid的最后6位
         self.rank_max_num = 100 # 排行榜最多显示前100名（允许同分）
 
-        conn = sqlite3.connect(self.db_path)
+        conn = self.load_database_to_memory(self.db_path)
+        self.configure_database(conn)
         cur = conn.cursor()
         # 获取所有书本信息
         # HASH_ID, BOOK_NAME, BOOK_ID, BOOK_URL
@@ -328,22 +467,23 @@ class member_storage_class:
         
         # 获取所有班级信息
         self.logger.info("正在初始化 班级信息")
-        cur.execute("SELECT DISTINCT GROUP_ID, NAME FROM notice WHERE GROUP_ID IS NOT NULL ORDER BY DATE DESC")
+        cur.execute("SELECT DISTINCT GROUP_ID, NAME, DATE FROM notice WHERE GROUP_ID IS NOT NULL")
         self.group_dict = {}
+        group_dict_date = {} # 由于没有ORDER BY DATE，用这个来留下最新的信息
         for group in cur.fetchall():
-            if group[0] in self.group_dict:
+            if group[0] in self.group_dict and group_dict_date[group[0]] > group[2]:
                 continue
             if group[1] is None:
                 self.group_dict[group[0]] = '无名小班'
-            else:                
-                self.group_dict[group[0]] = group[1].split('\n')[0].replace(' ', '\t') # 班名中可能有空格
-                # 第二行是介绍，不需要
+            else:
+                self.group_dict[group[0]] = group[1].split('\n')[0].replace(' ', '\t') # 班名中可能有空格。第二行是介绍，不需要
+            group_dict_date[group[0]] = group[2]
         self.logger.info("正在统计 成员信息条数")
         cur.execute("SELECT COUNT(*) FROM MEMBERS")
         cnt = cur.fetchone()[0]
         self.logger.info(f"成员信息条数：{cnt}")
         # 获取所有成员信息
-        command = "SELECT USER_ID, NICKNAME, COMPLETED_TIME, TODAY_DATE, WORD_COUNT, COMPLETED_TIMES, DURATION_DAYS, BOOK_NAME, GROUP_ID, STUDY_CHEAT FROM MEMBERS ORDER BY TODAY_DATE DESC"
+        command = "SELECT USER_ID, NICKNAME, COMPLETED_TIME, TODAY_DATE, WORD_COUNT, COMPLETED_TIMES, DURATION_DAYS, BOOK_NAME, GROUP_ID, STUDY_CHEAT FROM MEMBERS LIMIT 5000000"
         self.logger.info("正在初始化 成员信息")
         if DEBUG: # 苔泰！
             # command = "SELECT USER_ID, NICKNAME, COMPLETED_TIME, TODAY_DATE, WORD_COUNT, COMPLETED_TIMES, DURATION_DAYS, BOOK_NAME, GROUP_ID, STUDY_CHEAT FROM MEMBERS WHERE USER_ID == 1141201181 OR USER_ID == 1584809188 OR USER_ID == 766773235 OR USER_ID == 1798946708 ORDER BY TODAY_DATE DESC"
@@ -355,26 +495,44 @@ class member_storage_class:
         member_name_date = {}
         self.members = {}
         processed_cnt = 0
-        for member in cur:
+        r = 0
+        # 测试：计时
+        start_time = time.time()
+        step = 1
+        rows = cur.fetchall()
+        self.logger.info(f"fetchall耗时：{(time.time()-start_time)*1000000:.3f}us，平均{(time.time()-start_time)*1000000/cnt:.3f}us/条")
+        return
+        while rows:
+            for member in cur:
+                r += 1
+                if r == 1000000:
+                    processed_cnt += r
+                    r = 0
+                    self.logger.info(f"已处理 {processed_cnt} 条成员信息【平均{(time.time()-start_time)*1000000/1000000:.3f}us/条】 - {processed_cnt/cnt*100:.2f}%")
+                    step *= 10
+                    start_time = time.time()
+                continue
+            rows = cur.fetchmany(step)
+            continue
             user_id = member[0]
             if user_id not in self.members:
                 self.members[user_id] = []
             self.members[user_id].append(member)
 
+            # 有排序的版本
+            # name = member[1]
+            # if name is not None and user_id not in self.member_name:
+            #     self.member_name[user_id] = name.replace('\n','')
+            
+            # 没有排序的版本
             name = member[1]
-            if name is not None and user_id not in self.member_name:
-                self.member_name[user_id] = name.replace('\n','')
-            processed_cnt += 1
-            if processed_cnt % 100000 == 0:
-                self.logger.info(f"已处理 {processed_cnt} 条成员信息")
-            # 下面这个是没有排序的版本
-            # today_name = member[1]
-            # today_date = member[3]
-            # if today_date is None:
-            #     continue
-            # if user_id not in self.member_name or today_name != self.member_name[user_id] and member_name_date[user_id] < member[3]:
-            #     self.member_name[user_id] = today_name
-            #     member_name_date[user_id] = today_date
+            today_date = member[3]
+            if name is None or user_id in self.member_name and member_name_date[user_id] >= member[3]:
+                continue
+            self.member_name[user_id] = name.replace('\n','')
+            member_name_date[user_id] = today_date
+
+            
 
         # 读取黑名单评分
         self.logger.info("正在读取 黑名单评分")
@@ -420,10 +578,10 @@ class member_storage_class:
         return rating
 
     def read_blacklist(self):
-        if not os.path.exists(black_list_path):
+        if not os.path.exists(member_storage_class.black_list_path):
             return []
         # openpyxl
-        wb = openpyxl.load_workbook(black_list_path)
+        wb = openpyxl.load_workbook(member_storage_class.black_list_path)
         ws = wb.active
         # 列名：百词斩昵称	百词斩ID	退班时间	拉黑原因	记录班长	备注	最后编辑时间(不要填)	最后编辑人（不要填）	原创建班长（不要填）
         blacklist = {}
@@ -585,7 +743,7 @@ class member_storage_class:
                 completed_times = member[5]
                 duration_days = member[6]
                 if group_id not in group_infos:
-                    group_infos[group_id] = [0, 0, 0]
+                    group_infos[group_id] = [-1, -1, 0]
                 current_max_streak_days = group_infos[group_id][0]
                 # current_max_completed_times = group_infos[group_id][1]
                 current_max_duration_days = group_infos[group_id][2]
@@ -881,19 +1039,19 @@ class member_storage_class:
 
 
         self.logger.info("开始写入排名数据")
-        with open(member_info_top_rate_path, 'w', encoding='utf-8') as f:
+        with open(member_storage_class.member_info_top_rate_path, 'w', encoding='utf-8') as f:
             f.write("rank="+self.flatten(json.dumps([streak_rank, expectancy_rank, word_rank, time_rank, blacklist_rank], ensure_ascii=False))+";")
         # with zipfile.ZipFile(f"{member_info_top_rate_path}.zip", 'w', zipfile.ZIP_DEFLATED) as f:
         #     f.write(member_info_top_rate_path, arcname=member_info_top_rate_path)
 
-        with open(member_info_top_rate_screen_path, 'w', encoding='utf-8') as f:
+        with open(member_storage_class.member_info_top_rate_screen_path, 'w', encoding='utf-8') as f:
             f.write("var rank="+self.flatten(json.dumps([streak_rank_screen, expectancy_rank_screen, word_rank_screen, time_rank_screen, blacklist_rank_screen], ensure_ascii=False))+";")
         # with zipfile.ZipFile(f"{member_info_top_rate_screen_path}.zip", 'w', zipfile.ZIP_DEFLATED) as f:
         #     f.write(member_info_top_rate_screen_path, arcname=member_info_top_rate_screen_path)
 
         self.logger.info("开始写入排名name信息")
         # 用self.screen_set查表得到昵称
-        with open(member_info_top_name_path, 'w', encoding='utf-8') as f:
+        with open(member_storage_class.member_info_top_name_path, 'w', encoding='utf-8') as f:
             f.write("var rankNames=`"+self.flatten('\n'.join([f"{screen_uid}\n{self.member_name.get(uid, '未知昵称')}" for uid, screen_uid in self.id_dict.items()]))+"`;")
         # with zipfile.ZipFile(f"{member_info_top_name_path}.zip", 'w', zipfile.ZIP_DEFLATED) as f:
         #     f.write(member_info_top_name_path, arcname=member_info_top_name_path)
@@ -903,21 +1061,21 @@ class member_storage_class:
         group_infos = self.get_group_infos()
         group_infos[-1] = f'数据更新日期：{datetime.datetime.now().strftime("%Y-%m-%d")}'
         book_infos = self.get_book_infos()
-        with open(groups_path, 'wb') as f:
+        with open(member_storage_class.groups_path, 'wb') as f:
             f.write(encoder(self.flatten('\n'.join([f"{key}\n{value}" for key, value in group_infos.items()]))))
-        with zipfile.ZipFile(f"{groups_path}.zip", 'w', zipfile.ZIP_DEFLATED) as f:
-            f.write(groups_path, arcname=groups_path)
-        with open(books_path, 'wb') as f:
+        with zipfile.ZipFile(f"{member_storage_class.groups_path}.zip", 'w', zipfile.ZIP_DEFLATED) as f:
+            f.write(member_storage_class.groups_path, arcname=member_storage_class.groups_path)
+        with open(member_storage_class.books_path, 'wb') as f:
             f.write(encoder(self.flatten('\n'.join([f"{key}\n{value}" for key, value in book_infos.items()]))))
-        with zipfile.ZipFile(f"{books_path}.zip", 'w', zipfile.ZIP_DEFLATED) as f:
-            f.write(books_path, arcname=books_path)
+        with zipfile.ZipFile(f"{member_storage_class.books_path}.zip", 'w', zipfile.ZIP_DEFLATED) as f:
+            f.write(member_storage_class.books_path, arcname=member_storage_class.books_path)
         
         self.logger.info("开始写入blacklist字符串")
         # print(self.flatten('\n'.join(f"{string}\n{hash}" for hash, string in self.hash_dict.items())))
-        with open(black_list_string_assets, 'wb') as f:
+        with open(member_storage_class.black_list_string_assets, 'wb') as f:
             f.write(encoder(self.flatten('\n'.join(f"{string}\n{hash}" for hash, string in self.hash_dict.items()))))
-        with zipfile.ZipFile(f"{black_list_string_assets}.zip", 'w', zipfile.ZIP_DEFLATED) as f:
-            f.write(black_list_string_assets, arcname=black_list_string_assets)
+        with zipfile.ZipFile(f"{member_storage_class.black_list_string_assets}.zip", 'w', zipfile.ZIP_DEFLATED) as f:
+            f.write(member_storage_class.black_list_string_assets, arcname=member_storage_class.black_list_string_assets)
 
         # 然后是普通数据，按照前..位进行分割
         self.logger.info("开始压缩member数据")
@@ -952,10 +1110,10 @@ class member_storage_class:
         processed_cnt = 0
         for sect, member_list in classified_member_infos.items():
             flatten_str = self.flatten(json.dumps(member_list, ensure_ascii=False))
-            with open(f"{member_info_path}{sect}.bin", 'wb') as f:
+            with open(f"{member_storage_class.member_info_path}{sect}.bin", 'wb') as f:
                 f.write(encoder(flatten_str))
-            with zipfile.ZipFile(f"{member_info_path}{sect}.bin.zip", 'w', zipfile.ZIP_DEFLATED) as f:
-                f.write(f"{member_info_path}{sect}.bin", arcname=f"{member_info_path}{sect}.bin")
+            with zipfile.ZipFile(f"{member_storage_class.member_info_path}{sect}.bin.zip", 'w', zipfile.ZIP_DEFLATED) as f:
+                f.write(f"{member_storage_class.member_info_path}{sect}.bin", arcname=f"{member_storage_class.member_info_path}{sect}.bin")
             processed_cnt += 1
             if processed_cnt % 100 == 0:
                 logger.info(f"完成第{processed_cnt}个文件")
@@ -972,33 +1130,20 @@ class member_storage_class:
         processed_cnt = 0
         for sect, member_list in classified_member_names.items():
             flatten_str = "\n".join([f"{user_id}\n{nickname}" for user_id, nickname in member_list])
-            with open(f"{member_name_path}{sect}.bin", 'wb') as f:
+            with open(f"{member_storage_class.member_name_path}{sect}.bin", 'wb') as f:
                 f.write(encoder(flatten_str)) # nickname中有空格，不flatten
-            with zipfile.ZipFile(f"{member_name_path}{sect}.bin.zip", 'w', zipfile.ZIP_DEFLATED) as f:
-                f.write(f"{member_name_path}{sect}.bin", arcname=f"{member_name_path}{sect}.bin")
+            with zipfile.ZipFile(f"{member_storage_class.member_name_path}{sect}.bin.zip", 'w', zipfile.ZIP_DEFLATED) as f:
+                f.write(f"{member_storage_class.member_name_path}{sect}.bin", arcname=f"{member_storage_class.member_name_path}{sect}.bin")
             processed_cnt += 1
             if processed_cnt % 100 == 0:
                 logger.info(f"完成第{processed_cnt}个文件")
 
         self.logger.info("更新成员信息完成")
 
-    
-class notice_storage_class:
-    def __init__(self):
-        self.logger = logging.getLogger(__name__)
-        # 加载bad_fuzz
-        with open(bad_notice_path, "r", encoding="utf-8") as f:
-            self.bad_notice_str = f.read()
-
-    def close(self):
-        with open(bad_notice_path, "w", encoding="utf-8") as f:
-            f.write(self.bad_notice_str)
-
-    
-    
-
-
 if __name__ == '__main__':
-    conn = sqlite3.connect(default_notice_db_path)
-    update_notice(conn)
-    conn.close()
+    notice_parser = NoticeParser()
+    while True:
+        text = input("请输入要检查的通知：")
+        print(notice_parser.check_notice(text))
+        print("模糊词检查：")
+        print(notice_parser.check_notice(text, include_compulsory=True))

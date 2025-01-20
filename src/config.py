@@ -13,9 +13,19 @@ class Config:
         self.default_config_dict = {
             'host': '127.0.0.1',
             'port': 8850,
-            'database_path': 'data.db',
+            'database_path': '../BCZ-Notice-Examiner/bcz_notice.db',
             'dict_db_path': 'lookup.db',
-            'main_token': ''
+            'dict_patch_db_path': 'lookup_patch.db',
+            'puzzle_path': 'puzzle.db',
+            'main_token': '',
+            'sync_command': [],
+            'prevent_sleep_command': './timeout.exe',
+            'allow_sleep_command': './timeout.exe reverse',
+            'local': False,
+            'log_dir': './logs/',
+            'check_notice_pace': 3,
+            'pk_blacklist': [],
+            'pk_whitelist': [],
         }
         self.initConfig()
         self.raw = self.read()
@@ -23,7 +33,17 @@ class Config:
         self.port = self.raw.get('port', '')
         self.database_path = self.raw.get('database_path', '')
         self.dict_db_path = self.raw.get('dict_db_path', '')
+        self.dict_patch_db_path = self.raw.get('dict_patch_db_path', '')
         self.main_token = self.raw.get('main_token', '')
+        self.local = self.raw.get('local', False)
+        self.sync_command = self.raw.get('sync_command', [])
+        self.prevent_sleep_command = self.raw.get('prevent_sleep_command', '')
+        self.allow_sleep_command = self.raw.get('allow_sleep_command', '')
+        self.log_dir = self.raw.get('log_dir', '')
+        self.check_notice_pace = self.raw.get('check_notice_pace', 3)
+        self.puzzle_path = self.raw.get('puzzle_path', 'puzzle.db')
+        self.pk_blacklist = self.raw.get('pk_blacklist', [])
+        self.pk_whitelist = self.raw.get('pk_whitelist', [])
         self.verify()
 
     def initConfig(self):
@@ -87,3 +107,53 @@ class Config:
             value = self.default_config_dict[key]
             self.save(key, value)
             self.main_token = value
+        if self.local == '':
+            key = 'local'
+            value = self.default_config_dict[key]
+            self.save(key, value)
+            self.local = value
+        if self.sync_command == []:
+            key ='sync_command'
+            value = self.default_config_dict[key]
+            self.save(key, value)
+            self.sync_command = value
+        if self.prevent_sleep_command == '':
+            key = 'prevent_sleep_command'
+            value = self.default_config_dict[key]
+            self.save(key, value)
+            self.prevent_sleep_command = value
+        if self.allow_sleep_command == '':
+            key = 'allow_sleep_command'
+            value = self.default_config_dict[key]
+            self.save(key, value)
+            self.allow_sleep_command = value
+        if self.log_dir == '':
+            key = 'log_dir'
+            value = self.default_config_dict[key]
+            self.save(key, value)
+            self.log_dir = value
+        if self.check_notice_pace == '':
+            key = 'check_notice_pace'
+            value = self.default_config_dict[key]
+            self.save(key, value)
+            self.check_notice_pace = value
+        if self.puzzle_path == '':
+            key = 'puzzle_path'
+            value = self.default_config_dict[key]
+            self.save(key, value)
+            self.puzzle_path = value
+        if self.pk_blacklist == []:
+            key = 'pk_blacklist'
+            value = self.default_config_dict[key]
+            self.save(key, value)
+            self.pk_blacklist = value
+        if self.pk_whitelist == []:
+            key = 'pk_whitelist'
+            value = self.default_config_dict[key]
+            self.save(key, value)
+            self.pk_whitelist = value
+        if self.dict_patch_db_path == '':
+            key = 'dict_patch_db_path'
+            value = self.default_config_dict[key]
+            self.save(key, value)
+            self.dict_patch_db_path = value

@@ -89,18 +89,18 @@ default_headers = [
     }
 ]
 
-bcz_info = {
-    'short_version': '7.6.1',
-    'long_version': 7060100,
-    "device_model": "DCO-AL00",
-    "device_manufacturer": "HUAWEI",
-    "os_name": "android",
-    "os_sdk": '32',
-    "app_name": "baicizhan",
-    "oaid": "unknown"
-}
+class bcz_info:
+    short_version = '7.6.1'
+    long_version = 7060100
+    device_model = 'DCO-AL00'
+    device_manufacturer = 'HUAWEI'
+    os_name = 'android'
+    os_sdk = '32'
+    app_name = 'baicizhan'
+    oaid = 'unknown'
+
 def get_device_str(device_id):
-    return f"{bcz_info['device_model']}-{bcz_info['device_manufacturer']}-{device_id}"
+    return f"{bcz_info.device_model}-{bcz_info.device_manufacturer}-{device_id}"
 
 
 

@@ -37,10 +37,7 @@ class user_dict:
                 self.__user_dict_list = json.load(f)
             if len(self.__user_dict_list) > 0:
                 break
-            print("账号信息为空，请添加账号信息！")
-            append_user_data()
-
-        
+            print("账号信息为空，请访问/append/添加账号信息！")
 
         self.modified = False
         # 给用户分配索引（从0开始）
@@ -1998,7 +1995,6 @@ class cold_launch:
         logger.close()
 
 if __name__ == '__main__':
-    exit()
     user_dict_obj = user_dict()
     user_config = user_dict_obj.get_config(0)
     user_cookie = user_dict_obj.get_cookie(0)
