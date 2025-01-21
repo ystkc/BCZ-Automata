@@ -1,15 +1,21 @@
 <!DOCTYPE html>
 <html>
-<head>
-	<title>账号信息配置</title>
-</head>
+<head><title>账号信息配置</title></head>
 <body>
-    <textarea name="content" rows="50" cols="100" placeholder="请先在excel编辑好，然后粘贴到此处"></textarea>
+    <textarea name="content" rows="50" cols="100"></textarea>
     <br>
     <button onclick="submit()">提交</button>
     <div id="result"></div>
 </body>
 <script>
+    // 新增placeholder
+    document.querySelector('textarea[name="content"]').placeholder = `请先在excel编辑好，一行一个账号，然后粘贴到此处
+每行的格式如下（无需复制表头，带*为必填）：
+
+是否代卡*(0/1)    百词斩id*(留空无效)    百词斩昵称*(无需和bcz一致)    每日新学词数    铜板(留空)    令牌*    是否允许每日任务pk(默认否)    是否允许pk反挂(默认否)    可用班位数(默认0)    是否订阅公告更新(默认否)
+
+
+请务必拷贝所有列，否则无法识别`
     // 监听提交事件
     function submit() {
         // 阻止默认行为
@@ -27,7 +33,7 @@
                 alert('提交成功');
                 document.querySelector('#result').innerHTML = xhr.responseText.replace(/\\n/g, '<br>');
             } else {
-                alert('提交失败' + xhr.status);
+                alert('提交失败' + xhr.status + ':'+ xhr.statusText);
             }
         };
     }

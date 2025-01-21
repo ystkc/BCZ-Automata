@@ -70,6 +70,13 @@ class user_dict:
         if index is not None:
             self.__user_dict_list[index] = user_dict
             self.modified = True
+    
+    def delete_user(self, unique_id):
+        index = self.get_index_by_unique_id(unique_id)
+        if index is not None:
+            del self.__user_dict_list[index]
+            self.modified = True
+            self.save()
 
     def add_user(self, access_token, unique_id, name, device_id):
         new_user = {

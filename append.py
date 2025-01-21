@@ -58,34 +58,60 @@ def append_user_data(text=None):
         with open("./user_cookie.json", 'r', encoding='utf-8') as f:
             users = json.load(f)
             for user in users:
-                unique_id = int(user['config']['unique_id'])
-                current_user_config[unique_id] = user['config']
-                current_user_cookie[unique_id] = user['cookie']
-    except:
+                try:
+                    can_daka = user['config']['can_daka']
+                    unique_id = int(user['config']['unique_id'])
+                    name = user['config']['name']
+                    access_token = user['cookie']['access_token']
+
+                    assert can_daka in [0, 1]
+                    assert unique_id > 0
+                    assert name != 0
+                    assert access_token != 0
+                    
+                    current_user_config[unique_id] = user['config']
+                    current_user_cookie[unique_id] = user['cookie']
+                    current_user_config[unique_id]['unique_id'] = unique_id
+                except Exception as e:
+                    print(f"Invalid existing user: {user} {e}")
+                    result_str += f"Invalid existing user: {user} {e}\n"
+    except: # 可能原先没有账号数据
         pass
 
     cnt = 0
+    unique_id = 0
     for i in data:
-        if len(i) < 10:
+        if len(i) < 6:
             continue
-        unique_id = int(i[1])
-        access_token = i[5]
-        if unique_id == 0 or access_token == 0:
+        try: # 这些是必填项
+            assert int(i[0]) in [0, 1]
+            assert int(i[1]) > 0
+            assert i[2] != 0
+            assert i[5] != 0
+        except:
+            print(f"Ignore user: {i[2]}({i[1]})")
+            result_str += f"Ignore user: {i[2]}({i[1]})\n"
             continue
-        user_config = {
-            "can_daka": int(i[0]),
-            "unique_id": int(i[1]),
-            "name": i[2],
-            "word_count": int(i[3]),
-            # "cooper": int(i[4]), # read only
-            "can_pk": int(i[6]),
-            "arbitor": int(i[7]), # arbitor
-            "tidal_group_limit": int(i[8]),
-            "subscribe_notice": int(i[9])
-        }
-        user_cookie = {
-            "access_token": i[5],
-        }
+        try:
+            unique_id = int(i[1])
+            user_config = {
+                "can_daka": int(i[0]) if i[0] != '' else 0,
+                "unique_id": unique_id,
+                "name": i[2],
+                "word_count": int(i[3]) if i[3] != '' else 5,
+                # "cooper": int(i[4]), # read only
+                "can_pk": int(i[6]) if i[6] != '' else 0,
+                "arbitor": int(i[7]) if i[7] != '' else 0, # arbitor
+                "tidal_group_limit": int(i[8]) if i[8] != '' else 0,
+                "subscribe_notice": int(i[9]) if i[9] != '' else 0,
+            }
+            user_cookie = {
+                "access_token": i[5],
+            }
+        except:
+            print(f"Invalid user infos: {i[2]}({i[1]})")
+            result_str += f"Invalid user infos: {i[2]}({i[1]})\n"
+            continue
         
         if current_user_config.get(unique_id):
             cnt += 1

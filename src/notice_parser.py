@@ -331,7 +331,7 @@ class NoticeParser:
             if notice_content.startswith('(空)') and date > self.most_recent_clear_date:
                 self.most_recent_clear_date = date # 这里使用开始而不是最新日期
         # 遍历每个分类，找到公告被清空（以'(空)'开头）的那天
-        print(f"most_recent_clear_date: {datetime.datetime.fromtimestamp(self.most_recent_clear_date).strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"most_recent_clear_date: {datetime.datetime.fromtimestamp(self.most_recent_clear_date).strftime('%Y-%m-%d %H-%M-%S')}")
         cur.close()
         if close_conn:
             conn.close()

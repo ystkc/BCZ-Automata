@@ -245,6 +245,19 @@ def append_accounts_submit():
     except Exception as e:
         return restful(400, f'{e}{traceback.format_exc()}')
 
+@app.route('/accounts/delete', methods=['POST'])
+def accounts_delete():
+    '''删除用户'''
+    try:
+        unique_id = request.json.get('unique_id', '')
+        if not unique_id:
+            return restful(400, '调用方法异常Σ(っ °Д °;)っ')
+        daka_list_obj.delete_accounts(unique_id)
+        return restful(200, '删除成功')
+    except Exception as e:
+        return restful(400, f'{e}{traceback.format_exc()}')
+
+
 @app.route('/accounts/reload', methods=['GET'])
 def accounts_reload():
     '''重新加载用户列表'''
@@ -503,7 +516,7 @@ def own_groups():
         # user_school_name = result.user_info.user_education_info.school_name
         
 
-        date = datetime.datetime.fromtimestamp(daka_timestamp).strftime('%Y-%m-%d %H:%M:%S')
+        date = datetime.datetime.fromtimestamp(daka_timestamp).strftime('%Y-%m-%d %H-%M-%S')
         user_dict['config']['grade'] = data['grade']
         cooper = user_dict['config'].get('cooper', -1)
         daka_list_obj.update_user_dict(user_dict)

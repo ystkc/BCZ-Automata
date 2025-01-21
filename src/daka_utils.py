@@ -4,6 +4,7 @@ from src.config import Config
 from src.get_headers import getHeaders
 from src.avatar import find_unique_id
 from src.notice_parser import NoticeParser
+import zipfile
 import os
 import re
 import csv
@@ -19,6 +20,7 @@ from fuzzywuzzy import process
 DEBUG = False
 DEBUG_SIZE = 1
 LOAD_MEMBER_TABLE = True # 如果要一天获取多次，请设置为True
+MEMBERS_GROUPS_LIMIT = 2147483647 # 数据库循环队列的大小（旧的会被删除）
 
 # 功能开关
 BCZ_NCSVC = False # 已于12.5结束
@@ -100,6 +102,8 @@ class daka_list_class:
         self.dict_db_path = config.dict_db_path
         self.dict_patch_db_path = config.dict_patch_db_path
         self.log_dir = config.log_dir
+        if not os.path.exists(self.log_dir):
+            os.makedirs(self.log_dir, exist_ok=True)
         self.pk_blacklist = config.pk_blacklist
         self.pk_whitelist = config.pk_whitelist
 
@@ -202,11 +206,22 @@ class daka_list_class:
             GROUP_COUNT_6 INTEGER)''')
         conn.commit()
         conn.close()
+        # 检查lookup.db
+        if not os.path.exists('lookup.db'):
+            if not os.path.exists('lookup.rar'): 
+                raise Exception('lookup.rar不存在，请重新安装程序')
+            with zipfile.ZipFile('lookup.rar', 'r') as z:
+                z.extractall()
+                logger.info('解压lookup.rar成功')
         self.latest_check_notice_timestamp = 0
         self.notice_parser = NoticeParser()
 
         # 创建线程来执行耗时的初始化任务
         self.__not_prepared = True
+
+    def delete_accounts(self, unique_id):
+        '''删除账号'''
+        self.user_dict_obj.delete_user(unique_id)
 
     def delete_old_logs(self):
         '''删除35天前的日志文件'''
@@ -336,7 +351,7 @@ class daka_list_class:
             self.latest_check_user_timestamp = current_timestamp
         else:
             self.logger.info(f'最近{current_timestamp - self.latest_check_user_timestamp}秒前检测过 未打卡用户，不重复检查')
-        self.add_log(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'daka_list', 0, f'本轮{len(self.daka_list)}账号，有{len(not_daka_users)}人未打卡，共耗时{current_timestamp - self.time_start}秒')
+        self.add_log(datetime.datetime.now().strftime('%Y-%m-%d %H-%M-%S'), 'daka_list', 0, f'本轮{len(self.daka_list)}账号，有{len(not_daka_users)}人未打卡，共耗时{current_timestamp - self.time_start}秒')
         # 保存用户配置
         self.user_dict_obj.save()
         self.logger.info(f'用户配置保存完毕')
@@ -350,7 +365,7 @@ class daka_list_class:
                 check_item['modified'] = False
                 cnt += 1
         self.logger.info(f'本轮检查{cnt}条notice')
-        self.add_log(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'close_daka_list', 0, f'本轮检查{cnt}条notice')
+        self.add_log(datetime.datetime.now().strftime('%Y-%m-%d %H-%M-%S'), 'close_daka_list', 0, f'本轮检查{cnt}条notice')
         conn.commit()
         conn.close()
         if cnt > 0:
@@ -360,7 +375,7 @@ class daka_list_class:
         # 写入日志
         self.delete_old_logs()
         self.logger.info(f'写入了{len(self.logs)}条日志，{len(self.warnings)}条警告')
-        with open(f'{self.log_dir}log_{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}.{self.latest_check_user_timestamp}.{len(self.logs)}.txt', 'w', encoding='utf-8') as f:
+        with open(f'{self.log_dir}log_{datetime.datetime.now().strftime("%Y-%m-%d %H-%M-%S")}.{self.latest_check_user_timestamp}.{len(self.logs)}.txt', 'w', encoding='utf-8') as f:
             for msg in self.logs:
                 f.write(msg)
             for msg in self.warnings:
@@ -905,7 +920,7 @@ class daka_list_class:
         return not_daka_users
 
     def add_warning(self, content):
-        time_str = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        time_str = datetime.datetime.now().strftime('%Y-%m-%d %H-%M-%S')
         self.warnings.append(f'[Warning][{time_str}] {content}\n')
 
     def add_log(self, date_str, name, unique_id, msg):
@@ -1039,7 +1054,7 @@ class notice_subscriber:
 
     def get_last_hash(self):
         '''先获取上次公告哈希值(初始化以及距离上次更新时间超过1h)'''
-        # 从log_dir中获取最近的log文件subscriber_%Y-%m-%d %H:%M:%S.timestamp.len().csv
+        # 从log_dir中获取最近的log文件subscriber_%Y-%m-%d %H-%M-%S.timestamp.len().csv
         latest_file_name = ''
         ltt = 0
         for file_name in os.listdir(self.log_dir):
@@ -1129,7 +1144,7 @@ class notice_subscriber:
     
     def save_log(self):
         '''保存公告哈希值到log文件'''
-        with open(os.path.join(self.log_dir, f'subscriber_{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}.{int(time.time())}.csv'), 'w', encoding='utf-8', newline='') as f:
+        with open(os.path.join(self.log_dir, f'subscriber_{datetime.datetime.now().strftime("%Y-%m-%d %H-%M-%S")}.{int(time.time())}.csv'), 'w', encoding='utf-8', newline='') as f:
             writer = csv.writer(f)
             for key, value in self.last_hash.items():
                 writer.writerow(list(key) + [value])
@@ -1463,7 +1478,7 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
         response = http2_client_obj.send_http2_request('GET', url, pk_get_headers, None)
         data = response.json()['data']
         current_user_info = data['currentRankUserInfo']
-        end_time_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(data['session']['endTime'] // 1000))# auditEndTime=1731772799000
+        end_time_str = time.strftime('%Y-%m-%d %H-%M-%S', time.localtime(data['session']['endTime'] // 1000))# auditEndTime=1731772799000
         session_id = data["session"]["sessionId"]
         current_level = current_user_info["currentLevel"]
         current_star = current_user_info["currentStar"]
@@ -2618,7 +2633,7 @@ def notice_and_rank(user_cookie, user_config, http2_client_obj: http2_client, to
     #         class_name = class_item['groupName']
     #         class_score = class_item['score']
     #         cursor.execute(f"INSERT OR IGNORE INTO notice (SHARE_KEY, NAME, RANK_TYPE, RANK, HASH_VALUE, CONTENT, DATE, SCORE) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-    #                             (class_share_key, class_name, rank_type, i + 1, '', '', time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()), class_score))
+    #                             (class_share_key, class_name, rank_type, i + 1, '', '', time.strftime('%Y-%m-%d %H-%M-%S', time.localtime()), class_score))
     #     if VERBOSE:
     #         print(f'★ → 获取到排名{rank_type}的班级列表\n')  
     #     yield f'★{rank_type}'
@@ -2919,7 +2934,7 @@ def daka(daka_list: daka_list_class, user_cookie, user_config, http2_client_obj:
     
     message_str += '<br>开始背单词<br>'
     yield message_str
-    word_count = int((user_config.get('user_index', 0) / 10 + 1) * 2.5)
+    word_count = user_config.get('word_count', 5)
     for msg in learn_words(user_cookie, user_config, http2_client_obj, daka_list, react_wait_second, word_count):
         message_str += msg
         yield message_str
@@ -3158,7 +3173,14 @@ def daka_headless(daka_list: daka_list_class, user_cookie, user_config, http2_cl
             yield message
         daka_list.add_warning(message.replace('<br>', '\n'))
         daka_list.remove(unique_id)
-    daka_list.add_log(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), name, unique_id, f"延迟{delay}s后打卡\n{message}".replace('<br>', '\n'))
+    daka_list.add_log(datetime.datetime.now().strftime('%Y-%m-%d %H-%M-%S'), name, unique_id, f"延迟{delay}s后打卡\n{message}".replace('<br>', '\n'))
+
+def generator_wrapper(func, *args, **kwargs):
+    try:
+        for msg in func(*args, **kwargs):
+            ...
+    except Exception as e:
+        pass
 
 def daka_all_headless(daka_list: daka_list_class, http2_client_obj, only_rank_and_notice, user_dict_list=[], random_delay=1800):
     if user_dict_list == []:
@@ -3167,6 +3189,6 @@ def daka_all_headless(daka_list: daka_list_class, http2_client_obj, only_rank_an
     for user_dict in user_dict_list:
         if only_rank_and_notice == -1 and user_dict['config'].get('can_daka') == 0:
             continue
-        threading.Thread(target=daka_headless, args=(daka_list, user_dict['cookie'], user_dict['config'], http2_client_obj, user_cnt, only_rank_and_notice, random_delay)).start()
+        threading.Thread(target=generator_wrapper, args=(daka_headless, daka_list, user_dict['cookie'], user_dict['config'], http2_client_obj, user_cnt, only_rank_and_notice, random_delay, False)).start()
 
 

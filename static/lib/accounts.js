@@ -582,35 +582,12 @@ function changeToken(access_token, unique_id){
 }
 
 function addAccount() {
-  var name = prompt("请输入账号名称:");
-  if (name == null) return;
-  var access_token = prompt("请输入access_token:");
-  if (access_token == null) return;
-  let unique_id = prompt("请输入unique_id:");
-  if (unique_id == null) return;
-  return fetch('/accounts/add', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      name: name,
-      access_token: access_token,
-      unique_id: unique_id
-    })
-  })
- .then(function(response) {
-    return response.json();
-  })
- .then(function(data) {
-    loadOwnGroups(unique_id);
-  })
- .catch(function(error) {
-    loadOwnGroups(unique_id);
-  });
+  // 重定向到/append
+  window.location.href = '/append';
 }
 
 function deleteAccount(unique_id) {
+  if (!confirm("确认删除吗？此操作不可撤销")) return;
   document.querySelector(`#group${unique_id}`).innerHTML = `删除中...${unique_id}`;
   return fetch('/accounts/delete', {
     method: 'POST',
