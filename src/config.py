@@ -14,26 +14,26 @@ class Config:
             'host': '127.0.0.1',
             'port': 8850,
             'database_path': '../BCZ-Notice-Examiner/bcz_notice.db',
-            'dict_db_path': 'lookup.db',
             'dict_patch_db_path': 'lookup_patch.db',
             'puzzle_path': 'puzzle.db',
             'main_token': '',
-            'sync_command': [],
-            'prevent_sleep_command': './timeout.exe',
-            'allow_sleep_command': './timeout.exe reverse',
+            'sync_command': [], # 每天早上执行一次，可以手动添加备份命令，或启动订阅公告start subscribe.py等方便管理的小工具
+            'prevent_sleep_command': 'timeout',
+            'allow_sleep_command': 'timeout reverse',
             'local': False,
             'log_dir': './logs/',
             'check_notice_pace': 3,
             'pk_blacklist': [],
             'pk_whitelist': [],
+            'archiever_enable': False,
+            'class_list_2048': [],
+            'stargazer_enable': True,
         }
         self.initConfig()
         self.raw = self.read()
         self.host = self.raw.get('host', '')
         self.port = self.raw.get('port', '')
         self.database_path = self.raw.get('database_path', '')
-        self.dict_db_path = self.raw.get('dict_db_path', '')
-        self.dict_patch_db_path = self.raw.get('dict_patch_db_path', '')
         self.main_token = self.raw.get('main_token', '')
         self.local = self.raw.get('local', False)
         self.sync_command = self.raw.get('sync_command', [])
@@ -44,6 +44,10 @@ class Config:
         self.puzzle_path = self.raw.get('puzzle_path', 'puzzle.db')
         self.pk_blacklist = self.raw.get('pk_blacklist', [])
         self.pk_whitelist = self.raw.get('pk_whitelist', [])
+        self.dict_patch_db_path = self.raw.get('dict_patch_db_path', '')
+        self.archiever_enable = self.raw.get('archiever_enable', False)
+        self.class_list_2048 = self.raw.get('class_list_2048', [])
+        self.stargazer_enable = self.raw.get('stargazer_enable', True)
         self.verify()
 
     def initConfig(self):
@@ -97,11 +101,6 @@ class Config:
             value = self.default_config_dict[key]
             self.save(key, value)
             self.database_path = value
-        if self.dict_db_path == '':
-            key = 'dict_db_path'
-            value = self.default_config_dict[key]
-            self.save(key, value)
-            self.dict_db_path = value
         if self.main_token == '':
             key ='main_token'
             value = self.default_config_dict[key]
@@ -157,3 +156,18 @@ class Config:
             value = self.default_config_dict[key]
             self.save(key, value)
             self.dict_patch_db_path = value
+        if self.archiever_enable == '':
+            key = 'archiever_enable'
+            value = self.default_config_dict[key]
+            self.save(key, value)
+            self.archiever_enable = value
+        if self.class_list_2048 == []:
+            key = 'class_list_2048'
+            value = self.default_config_dict[key]
+            self.save(key, value)
+            self.class_list_2048 = value
+        if self.stargazer_enable == '':
+            key ='stargazer_enable'
+            value = self.default_config_dict[key]
+            self.save(key, value)
+            self.stargazer_enable = value

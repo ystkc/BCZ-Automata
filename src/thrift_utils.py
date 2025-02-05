@@ -4,6 +4,7 @@
 # thrift.exe -gen py d:/dotoro/project/#python/BCZ-Automata/src/thriftAPI
 
 
+import traceback
 from thrift.transport import TTransport
 from thrift.protocol import TCompactProtocol
 
@@ -12,18 +13,20 @@ try:
     from src.thriftAPI.ttypes import *
     from src.thriftAPI import *
     from src.get_headers import getHeaders, bcz_info, get_device_str
+    from src.http2_client import http2_client
 except:
     from thriftAPI.ttypes import *
     from thriftAPI import *
     from get_headers import getHeaders, bcz_info, get_device_str
-import requests
+    from http2_client import http2_client
+# import requests
 import random
 import gzip
 import struct
 import time
 import json
-import httpx
-import certifi
+# import httpx
+# import certifi
 import datetime
 import threading
 
@@ -51,6 +54,10 @@ class user_dict:
             if self.__user_dict_list[i]['config']['unique_id'] == unique_id:
                 return i
         return None
+    
+    def get_access_token_by_unique_id(self, unique_id=0):
+        index = self.get_index_by_unique_id(unique_id)
+        return self.__user_dict_list[index]['cookie']['access_token']
     
     def get_count(self):
         return len(self.__user_dict_list)
@@ -503,106 +510,12 @@ def print_thrift_object(obj, indent=0, index=-1, f=None):
                 print(f"{indent_str}{index_str}{obj}")  
   
 
-def send_request(method, url, headers, content = None):
-    '''此处没有gzip'''
-    if method == 'POST':
-        response = requests.post(url, headers=headers, data=content)
-    elif method == 'GET':
-        response = requests.get(url, headers=headers)
-    elif method == 'OPTIONS':
-        response = requests.options(url, headers=headers)
-    else:
-        raise Exception('method not support')
-    if response.status_code != 200:
-        raise Exception(f'http status code: {response.status_code}')
-    return response
-
-class http2_client:
-    def __init__(self):
-        self.client = None
-
-    def send_http2_request(self, method, url, headers, content, jsonify=False):
-        '''
-        使用了http2尽可能复用tunnel，但5s闲置会断开连接
-        此处没有gzip'''
-        
-        client = self.get_http2_client()
-        
-        failed_count = 0
-        response = None
-        if method == 'POST':
-            while True:
-                try:
-                    response = client.post(url, content=content, headers=headers)
-                    if response.status_code != 200:
-                        print(f'http2 warning, status_code: {response.status_code}')
-                        time.sleep(10)
-                        continue
-                    if jsonify:
-                        response = response.json()
-                    break
-                except Exception as e:
-                    print(f'http2 error: {e}')
-                    if client.is_closed:
-                        client = self.get_http2_client()
-                        continue
-                    time.sleep(10)
-                    failed_count += 1
-                    if failed_count > 5:
-                        Warning('http2 error, failed_count > 7')
-                        time.sleep(60)
-                        failed_count = 0
-                    continue
-            return response
-        elif method == 'GET':
-            while True:
-                try:
-                    response = client.get(url, headers=headers)
-                    if response.status_code != 200:
-                        print(f'http2 warning, status_code: {response.status_code}')
-                        time.sleep(10)
-                        continue
-                    if jsonify:
-                        response = response.json()
-                    break
-                except Exception as e:
-                    print(f'http2 error: {e}')
-                    if client.is_closed:
-                        client = self.get_http2_client()
-                        continue
-                    time.sleep(10)
-                    failed_count += 1
-                    if failed_count > 5:
-                        Warning('http2 error, failed_count > 7')
-                        time.sleep(60)
-                        failed_count = 0
-                    continue
-            return response
-        elif method == 'OPTIONS':
-            return client.options(url)
-        else:
-            return Exception('method not support')
-
-    def get_http2_client(self):
-        if self.client is None or self.client.is_closed:
-            self.client = httpx.Client(http2=True, verify=certifi.where())
-        return self.client
-
-    def reload_http2_client(self):
-        if not(self.client is None or self.client.is_closed):
-            self.client.close()
-        self.client = httpx.Client(http2=True, verify=certifi.where())
-
-    def __del__(self):
-        if not(self.client is None or self.client.is_closed):
-            self.client.close()
-    
 class bcz_system:
     def __init__(self, http2_client_obj: http2_client):
         self.http2_client_obj = http2_client_obj
     
     def send_http2_request(self, method, url, headers, content, jsonify=False):
-        return self.http2_client_obj.send_http2_request(method, url, headers, content, jsonify)
+        return self.http2_client_obj.send_http2_request(method, url, headers, content)
     
     def bcz_system_check_infos(self, user_cookie, user_config):
         '''check_infos'''
@@ -771,7 +684,7 @@ class advertise:
         self.http2_client_obj = http2_client_obj
     
     def send_http2_request(self, method, url, headers, content, jsonify=False):
-        return self.http2_client_obj.send_http2_request(method, url, headers, content, jsonify)
+        return self.http2_client_obj.send_http2_request(method, url, headers, content)
     
     def advertise_get_startup_ad(self, user_cookie, user_config, screen_length=1920, screen_width=1080):
         '''get_startup_ad'''
@@ -1045,7 +958,7 @@ class user_study:
         self.http2_client_obj = http2_client_obj
     
     def send_http2_request(self, method, url, headers, content, jsonify=False):
-        return self.http2_client_obj.send_http2_request(method, url, headers, content, jsonify)
+        return self.http2_client_obj.send_http2_request(method, url, headers, content)
     
     def user_study_user_basic_info_v2(self, user_cookie, user_config):
         '''user_basic_info_v2'''
@@ -1183,7 +1096,7 @@ class user_study:
         headers = getHeaders("$learn", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/user_study/submit_win_streak_records/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
-        response = self.send_http2_request('POST', url, headers, content, False)
+        response = self.send_http2_request('POST', url, headers, content)
         transport.close()
 
         result = response.content[4:]
@@ -1284,7 +1197,7 @@ class user_study:
         headers = getHeaders("$learn", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/user_study/user_daka_v2/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
-        response = self.send_http2_request('POST', url, headers, content, False)
+        response = self.send_http2_request('POST', url, headers, content)
         transport.close()
 
         result = response.content[4:]
@@ -1354,7 +1267,7 @@ class user_study:
         headers = getHeaders("$learn", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/user_study/update_done_data/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
-        response = self.send_http2_request('POST', url, headers, content, False)
+        response = self.send_http2_request('POST', url, headers, content)
         transport.close()
 
         result = response.content[4:]
@@ -1448,7 +1361,7 @@ class user_study:
         headers = getHeaders("$learn", user_cookie, int(time.time()))
         url = f'https://{headers["Host"]}/rpc/user_study/submit_experience_record/{time_long}'
         content = gzip.compress(struct.pack("!i", len(content)) + content)
-        response = self.send_http2_request('POST', url, headers, content, False)
+        response = self.send_http2_request('POST', url, headers, content)
         transport.close()
 
         result = response.content[4:]
@@ -1563,7 +1476,7 @@ class unified_user:
         self.http2_client_obj = http2_client_obj
     
     def send_http2_request(self, method, url, headers, content, jsonify=False):
-        return self.http2_client_obj.send_http2_request(method, url, headers, content, jsonify)
+        return self.http2_client_obj.send_http2_request(method, url, headers, content)
     
     def unified_user_get_bind_info(self, user_cookie, user_config):
         '''get_bind_info'''
@@ -1618,7 +1531,7 @@ class assistant:
         self.http2_client_obj = http2_client_obj
     
     def send_http2_request(self, method, url, headers, content, jsonify=False):
-        return self.http2_client_obj.send_http2_request(method, url, headers, content, jsonify)
+        return self.http2_client_obj.send_http2_request(method, url, headers, content)
     
     def assistant_check_feedback_msg(self, user_cookie, user_config):
         '''check_feedback_msg'''

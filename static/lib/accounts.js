@@ -3,6 +3,33 @@ let daka = 0, not_daka = 0, not_loaded = 0; // 总账号数=daka+not_daka，总�
 let groups_list = []; // 加入的班级列表，{name: 'xxx', count: 有多少个账号加入该班级, include_leader: true/false}
 let notice_groups_count = 0, not_notice_groups_count = 0; // 加入的青铜班级（用于更公告）数量
 let all_groups_count = 0; // 总现在开了的班位数量
+let socket = null;
+function connect_ws() {
+  socket = new WebSocket(`ws://${location.host}/ws`);
+  socket.onmessage = function(event) {
+    console.log(event.data); // 如果不知道是谁在打卡，可以查看控制台（说白了：懒）
+    msg = event.data;
+      msg_info = msg.split('#')
+      unique_id = msg_info[0];
+      msg_type = msg_info[1];
+      meta_length = unique_id.length+msg_type.length
+      content_type = msg[unique_id.length+msg_type.length];
+      msg = msg.slice(meta_length+1);
+      if (content_type == '$' || msg_type == 'error'){
+        element = document.querySelector(`#img_frame${unique_id}`);
+        if (element) {
+          element.innerHTML = msg;
+        }
+      }
+      else{
+        element = document.querySelector(`#nickname${unique_id}`);
+        if (element) {
+          element.innerHTML = msg;
+        }
+      }
+  };
+}
+
 String.prototype.replaceAll = function(s1, s2) {
   return this.replace(new RegExp(s1, "gm"), s2);
 }
@@ -73,7 +100,7 @@ function loadAccountList() {
       console.error(error);
     });
 }
-function replyAndACK(button, group_share_key, unique_id) {
+function replyAndACK(group_share_key, unique_id) {
   var content = prompt("请输入回复内容:");
   if (content == null) return;
   return fetch('/api/reply_and_ack', {
@@ -91,7 +118,7 @@ function replyAndACK(button, group_share_key, unique_id) {
     return response.json();
   })
  .then(function(data) {
-    button.parentNode.parentNode.querySelector('#nickname').innerHTML = data.msg;
+    document.querySelector(`#nickname${unique_id}${group_share_key}`).innerHTML = data.msg;
     // loadOwnGroups(unique_id);
   })
  .catch(function(error) {
@@ -168,21 +195,21 @@ function showOwnGroups(data, unique_id) {
           <td>${group.name}</td>
           <td>${group.rank}</td>
           <td>加入上限${group.introduction}</td>
-          <td id='img_frame'>${group.notice}</td>
-          <td id='nickname'>${group.group_nickname}</td>
+          <td id='img_frame${unique_id}'>${group.notice}</td>
+          <td id='nickname${unique_id}'>${group.group_nickname}</td>
           <td><button onclick="moreGroups(${unique_id})">增加班位</button></td>
-          <td><button class='daka' onclick="daKa(this, ${unique_id})">打卡</button></td>
+          <td><button class='daka' onclick="daKa(${unique_id})">打卡</button></td>
         </tr>`;
       }else{
         quit_button = '';
         background = '';
         
         if (group.leader == true){
-          quit_button = `<td><button id='op1' onclick="changeNotice(this.parentNode, '${group.share_key}', ${unique_id}, '${group.group_id}')">改公告</button></td>`
+          quit_button = `<td><button id='op1${unique_id}${group.share_key}' onclick="changeNotice('${group.share_key}', ${unique_id}, '${group.group_id}')">改公告</button></td>`
           background = 'background-color: #00ffff88;';
         }
         else{
-          quit_button = `<td><button id='op1'onclick="quitGroup('${group.name}', '${group.share_key}', ${unique_id})">退出</button></td>`
+          quit_button = `<td><button id='op1${unique_id}${group.share_key}' onclick="quitGroup('${group.name}', '${group.share_key}', ${unique_id})">退出</button></td>`
         }
         if (group.rank == 1)
           notice_groups_count += 1;
@@ -195,9 +222,9 @@ function showOwnGroups(data, unique_id) {
             <td>${group.name}</td>
             <td>${group.rank}</td>
             <td>${group.introduction}</td>
-            <td id='notice' onclick='changeNotice(this, "${group.share_key}", ${unique_id})'>${group.notice}</td>
-            <td id='nickname'>${group.group_nickname}</td>
-            <td><button onclick="replyAndACK(this, '${group.share_key}', ${unique_id})">回复收到</button></td>
+            <td id='notice${unique_id}${group.share_key}' onclick='changeNotice("${group.share_key}", ${unique_id})'>${group.notice}</td>
+            <td id='nickname${unique_id}${group.share_key}'>${group.group_nickname}</td>
+            <td><button onclick="replyAndACK('${group.share_key}', ${unique_id})">回复收到</button></td>
             ${quit_button}
           </tr>
         `;
@@ -214,20 +241,20 @@ function showOwnGroups(data, unique_id) {
   table_element.innerHTML = table;
   document.querySelector(`#group${unique_id}`).appendChild(table_element);
 }
-function changeNotice(element, group_share_key, unique_id, group_id=''){
-  let op1_button = element.parentNode.querySelector('#op1');
+function changeNotice(group_share_key, unique_id, group_id=''){
+  let op1_button = document.querySelector(`#op1${unique_id}${group_share_key}`);
   if (op1_button.textContent == "改公告" ) // 是班长，进入编辑公告模式
   {
-    let notice_span = element.parentNode.querySelector('#notice');
+    let notice_span = document.querySelector(`#notice${unique_id}${group_share_key}`);
     // 将notice_span改成输入框（保留当前公告）
     let original_content = notice_span.innerText;
     let original_html_content = notice_span.innerHTML;
     // 使textarea的宽度和高度与notice_span一致
     let width = notice_span.offsetWidth;
     let height = notice_span.offsetHeight;
-    let input_span = `<textarea type="text" id="editor" style="width:${width}px;height:${height}px;">${original_content}</textarea>`;
-    element.innerHTML = input_span;
-    element.querySelector('#editor').focus();
+    let input_span = `<textarea type="text" id="editor${unique_id}${group_share_key}" style="width:${width}px;height:${height}px;">${original_content}</textarea>`;
+    notice_span.innerHTML = input_span;
+    // notice_span.setAttribute("onclick", "");
     op1_button.textContent = "发送";
     // 设置ESC键退出编辑模式
     document.addEventListener('keydown', function(event){
@@ -236,14 +263,13 @@ function changeNotice(element, group_share_key, unique_id, group_id=''){
         op1_button.textContent = "改公告";
       }
     });
+    showNickNameList(group_share_key, unique_id);
   }
-  else if (element.textContent != "发送" && op1_button.textContent == "发送")
-    return;
-  else if (element.textContent == "发送") // 是班长，发送公告
-  {// 此处不使用op1.textContent是因为编辑公告时点击编辑器不应该触发
-    content = element.parentNode.querySelector('#editor').value;
+  else if (op1_button.textContent == "发送" && group_id != '') // 是班长，发送公告
+  { // 区别：如果是点击编辑器，则group_id为空，不应该触发发送请求
+    content = document.querySelector(`#editor${unique_id}${group_share_key}`).value;
     //换回td
-    let notice_span = element.parentNode.querySelector('#notice');
+    let notice_span = document.querySelector(`#notice${unique_id}${group_share_key}`);
     
     // 查找content中所有`到空格之间的字符串，提取成列表
     let nickname_list = []
@@ -292,53 +318,54 @@ function changeNotice(element, group_share_key, unique_id, group_id=''){
       sse.close();
     });
   }
-  if (op1_button.textContent == "退出" || op1_button.textContent == "发送") // 因为改公告点击后会立刻变为发送
+  else if (op1_button.textContent == "退出") // 不是班长，仅显示昵称列表
   {
-     // 显示昵称框
-     fetch (`/api/get_nickname?unique_id=${unique_id}&group_share_key=${group_share_key}`)
-     .then(response => response.json())
-     .then(data => {
-        data = data.data;
-        // 先将my_reply写入#nickname中
-        let my_reply = data.my_reply;
-        if (my_reply != null){
-          let nickname_span = element.parentNode.querySelector('#nickname');
-          nickname_span.innerHTML = my_reply;
-        }
-        var old = element.parentNode.querySelector('#nickname_list');
-        if (old) old.remove();
-        // 在公告输入区下面加一个列表，点击昵称可以插入到公告中
-        let nickname_list = document.createElement('ul');
-        nickname_list.id = 'nickname_list';
-        element.parentNode.querySelector('#notice').appendChild(nickname_list);
-        // data是{uniqueId:{nickname:nickname, group_nickname:group_nickname, two_week_daka_dates:two_week_daka_dates[14]}}
-        data = data.group_nickname;
-        for (let unique_id in data){
-          // console.log(data[unique_id]);
-          // console.log(data[unique_id].two_week_daka_dates);
-          let nickname_li = document.createElement('li');
-          // 第一行显示昵称+(uniqueId)，第二行显示组内昵称，第三行显示两周打卡天数的前7位，第四行显示两周打卡天数的后7位
-          if (op1_button.textContent == "发送")
-            nickname_li.innerHTML = `<span onclick="insertNickname(this, '${unique_id}', '${data[unique_id].group_nickname}')">
-${data[unique_id].nickname}(${unique_id})[${data[unique_id].completed_times}/${data[unique_id].duration_days}]:<br>
-${data[unique_id].group_nickname}<br>
-${data[unique_id].two_week_daka_dates.slice(0,7)}<br>
-${data[unique_id].two_week_daka_dates.slice(7)}</span>`;
-          else
-            nickname_li.innerHTML = `<span>
-${data[unique_id].nickname}(${unique_id})[${data[unique_id].completed_times}/${data[unique_id].duration_days}]:<br>
-${data[unique_id].group_nickname}<br>
-${data[unique_id].two_week_daka_dates.slice(0,7)}<br>
-${data[unique_id].two_week_daka_dates.slice(7)}</span>`;
-          nickname_list.appendChild(nickname_li);
-        }
-     })
-     .catch(error => console.error(error));
+     showNickNameList(group_share_key, unique_id);
   }
 }
-function insertNickname(element, unique_id, nickname){
-  let editor = element.parentNode.parentNode.parentNode.querySelector('#editor');
-  editor.value += `@${nickname}\`${unique_id} `;
+function showNickNameList(group_share_key, unique_id){
+  let op1_button = document.querySelector(`#op1${unique_id}${group_share_key}`);
+  // 显示昵称框
+  fetch (`/api/get_nickname?unique_id=${unique_id}&group_share_key=${group_share_key}`)
+  .then(response => response.json())
+  .then(data => {
+     data = data.data;
+     // 先将my_reply写入#nickname中
+     let my_reply = data.my_reply;
+     if (my_reply != null){
+       let nickname_span = document.querySelector(`#nickname${unique_id}${group_share_key}`);
+       nickname_span.innerHTML = my_reply;
+     }
+     var old = document.querySelector(`#nickname_list${unique_id}${group_share_key}`);
+     if (old) old.remove();
+     // 在公告输入区下面加一个列表，点击昵称可以插入到公告中
+     let nickname_list = document.createElement('ul');
+     nickname_list.id = `nickname_list${unique_id}${group_share_key}`;
+     document.querySelector(`#notice${unique_id}${group_share_key}`).appendChild(nickname_list);
+     // data是{uniqueId:{nickname:nickname, group_nickname:group_nickname, two_week_daka_dates:two_week_daka_dates[14]}}
+     data = data.group_nickname;
+     for (let user_unique_id in data){
+       // console.log(data[user_unique_id]);
+       // console.log(data[user_unique_id].two_week_daka_dates);
+       let nickname_li = document.createElement('li'), tmp_str = '';
+       // 第一行显示昵称+(uniqueId)，第二行显示组内昵称，第三行显示两周打卡天数的前7位，第四行显示两周打卡天数的后7位
+       if (op1_button.textContent == "发送") // 编辑公告时，点击昵称插入到公告中at
+         tmp_str = `<span onclick="insertNickname('${unique_id}', '${user_unique_id}', '${group_share_key}', '${data[user_unique_id].group_nickname}')">`;
+       else
+         tmp_str = `<span>`;
+        tmp_str += `${data[user_unique_id].nickname}(${user_unique_id})[${data[user_unique_id].completed_times}/${data[user_unique_id].duration_days}]:<br>`;
+        tmp_str += `${data[user_unique_id].group_nickname}<br>`;
+        tmp_str += `${data[user_unique_id].two_week_daka_dates.slice(0,7)}<br>`;
+        tmp_str += `${data[user_unique_id].two_week_daka_dates.slice(7)}</span>`;
+       nickname_li.innerHTML = tmp_str;
+       nickname_list.appendChild(nickname_li);
+     }
+  })
+  .catch(error => console.error(error));
+}
+function insertNickname(unique_id, user_unique_id, group_share_key, nickname){
+  let editor = document.querySelector(`#editor${unique_id}${group_share_key}`);
+  editor.value += `@${nickname}\`${user_unique_id} `;
 }
 function joinAll(){
   let share_key = prompt("请输入shareKey(16位)或inviteCode(5-8位):");
@@ -398,55 +425,22 @@ function buKa(){ // 给未打卡的账号打卡
   });
 
 }
-function daKa(button, unique_id){
+function daKa(unique_id){
   // websocket链接
-  button.parentNode.parentNode.querySelector('#img_frame').innerHTML = '';
-  button.parentNode.parentNode.querySelector('#nickname').innerHTML = '';
-  let socket = io();
-  socket.emit('daka', unique_id);
-  socket.on('msg', function(data) {
-    // console.log(data);
-    msg = data;
-    if (msg[0] == '$'){
-      button.parentNode.parentNode.querySelector('#img_frame').innerHTML = msg;
-    }
-    else{
-      button.parentNode.parentNode.querySelector('#nickname').innerHTML = msg;
-    }
-  });
-  socket.on('error', function(error) {
-    button.parentNode.parentNode.querySelector('#img_frame').innerHTML = error;
-    socket.close();
-  });
-  
-  // let socket = new WebSocket('ws://' + location.host + '/api/daka?unique_id=' + unique_id);
-  // socket.onopen = function(event) {
-  //   console.log("WebSocket已连接");
-  // };
-  // socket.onmessage = function(event) {
-  //   console.log(event.data);
-  //   msg = event.data;
-  //   if (msg[0] == '$'){
-  //     button.parentNode.parentNode.querySelector('#img_frame').innerHTML = msg;
-  //   }
-  //   else{
-  //     button.parentNode.parentNode.querySelector('#nickname').innerHTML = msg;
-  //   }
-  // };
-  // socket.onerror = function(event) {
-  //   console.error(event);
-  //   socket.close();
-  // };
-
-  // sse.onmessage = function(event) {
-  //   if (event.data[0] == '$')
-  //     button.parentNode.parentNode.querySelector('#img_frame').innerHTML = event.data;
-  //   button.parentNode.parentNode.querySelector('#nickname').innerHTML = event.data;
-  // };
-  // sse.onerror = function(event) {
-  //   console.error(event);
-  //   sse.close();
-  // };
+  document.querySelector(`#img_frame${unique_id}`).innerHTML = '';
+  document.querySelector(`#nickname${unique_id}`).innerHTML = '';
+  if (socket.readyState != 1) {
+    document.querySelector(`#nickname${unique_id}`).innerHTML = '连接中...';
+    connect_ws();
+    let interval = setInterval(function(){
+      if (socket.readyState == 1) {
+        socket.send(`daka: ${unique_id}`);
+        clearInterval(interval);
+      }
+    }, 1000);
+  } else {
+    socket.send(`daka: ${unique_id}`);
+  }
 }
 
 function moreGroups(unique_id){
@@ -540,7 +534,7 @@ function showAccountList(data, init=0) {
       <li class="account-item">${account.name}(${account.unique_id})
         <button class="delete-btn" onclick="deleteAccount(${account.unique_id})">删除</button>
         <button class="edit-btn" onclick="loadOwnGroups(${account.unique_id})">${refresh_btn_text}</button>
-        <button class="join-btn" onclick="changeToken('${account.access_token}', ${account.unique_id})">魔法账号</button>
+        <button class="join-btn" onclick="changeToken(${account.unique_id})">魔法账号</button>
       </li>
     </div>`;
     
@@ -562,7 +556,7 @@ function showAccountList(data, init=0) {
     }
   });
 }
-function changeToken(access_token, unique_id){
+function changeToken(unique_id){
   // no-cors
   return fetch(`change_token`, {
     method: 'POST', // 根据需要选择请求方法
@@ -570,7 +564,6 @@ function changeToken(access_token, unique_id){
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      access_token: access_token,
       unique_id: unique_id
     })
   })
@@ -612,5 +605,6 @@ function deleteAccount(unique_id) {
 
 // 页面加载完成后，调用 loadAccountList 函数
 window.onload = function() {
+  connect_ws();
   loadAccountList();
 }

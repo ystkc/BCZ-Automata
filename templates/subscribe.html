@@ -99,10 +99,11 @@ function displayData(data) {
 }
 function load_data() {
     fetch(window.location.href + "/data")
-   .then(function(response) {
+    .then(function(response) {
         return response.json();
     })
    .then(function(data) {
+        data = data.data;
         document.getElementById("user_name").innerHTML = data.user_name;
         document.getElementById("unique_id").innerHTML = data.unique_id;
         document.getElementById("group_name").innerHTML = data.group_name;

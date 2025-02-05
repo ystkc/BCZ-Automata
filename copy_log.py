@@ -4,7 +4,7 @@ import os
 import time
 
 # 获取当前时间
-today = time.strftime('%Y-%m-%d', time.localtime())
+today = input('请输入日期(格式：2021-01-01): ')
 
 result = ''
 path = './logs/'

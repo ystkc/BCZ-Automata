@@ -6,7 +6,7 @@ import threading
 import time
 import os
 import random
-from src.thrift_utils import http2_client
+from src.http2_client import http2_client
 http2_client_obj = http2_client()
 from src.get_headers import getHeaders
 

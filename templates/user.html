@@ -32,7 +32,8 @@
     let login_btn = document.getElementById('login_btn');
     window.onload = ()=>{
       let userData = JSON.parse(localStorage.getItem('userData'));
-      document.querySelector('.member-info').innerHTML = '你的用户ID为: ' + userData.user_id + '<br>你的授权令牌为: ' + userData.token;
+      document.querySelector('.member-info').innerHTML = '你的用户ID为: ' + userData.user_id + '<br>你的授权令牌为: ' + userData.token + '<br>请立即复制以免丢失';
+      localStorage.removeItem('userData');
     }
 
     // 发送短信验证码

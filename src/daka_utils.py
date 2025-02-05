@@ -1,4 +1,6 @@
 
+import logging
+import queue
 from src.thrift_utils import report_event, social_send_share_success, user_study, user_dict, http2_client
 from src.config import Config
 from src.get_headers import getHeaders
@@ -17,10 +19,12 @@ import threading
 import hashlib
 import traceback
 from fuzzywuzzy import process
+from collections import Counter
 DEBUG = False
 DEBUG_SIZE = 1
 LOAD_MEMBER_TABLE = True # 如果要一天获取多次，请设置为True
 MEMBERS_GROUPS_LIMIT = 2147483647 # 数据库循环队列的大小（旧的会被删除）
+DICT_DB_PATH = 'lookup.db'
 
 # 功能开关
 BCZ_NCSVC = False # 已于12.5结束
@@ -79,6 +83,15 @@ def get_history_learnt_list(unique_id, delta=1):
 
 from src.bcz import getRandomWordIDInBook
 
+class stargazer_class:
+    def __init__(self, logger, http2_client_obj: http2_client, config: Config):
+        self.http2_client_obj = http2_client_obj
+        self.logger = logger
+        self.stargazer_list = config.pk_blacklist
+
+    def start(self):
+        ...
+
 class daka_list_class:
     def __init__(self, logger, http2_client_obj: http2_client, config: Config):
         self.http2_client_obj = http2_client_obj
@@ -86,12 +99,14 @@ class daka_list_class:
         self.daka_list = []
         self.logs = []
         self.warnings = []
+        self.class_list_2048 = []
+        for share_key in config.class_list_2048:
+            self.class_list_2048.append({'shareKey': share_key, 'score': None})
         self.lock = threading.Lock()
         self.patch_list = [] # 公告块，切分合并成1000长度(每次检测最多1000个)，检测后切除通过的部分，得到坏词
         self.status = [] # 标记每个patch_list中的检查状态：0未检查，1已从后检查，2已双向检查
         self.class_list = {}
-        self.time_start = 0
-
+        self.time_start = int(time.time())
         # 加载用户字典
         self.user_dict_obj = user_dict()
         logger.info(f'加载了{self.get_user_cnt()}个用户')
@@ -99,17 +114,12 @@ class daka_list_class:
         # 初始化数据储存信息
         self.notice_and_rank_path = config.database_path
         self.puzzle_path = config.puzzle_path
-        self.dict_db_path = config.dict_db_path
         self.dict_patch_db_path = config.dict_patch_db_path
         self.log_dir = config.log_dir
         if not os.path.exists(self.log_dir):
             os.makedirs(self.log_dir, exist_ok=True)
         self.pk_blacklist = config.pk_blacklist
         self.pk_whitelist = config.pk_whitelist
-
-
-        # 读取今天的cheat_tracker
-        self.load_cheat_tracker(datetime.datetime.now().strftime('%Y-%m-%d'))# 防止数据跨天
 
         # 初始化单词大赛数据库
         if BCZ_NCSVC:
@@ -130,7 +140,6 @@ class daka_list_class:
             puzzle_conn.close()
         # 单词数据库
         
-        # wl_conn = sqlite3.connect(self.dict_db_path)
         wl_patch_conn = sqlite3.connect(self.dict_patch_db_path)
         cursor = wl_patch_conn.cursor()
         cursor.execute('''CREATE TABLE IF NOT EXISTS dict_bcz (
@@ -159,25 +168,16 @@ class daka_list_class:
             WORD_COUNT INTEGER,                 -- 今日词数
             STUDY_CHEAT INTEGER,                -- 是否作弊
             BOOK_NAME INTEGER,                     -- 学习词书
-            GROUP_ID_1 INTEGER,            -- 小班ID
-            COMPLETED_TIMES_1 INTEGER,            -- 打卡天数
-            DURATION_DAYS_1 INTEGER,              -- 入班天数
-            GROUP_ID_2 INTEGER,
-            COMPLETED_TIMES_2 INTEGER,
-            DURATION_DAYS_2 INTEGER,
-            GROUP_ID_3 INTEGER,
-            COMPLETED_TIMES_3 INTEGER,
-            DURATION_DAYS_3 INTEGER,
-            GROUP_ID_4 INTEGER,
-            COMPLETED_TIMES_4 INTEGER,
-            DURATION_DAYS_4 INTEGER,
-            GROUP_ID_5 INTEGER,
-            COMPLETED_TIMES_5 INTEGER,
-            DURATION_DAYS_5 INTEGER,
-            GROUP_ID_6 INTEGER,
-            COMPLETED_TIMES_6 INTEGER,
-            DURATION_DAYS_6 INTEGER,            -- 最多6个小班(虽然很多人填不满，但还是比重复要省空间)
             UNIQUE(USER_ID, TODAY_DATE))''')
+        cursor.execute("""CREATE TABLE IF NOT EXISTS MEMBERS_GROUPS (
+            USER_ID INTEGER,                         -- 用户ID
+            GROUP_ID INTEGER,                        -- 小班ID
+            STREAK_TIMES INTEGER,                    -- 连胜天数（最长完成 = 开始天数 + 连胜天数）
+            COMPLETED_TIMES_START INTEGER,           -- 连胜开始时的打卡天数
+            START_DATE INTEGER,                      -- 开始日期
+            ACHIEVED_DATE INTEGER,                   -- 达到这个连胜的日期
+            DURATION_DAYS INTEGER,                   -- 最新的入班天数（也就是最长的）
+            UNIQUE(USER_ID, GROUP_ID, START_DATE))""")
         cursor.execute('''CREATE TABLE IF NOT EXISTS BOOK_NAME (
             HASH_ID INTEGER PRIMARY KEY,
             BOOK_NAME TEXT,
@@ -207,6 +207,7 @@ class daka_list_class:
         conn.commit()
         conn.close()
         # 检查lookup.db
+        # wl_conn = sqlite3.connect(DICT_DB_PATH)
         if not os.path.exists('lookup.db'):
             if not os.path.exists('lookup.rar'): 
                 raise Exception('lookup.rar不存在，请重新安装程序')
@@ -238,8 +239,13 @@ class daka_list_class:
                 pass
     
     def init_notice_storage(self, logger):
-        if not self.__not_prepared:
+        '''加载用户信息、小班信息、作弊信息、公告信息、坏词信息、词库信息'''
+        if not self.__not_prepared: # 如果False，说明已经初始化过了。如果undefined，则抛出错误
             return
+
+        # 读取今天的cheat_tracker
+        self.load_cheat_tracker(datetime.datetime.now().strftime('%Y-%m-%d'))# 防止数据跨天
+
         logger.info('开始读取数据库')
         self.load_dict_db(logger)
         conn = sqlite3.connect(self.notice_and_rank_path, uri=True)
@@ -290,7 +296,9 @@ class daka_list_class:
         if LOAD_MEMBER_TABLE:
             self.load_member_list(cursor, int(datetime.datetime.now().strftime('%m%d')))
         else:
-            self.member_list = {} # USER_ID: (COMPLETED_TIME, TODAY_DATE, WORD_COUNT, STUDY_CHEAT, BOOK_NAME, GROUP_ID_1, COMPLETED_TIMES_1, DURATION_DAYS_1, GROUP_ID_2, COMPLETED_TIMES_2, DURATION_DAYS_2, GROUP_ID_3, COMPLETED_TIMES_3, DURATION_DAYS_3, GROUP_ID_4, COMPLETED_TIMES_4, DURATION_DAYS_4, GROUP_ID_5, COMPLETED_TIMES_5, DURATION_DAYS_5, GROUP_ID_6, COMPLETED_TIMES_6, DURATION_DAYS_6)
+            self.member_list = {} # USER_ID: (COMPLETED_TIME, TODAY_DATE, WORD_COUNT, STUDY_CHEAT, BOOK_NAME)
+            self.member_groups = {}
+            self.prev_user_streak_info = {}
         # 加载书本信息
         self.book_name_dict = {} # BOOK_NAME:BOOK_ID
         cursor.execute('''SELECT HASH_ID, BOOK_NAME, BOOK_ID, BOOK_URL FROM BOOK_NAME''')
@@ -331,66 +339,76 @@ class daka_list_class:
         self.notice_time_buffer = []
         self.group_info_buffer = [] # 每天最多7000条，暂无需设置大小
         self.user_info_buffer = [] # 每天最多700000条，暂无需设置大小
-        self.member_buffer = {} # 每天最多700000条，暂无需设置大小
+        self.member_buffer = [] # 每天最多700000条，暂无需设置大小
         self.book_name_buffer = []
         
-        logger.info('数据库初始化完毕')
+        logger.info('\033[32m数据库初始化完毕\033[0m')
         self.__not_prepared = False
 
+
+    
+    def load_member_list(self, cursor: sqlite3.Cursor, date_int: int):
+        self.member_groups_cnt = {} # user_id: group_id: cnt
+        self.member_list = {}
+        cursor.execute('''SELECT USER_ID, COMPLETED_TIME, TODAY_DATE, WORD_COUNT, STUDY_CHEAT, BOOK_NAME FROM MEMBERS WHERE TODAY_DATE == ?''', (date_int, ))
+        for row in cursor.fetchall():
+            self.member_list[row[0]] = (row[0], row[1], row[2], row[3], row[4], row[5])
+        self.logger.info(f'member_list共加载{len(self.member_list)}条数据')
+        self.member_buffer = [] # 每天最多700000条，暂无需设置大小
+        # 加载MEMBERS_GROUPS表
+        self.member_groups = {}
+        self.prev_user_streak_info = {}
+        cursor.execute('''SELECT USER_ID, GROUP_ID, STREAK_TIMES, COMPLETED_TIMES_START, START_DATE, ACHIEVED_DATE, DURATION_DAYS FROM MEMBERS_GROUPS''')
+        for row in cursor.fetchall():
+            idx = (row[0], row[1])
+            tp = self.member_groups.get(idx)
+            if tp is None:
+                self.member_groups[idx] = (row[2], row[3], row[4], row[5], row[6])
+            elif row[4] > tp[4]: # 最新的连胜日期
+                self.prev_user_streak_info[idx] = tp # 由于有单词机，可能出现连胜中断后补上，这里储存上一次连胜以备连接
+                self.member_groups[idx] = (row[2], row[3], row[4], row[5], row[6])
+            else: # 不是最新的，如果比prev_user_streak_info新，则替换prev_user_streak_info
+                prev_tp = self.prev_user_streak_info.get(idx)
+                if prev_tp is not None and row[4] > prev_tp[4]:
+                    self.prev_user_streak_info[idx] = (row[2], row[3], row[4], row[5], row[6])
+
+        self.logger.info(f'成员的groups共加载{len(self.member_groups)}条数据')
+        self.logger.info(f'备用prev{len(self.prev_user_streak_info)}条数据')
+        self.member_groups_buffer = []
+        self.member_groups_delete_buffer = [] # 由于有单词机，可能出现连胜中断后补上，所以要合并后删掉之前的
 
     def wait(self):
         while self.__not_prepared:
             time.sleep(1)
+        date_int = int(datetime.datetime.now().strftime('%m%d'))
 
     def close(self):
         self.wait()
+        close_start_time = int(time.time())
+        now = datetime.datetime.now()
+        # 删除35天前的日志
+        self.delete_old_logs() # 这家伙也是log很多（故意的）
+        self.logger.info(f'35天前的日志删除完毕')
+        # 检查未打卡用户
         not_daka_users = []
-        current_timestamp = int(datetime.datetime.now().timestamp())
-        if current_timestamp - self.latest_check_user_timestamp > 3600:
+        if close_start_time - self.latest_check_user_timestamp > 3600:
             not_daka_users = self.check_not_daka_users(include_not_daka=False) # 有网络请求，要放在close前面，防止log太多
-            self.latest_check_user_timestamp = current_timestamp
+            self.latest_check_user_timestamp = close_start_time
         else:
-            self.logger.info(f'最近{current_timestamp - self.latest_check_user_timestamp}秒前检测过 未打卡用户，不重复检查')
-        self.add_log(datetime.datetime.now().strftime('%Y-%m-%d %H-%M-%S'), 'daka_list', 0, f'本轮{len(self.daka_list)}账号，有{len(not_daka_users)}人未打卡，共耗时{current_timestamp - self.time_start}秒')
+            self.logger.info(f'最近{close_start_time - self.latest_check_user_timestamp}秒前检测过 未打卡用户，不重复检查')
+        self.logger.info(f'本轮{self.get_user_cnt()}个账号，有{len(not_daka_users)}人未打卡，共耗时{close_start_time - self.time_start}秒')
+        for user in not_daka_users:
+            self.logger.warning(f'未打卡用户：{user["config"].get("name")}({user["config"].get("unique_id")})')
         # 保存用户配置
         self.user_dict_obj.save()
         self.logger.info(f'用户配置保存完毕')
-        # 将检测结果存入notice_and_rank_path
-        cnt = 0
-        conn = sqlite3.connect(self.notice_and_rank_path)
-        cursor = conn.cursor()
-        for i, check_item in enumerate(self.check_list):
-            if check_item['modified'] and check_item['valid']:
-                cursor.execute(f'''UPDATE notice SET CHECKED = ? WHERE GROUP_ID == ? AND DATE == ?''', (check_item['checked']*100000000 + check_item['cursorA'] * 10000 + check_item['cursorB'], check_item['group_id'], check_item['date']))
-                check_item['modified'] = False
-                cnt += 1
-        self.logger.info(f'本轮检查{cnt}条notice')
-        self.add_log(datetime.datetime.now().strftime('%Y-%m-%d %H-%M-%S'), 'close_daka_list', 0, f'本轮检查{cnt}条notice')
-        conn.commit()
-        conn.close()
-        if cnt > 0:
-            # 将坏词存入json
-            with open('tmp_bad_words.json', 'w', encoding='utf-8') as f:
-                json.dump(self.get_bad_words(has_mid=False), f, ensure_ascii=False, indent=4)
-        # 写入日志
-        self.delete_old_logs()
-        self.logger.info(f'写入了{len(self.logs)}条日志，{len(self.warnings)}条警告')
-        with open(f'{self.log_dir}log_{datetime.datetime.now().strftime("%Y-%m-%d %H-%M-%S")}.{self.latest_check_user_timestamp}.{len(self.logs)}.txt', 'w', encoding='utf-8') as f:
-            for msg in self.logs:
-                f.write(msg)
-            for msg in self.warnings:
-                f.write(msg)
-        self.logs = []
-        for warning in self.warnings:
-            self.logger.warning(warning)
-        self.warnings = []
         # 写入作弊检测self.cheat_tracker结果到csv
         if len(self.cheat_tracker) > 0:
             with open(f'{self.log_dir}cheat-tracker_{self.cheat_tracker_date_str} .csv', 'w', encoding='utf-8', newline='') as f:
                 writer = csv.writer(f)
                 writer.writerow(['bcz_id', 'word_cnt', 'time','study_cheat'])
-                for user_id, (word_count, time, status) in self.cheat_tracker.items():
-                    writer.writerow([user_id, word_count, time, status])
+                for user_id, (word_count, time_, status) in self.cheat_tracker.items():
+                    writer.writerow([user_id, word_count, time_, status])
         # 写入缓冲区到数据库
         # 写入puzzle_buffer
         if BCZ_NCSVC and len(self.puzzle_buffer) > 0:
@@ -400,6 +418,7 @@ class daka_list_class:
             puzzle_conn.commit()
             puzzle_conn.close()
             self.logger.info(f'写入{len(self.puzzle_buffer)}条puzzle')
+            self.puzzle_buffer = []
         if len(self.patch_buffer) > 0:
             patch_conn = sqlite3.connect(self.dict_patch_db_path)
             cursor = patch_conn.cursor()
@@ -407,14 +426,37 @@ class daka_list_class:
             patch_conn.commit()
             patch_conn.close()
             self.logger.info(f'写入{len(self.patch_buffer)}条patch')
+            self.patch_buffer = []
 
-        # 写入notice_buffer
+
+        # 将公告检测结果存入notice_and_rank_path
+        cnt = 0
         conn = sqlite3.connect(self.notice_and_rank_path)
         cursor = conn.cursor()
+        self.save_other_info(cursor)
+        for i, check_item in enumerate(self.check_list):
+            if check_item['modified'] and check_item['valid']:
+                cursor.execute(f'''UPDATE notice SET CHECKED = ? WHERE GROUP_ID == ? AND DATE == ?''', (check_item['checked']*100000000 + check_item['cursorA'] * 10000 + check_item['cursorB'], check_item['group_id'], check_item['date']))
+                check_item['modified'] = False
+                cnt += 1
+        self.logger.info(f'本轮检查{cnt}条notice')
+        if cnt > 0:
+            bad_words = self.get_bad_words(has_mid=False)
+            # 获取一下今天有没有新的坏词
+            date_str = now.strftime('(%Y-%m-%d)')
+            has_new_bad_word = False
+            for bad_word in bad_words:
+                if bad_word.startswith(date_str):
+                    self.logger.info(f'新增坏词：{bad_word}')
+                    has_new_bad_word = True
+            # 将坏词存入json
+            if has_new_bad_word:
+                with open('tmp_bad_words.json', 'w', encoding='utf-8') as f:
+                    json.dump(bad_words, f, ensure_ascii=False, indent=4)
+        # 写入notice_buffer
         # 删除35天前的MEMBERS和notice数据
-        now_date = datetime.datetime.now()
-        date_int = int(now_date.strftime('%m%d'))
-        thresh_date = datetime.datetime.combine((now_date - datetime.timedelta(days=35)), datetime.time.min)
+        date_int = int(now.strftime('%m%d'))
+        thresh_date = datetime.datetime.combine((now - datetime.timedelta(days=35)), datetime.time.min)
         thresh_date_int = int(thresh_date.strftime('%m%d'))
         thresh_date_int_timestamp = int(thresh_date.timestamp())
         if date_int < thresh_date_int: # 跨年
@@ -430,75 +472,97 @@ class daka_list_class:
         cursor.execute('''SELECT COUNT(*) FROM notice WHERE DATE < ? AND (LATEST_DATE IS NULL OR LATEST_DATE < ?)''', (thresh_date_int_timestamp, thresh_date_int_timestamp))
         print(f'删除{thresh_date.strftime("%Y-%m-%d")}前的notice数据{cursor.fetchone()[0]}条')
         cursor.execute('''DELETE FROM notice WHERE DATE < ? AND (LATEST_DATE IS NULL OR LATEST_DATE < ?)''', (thresh_date_int_timestamp, thresh_date_int_timestamp))
-        
+        # 删除MEMBERS_GROUPS中ACHIEVED_DATE在7天前且STREAK_TIMES<7的记录
+        thresh_date_int = int((now - datetime.timedelta(days=7)).strftime('%Y%m%d'))
+        cursor.execute('''SELECT COUNT(*) FROM MEMBERS_GROUPS WHERE ACHIEVED_DATE < ? AND STREAK_TIMES < ?''', (thresh_date_int, 7))
+        print(f'删除{thresh_date_int}前且STREAK_TIMES<7的MEMBERS_GROUPS数据{cursor.fetchone()[0]}条')
+        cursor.execute('''DELETE FROM MEMBERS_GROUPS WHERE ACHIEVED_DATE < ? AND STREAK_TIMES < ?''', (thresh_date_int, 7))
         # 写入notice
         self.logger.info(f'写入notice缓冲区{len(self.notice_buffer)}条')
         cursor.executemany('''INSERT OR REPLACE INTO notice (GROUP_ID, RANK_TYPE_RANK, CONTENT, DATE, LATEST_DATE, SCORE) VALUES (?, ?, ?, ?, ?, ?)''', self.notice_buffer)
+        self.notice_buffer = []
+
         # 仅更新时间的公告
         self.logger.info(f'更新notice时间缓冲区{len(self.notice_time_buffer)}条')
         cursor.executemany('''UPDATE notice SET LATEST_DATE = ?, RANK_TYPE_RANK = ? WHERE GROUP_ID = ? AND DATE = ?''', self.notice_time_buffer)
+        self.notice_time_buffer = []
+
         # 被清空的公告
         self.logger.info(f'写入notice被清空缓冲区{len(self.notice_cleared_buffer)}条')
         cursor.executemany('''UPDATE notice SET CHECKED=0 WHERE GROUP_ID = ? AND (DATE = ? OR LATEST_DATE = ?)''', self.notice_cleared_buffer)
+        self.notice_cleared_buffer = [] # 已经在store_notice中处理
+
         # 写入group_name
         self.logger.info(f'写入group_name缓冲区{len(self.group_info_buffer)}条')
         cursor.executemany('''INSERT OR REPLACE INTO GROUP_NAME (GROUP_ID, SHARE_KEY, MONITOR_ID, GROUP_NAME, GROUP_INTRODUCTION, GROUP_AVATAR) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(GROUP_ID) DO UPDATE SET SHARE_KEY = excluded.SHARE_KEY, MONITOR_ID = excluded.MONITOR_ID, GROUP_NAME = excluded.GROUP_NAME, GROUP_INTRODUCTION = excluded.GROUP_INTRODUCTION, GROUP_AVATAR = excluded.GROUP_AVATAR''', self.group_info_buffer)
+        self.group_info_buffer = []
+
         # 写入user_name
         self.logger.info(f'写入user_name缓冲区{len(self.user_info_buffer)}条')
         cursor.executemany('''INSERT OR REPLACE INTO USER_NAME (USER_ID, NICKNAME, USER_AVATAR) VALUES (?, ?, ?) ON CONFLICT(USER_ID) DO UPDATE SET NICKNAME = excluded.NICKNAME, USER_AVATAR = excluded.USER_AVATAR''', self.user_info_buffer)
+        self.user_info_buffer = [] # 每天最多700000条，暂无需设置大小
+
         # 写入member
         # 如果是星期日，则全部写入；否则只保留已打卡的成员
         copied_buffer = []
-        self.reset_group_counter()
         if datetime.datetime.now().weekday() != 6:
-            for value in self.member_buffer.values():
+            for value in self.member_buffer:
                 if value[1] != 0:
                     copied_buffer.append(value)
-                    self.count_group(value[9], value[12], value[15], value[18], value[21])
             self.logger.info(f'写入member缓冲区，原有{len(self.member_buffer)}条，保留已打卡的成员{len(copied_buffer)}条')
-            cursor.executemany('''INSERT OR REPLACE INTO MEMBERS (USER_ID, COMPLETED_TIME, TODAY_DATE, WORD_COUNT, STUDY_CHEAT, BOOK_NAME, GROUP_ID_1, COMPLETED_TIMES_1, DURATION_DAYS_1, GROUP_ID_2, COMPLETED_TIMES_2, DURATION_DAYS_2, GROUP_ID_3, COMPLETED_TIMES_3, DURATION_DAYS_3, GROUP_ID_4, COMPLETED_TIMES_4, DURATION_DAYS_4, GROUP_ID_5, COMPLETED_TIMES_5, DURATION_DAYS_5, GROUP_ID_6, COMPLETED_TIMES_6, DURATION_DAYS_6) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', copied_buffer)
+            cursor.executemany('''INSERT OR REPLACE INTO MEMBERS (USER_ID, COMPLETED_TIME, TODAY_DATE, WORD_COUNT, STUDY_CHEAT, BOOK_NAME) VALUES (?, ?, ?, ?, ?, ?)''', copied_buffer)
         else:
             self.logger.info(f'写入member缓冲区{len(self.member_buffer)}条')
-            for value in self.member_buffer.values():
-                self.count_group(value[9], value[12], value[15], value[18], value[21])
-            cursor.executemany('''INSERT OR REPLACE INTO MEMBERS (USER_ID, COMPLETED_TIME, TODAY_DATE, WORD_COUNT, STUDY_CHEAT, BOOK_NAME, GROUP_ID_1, COMPLETED_TIMES_1, DURATION_DAYS_1, GROUP_ID_2, COMPLETED_TIMES_2, DURATION_DAYS_2, GROUP_ID_3, COMPLETED_TIMES_3, DURATION_DAYS_3, GROUP_ID_4, COMPLETED_TIMES_4, DURATION_DAYS_4, GROUP_ID_5, COMPLETED_TIMES_5, DURATION_DAYS_5, GROUP_ID_6, COMPLETED_TIMES_6, DURATION_DAYS_6) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', self.member_buffer.values())
-        self.save_other_info(cursor)
+            cursor.executemany('''INSERT OR REPLACE INTO MEMBERS (USER_ID, COMPLETED_TIME, TODAY_DATE, WORD_COUNT, STUDY_CHEAT, BOOK_NAME) VALUES (?, ?, ?, ?, ?, ?)''', self.member_buffer)
+        self.member_buffer = []
+
         # 写入book_name
         self.logger.info(f'写入book_name缓冲区{len(self.book_name_buffer)}条')
         cursor.executemany('''INSERT OR REPLACE INTO BOOK_NAME (HASH_ID, BOOK_NAME, BOOK_ID, BOOK_URL) VALUES (?, ?, ?, ?)''', self.book_name_buffer)
+        self.book_name_buffer = []
+        # 写入MEMBERS_GROUPS
+        self.logger.info(f'写入MEMBERS_GROUPS缓冲区{len(self.member_groups_buffer)}条')
+        cursor.executemany('''INSERT OR REPLACE INTO MEMBERS_GROUPS (USER_ID, GROUP_ID, STREAK_TIMES, COMPLETED_TIMES_START, START_DATE, ACHIEVED_DATE, DURATION_DAYS) VALUES (?, ?, ?, ?, ?, ?, ?)''', self.member_groups_buffer)
+        self.member_groups_buffer = []
+        # 写入MEMBERS_GROUPS合并后需要被删除的部分
+        self.logger.info(f'写入MEMBERS_GROUPS合并后需要被删除的部分{len(self.member_groups_delete_buffer)}条')
+        cursor.executemany('''DELETE FROM MEMBERS_GROUPS WHERE USER_ID = ? AND GROUP_ID = ? AND START_DATE = ?''', self.member_groups_delete_buffer)
+        self.member_groups_delete_buffer = []
         conn.commit()
         self.logger.info(f'缓冲区写入完毕')
-        if current_timestamp - self.latest_check_notice_timestamp > 3600:
+        if close_start_time - self.latest_check_notice_timestamp > 3600:
             self.notice_parser.update_notice(conn, only_raw_notice=True)
-            self.latest_check_notice_timestamp = current_timestamp
+            self.latest_check_notice_timestamp = close_start_time
             self.logger.info(f'notice_parser检查库已更新')
         else:
             self.logger.info(f'notice_parser 时间过短，不更新')
         conn.close()
-        # 清空前合并缓冲区到内存数据
-        self.notice_buffer = []
-        self.notice_cleared_buffer = [] # 已经在store_notice中处理
-        self.notice_time_buffer = []
-        for tp in self.group_info_buffer:
-            self.group_infos[tp[0]] = tp
-        self.group_info_buffer = []
-        for tp in self.user_info_buffer:
-            self.user_infos[tp[0]] = tp
-        self.user_info_buffer = []
-        for tp in self.member_buffer.values():
-            self.member_list[tp[0]] = tp
-        self.member_buffer = {}
-        for tp in self.book_name_buffer:
-            self.book_name_dict[tp[1]] = tp[0]
-        self.book_name_buffer = []
-        self.logger.info("内存已更新，全部保存操作完成")
+        self.logger.info("数据库已保存")
+        # 写入日志
+        with open(f'{self.log_dir}log_{now.strftime("%Y-%m-%d %H-%M-%S")}.{self.latest_check_user_timestamp}.{len(self.logs)}.txt', 'w', encoding='utf-8') as f:
+            for msg in self.logs:
+                f.write(msg)
+            for msg in self.warnings:
+                f.write(msg)
+        self.logger.info(f'写入了{len(self.logs)}条日志，{len(self.warnings)}条警告如下：')
+        self.logs = []
+        for warning in self.warnings:
+            self.logger.warning(warning)
+        self.warnings = []
+        self.logger.info(f'全部保存操作已完成')
     
     def closing_count_down(self):
         '''为防止频繁关闭，增加关闭倒计时'''
         close_timestamp = self.last_remove_timestamp
-        close_count_down_time = 60
+        close_count_down_time = 120
+        if DEBUG:
+            close_count_down_time = 12
         while True:
-            if close_timestamp != self.last_remove_timestamp:
+            try:
+                self.http2_client_obj.check_closing_state()
+            except AssertionError: # 快速关闭
+                return
+            if close_timestamp != self.last_remove_timestamp or not self.is_empty():
                 return
             if close_count_down_time <= 0:
                 break
@@ -569,8 +633,8 @@ class daka_list_class:
             puzzle_conn.close()
             logger.info(f'加载puzzle_path数据库{len(self.puzzles)}条')
             self.puzzle_buffer = []
-        # 遍历self.dict_db_path中的所有表
-        dict_db_conn = sqlite3.connect(self.dict_db_path)
+        # 遍历DICT_DB_PATH中的所有表
+        dict_db_conn = sqlite3.connect(DICT_DB_PATH)
         cursor = dict_db_conn.cursor()
         cursor.execute('''SELECT name FROM sqlite_master WHERE type='table' ''')
         tables = cursor.fetchall()
@@ -696,32 +760,18 @@ class daka_list_class:
         result = self.word_occur_ranks.get(word)
         # 检查是否已经存在
         if result is None:
+            self.word_occur_ranks[word] = rank
             self.patch_buffer.append((answer, word, topic_id, rank))
         else:
             recorded_rank = result.split(',')
             if rank not in recorded_rank:
                 recorded_rank.append(rank)
-                self.patch_buffer.append((answer, word, topic_id, ','.join(recorded_rank)))
+                new_str = ','.join(recorded_rank)
+                self.word_occur_ranks[word] = new_str
+                self.patch_buffer.append((answer, word, topic_id, new_str))
 
-    def reset_group_counter(self):
-        today_date_int = int(datetime.datetime.now().strftime('%Y%m%d'))
-        if self.group_counter_date != today_date_int:
-            self.group_counter_date = today_date_int
-            self.group_counter = [0, 0, 0, 0, 0, 0]
-
-    def count_group(self, group_id_2, group_id_3, group_id_4, group_id_5, group_id_6):
-        if group_id_2 is None:
-            self.group_counter[0] += 1
-        elif group_id_3 is None:
-            self.group_counter[1] += 1
-        elif group_id_4 is None:
-            self.group_counter[2] += 1
-        elif group_id_5 is None:
-            self.group_counter[3] += 1
-        elif group_id_6 is None:
-            self.group_counter[4] += 1
-        else:
-            self.group_counter[5] += 1
+    def count_group(self):
+        return Counter([len(groups) for groups in self.member_groups_cnt.values()])
 
     def get_uv(self):
         '''获取总用户uv，储存到self.uv_index'''
@@ -737,22 +787,15 @@ class daka_list_class:
         '''保存其他信息，包括uv_index，小班数量比例和最大group_id'''
         if len(self.member_buffer) == 0:
             return
-        total_count = sum(self.group_counter)
+        group_counter = self.count_group()
+        total_count = sum(group_counter.values())
         # 记录每种小班数量的比例
-        group_ratio = [round(count/total_count*100, 2) for count in self.group_counter]
+        group_ratio = [round(count/total_count*100, 2) for count in group_counter.values()]
         self.logger.info(f'小班数量百分比：{group_ratio}')
         self.get_uv()
         today_date_int = int(datetime.datetime.now().strftime('%Y%m%d'))
-        cursor.execute('''INSERT OR REPLACE INTO OTHER_INFO (UV_INDEX, MAX_GROUP_ID, GROUP_COUNT_1, GROUP_COUNT_2, GROUP_COUNT_3, GROUP_COUNT_4, GROUP_COUNT_5, GROUP_COUNT_6, TODAY_DATE) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', (self.uv_index, self.max_group_id, self.group_counter[0], self.group_counter[1], self.group_counter[2], self.group_counter[3], self.group_counter[4], self.group_counter[5], today_date_int))
+        cursor.execute('''INSERT OR REPLACE INTO OTHER_INFO (UV_INDEX, MAX_GROUP_ID, GROUP_COUNT_1, GROUP_COUNT_2, GROUP_COUNT_3, GROUP_COUNT_4, GROUP_COUNT_5, GROUP_COUNT_6, TODAY_DATE) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', (self.uv_index, self.max_group_id, group_counter[1], group_counter[2], group_counter[3], group_counter[4], group_counter[5], group_counter[6], today_date_int))
     
-    def load_member_list(self, cursor: sqlite3.Cursor, date_int: int):
-        self.member_list = {}
-        self.member_list_date = date_int
-        cursor.execute('''SELECT USER_ID, COMPLETED_TIME, TODAY_DATE, WORD_COUNT, STUDY_CHEAT, BOOK_NAME, GROUP_ID_1, COMPLETED_TIMES_1, DURATION_DAYS_1, GROUP_ID_2, COMPLETED_TIMES_2, DURATION_DAYS_2, GROUP_ID_3, COMPLETED_TIMES_3, DURATION_DAYS_3, GROUP_ID_4, COMPLETED_TIMES_4, DURATION_DAYS_4, GROUP_ID_5, COMPLETED_TIMES_5, DURATION_DAYS_5, GROUP_ID_6, COMPLETED_TIMES_6, DURATION_DAYS_6 FROM MEMBERS WHERE TODAY_DATE == ?''', (date_int, ))
-        for row in cursor.fetchall():
-            self.member_list[row[0]] = (row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9], row[10], row[11], row[12], row[13], row[14], row[15], row[16], row[17], row[18], row[19], row[20], row[21], row[22], row[23])
-        self.logger.info(f'member_list共加载{len(self.member_list)}条数据')
-
     def load_cheat_tracker(self, cheat_tracker_date_str: str):
         self.cheat_tracker = {}
         self.cheat_tracker_date_str = cheat_tracker_date_str
@@ -768,7 +811,7 @@ class daka_list_class:
 
         
     def store_group_info(self, group_id, share_key, monitor_id, class_name, introduction, group_avatar):
-        self.wait()
+        '''self.wait() before calling this function''' # 在notice_and_rank函数中已经调用了
         group_avatar = None
         if monitor_id == '':
             monitor_id = None
@@ -777,10 +820,12 @@ class daka_list_class:
             current_data = self.group_infos.get(group_id, (None, None, None, None, None, None))
             if current_data[3] == class_name and current_data[4] == introduction and current_data[5] == group_avatar:
                 return
-            self.group_info_buffer.append((group_id, share_key, monitor_id, class_name, introduction, group_avatar))
+            new_tp = (group_id, share_key, monitor_id, class_name, introduction, group_avatar)
+            self.group_infos[group_id] = new_tp
+            self.group_info_buffer.append(new_tp)
 
     def store_notice(self, group_id, rank_type_rank, content, data_time, score) -> int: # 0被清空，1新增，2已存在
-        self.wait()
+        '''self.wait() before calling this function''' # 在notice_and_rank函数中已经调用了
         with self.lock:
             if group_id not in self.notice_list:
                 self.notice_list[group_id] = {}
@@ -814,23 +859,17 @@ class daka_list_class:
     
     
     
-    def store_member(self, date_int, user_id, group_id, completed_time, today_date, word_count, study_cheat, completed_times, duration_days, book_name, nickname, user_avatar):
-        self.wait()
-        if date_int != self.member_list_date:
-            # 更新member_list
-            self.logger.info("日期不一致，更新member_list")
-            conn = sqlite3.connect(self.notice_and_rank_path)
-            cursor = conn.cursor()
-            self.load_member_list(cursor, date_int)
-            conn.close()
+    def store_member(self, user_id, group_id, completed_time, today_date, today_date_mmdd, today_date_datetime: datetime.datetime, word_count, study_cheat, completed_times, duration_days, book_name, nickname, user_avatar):
+        '''self.wait() before calling this function''' # 在notice_and_rank函数中已经调用了
         with self.lock:
             def store_user_info(user_id, nickname, user_avatar):
                 user_avatar = None
                 current_data = self.user_infos.get(user_id, (None,None,None))
                 if current_data[1] == nickname and current_data[2] == user_avatar:
                     return
-                self.user_infos[user_id] = (user_id, nickname, user_avatar)
-                self.user_info_buffer.append((user_id, nickname, user_avatar))
+                new_tp = (user_id, nickname, user_avatar)
+                self.user_infos[user_id] = new_tp
+                self.user_info_buffer.append(new_tp)
             # 先存储用户信息
             store_user_info(user_id, nickname, user_avatar)
             # 先将书本名对应到id
@@ -842,42 +881,72 @@ class daka_list_class:
             # 先检查是否有重复记录
             tp = self.member_list.get(user_id)
             if tp is None:
-                tp = self.member_buffer.get(user_id)
-                if tp is None:
-                    self.member_buffer[user_id] = (user_id, completed_time, today_date, word_count, study_cheat, book_id,  group_id, completed_times, duration_days,  None, None, None,  None, None, None,  None, None, None,  None, None, None,  None, None, None)
-                    return
-            status_changed = 1 if tp[1] == 0 and completed_time > 0 else 0 # 今日打卡状态变化，要将拥有的小班的completed times+1
-            if group_id == tp[6]:
-                return
-            if tp[9] is None:
-                self.member_buffer[user_id] = (user_id, completed_time, today_date, word_count, study_cheat, book_id,  tp[6], tp[7] + status_changed, tp[8],  group_id, completed_times, duration_days,  None, None, None,  None, None, None,  None, None, None,  None, None, None)
-                return
-            if group_id == tp[9]:
-                return
-            if tp[12] is None:
-                self.member_buffer[user_id] = (user_id, completed_time, today_date, word_count, study_cheat, book_id,  tp[6], tp[7] + status_changed, tp[8],  tp[9], tp[10] + status_changed, tp[11],  group_id, completed_times, duration_days,  None, None, None,  None, None, None,  None, None, None)
-                return
-            if group_id == tp[12]:
-                return
-            if tp[15] is None:
-                self.member_buffer[user_id] = (user_id, completed_time, today_date, word_count, study_cheat, book_id,  tp[6], tp[7] + status_changed, tp[8],  tp[9], tp[10] + status_changed, tp[11],  tp[12], tp[13] + status_changed, tp[14],  group_id, completed_times, duration_days,  None, None, None,  None, None, None)
-                return
-            if group_id == tp[15]:
-                return
-            if tp[18] is None:
-                self.member_buffer[user_id] = (user_id, completed_time, today_date, word_count, study_cheat, book_id,  tp[6], tp[7] + status_changed, tp[8],  tp[9], tp[10] + status_changed, tp[11],  tp[12], tp[13] + status_changed, tp[14],  tp[15], tp[16] + status_changed, tp[17],  group_id, completed_times, duration_days,  None, None, None)
-                return
-            if group_id == tp[18]:
-                return
-            if tp[21] is None:
-                self.member_buffer[user_id] = (user_id, completed_time, today_date, word_count, study_cheat, book_id,  tp[6], tp[7] + status_changed, tp[8],  tp[9], tp[10] + status_changed, tp[11],  tp[12], tp[13] + status_changed, tp[14],  tp[15], tp[16] + status_changed, tp[17],  tp[18], tp[19] + status_changed, tp[20],  group_id, completed_times, duration_days)
-                return # 已满6个小班，不再添加
-            Warning(f'用户{user_id}:{group_id}: 组数 > 6 ? (挠头):{tp}')
-            # 有可能是刚刚换了班
-            
-    # def __del__(self):
-        # self.close() # 看起来销毁时不能读写文件
+                tp_new = (user_id, completed_time, today_date_mmdd, word_count, study_cheat, book_id)
+                self.member_list[user_id] = tp_new
+                self.member_buffer.append(tp_new)
+                self.member_groups_cnt[user_id] = {group_id: 1}
+            else:
+                if today_date_mmdd != tp[2] or self.member_groups_cnt.get(user_id) is None:
+                    self.member_groups_cnt[user_id] = {}
+                self.member_groups_cnt[user_id][group_id] = 1
+                if completed_time != tp[1] or today_date_mmdd != tp[2] or word_count != tp[3] or study_cheat != tp[4] or book_id != tp[5]:
+                    tp_new = (user_id, completed_time, today_date_mmdd, word_count, study_cheat, book_id)
+                    self.member_list[user_id] = tp_new
+                    self.member_buffer.append(tp_new)
 
+            idx = (user_id, group_id)
+            tp = self.member_groups.get(idx)
+            if tp is None:
+                if completed_time == 0: # 默认当天打卡，为了防止不打卡用户产生碎片数据，只有打了卡才能开始第一天连胜
+                    return
+                if completed_times == duration_days:
+                    calc_start_date = int((today_date_datetime - datetime.timedelta(days=completed_times - 1)).strftime('%Y%m%d')) # 之前的都算连胜
+                    self.member_groups[idx] = (completed_times, 1, calc_start_date, today_date, duration_days)
+                    self.member_groups_buffer.append((user_id, group_id, completed_times, 1, calc_start_date, today_date, duration_days))
+                else:
+                    self.member_groups[idx] = (1, completed_times, today_date, today_date, duration_days)  # 从今天开始算第一天连胜
+                    self.member_groups_buffer.append((user_id, group_id, 1, completed_times, today_date, today_date, duration_days))
+                return
+            streak_times, completed_times_start, start_date, achieved_date, duration_days_old = tp
+            delta = (today_date_datetime - datetime.datetime.strptime(str(achieved_date), '%Y%m%d')).days - 1 - (completed_times - streak_times - completed_times_start)
+            if delta < 0: # 打卡次数多过天数，可能是单词机（或者后门）
+                # 检查本次延长后是否和上次连接。极端情况下，会有多次记录需要合并，每次合并一段，多几次就好了
+                prev_tp = self.prev_user_streak_info.get(idx)
+                if prev_tp is not None:
+                    prev_streak_times, prev_completed_times_start, prev_start_date, prev_achieved_date, prev_duration_days = prev_tp
+                    prev_delta = (today_date_datetime - datetime.datetime.strptime(str(prev_achieved_date), '%Y%m%d')).days - 1 - (completed_times - streak_times - completed_times_start)
+                    if prev_delta <= 0:
+                        streak_times = prev_streak_times + (-prev_delta) # 补上上次的连胜部分，后面还要再加上本次的连胜部分
+                        completed_times_start = prev_completed_times_start
+                        self.member_groups_delete_buffer.append((user_id, group_id, start_date)) # 是删掉这一次的中断记录，合并如上一次的完整记录
+                        start_date = prev_start_date
+                        achieved_date = prev_achieved_date
+                        duration_days = prev_duration_days
+                        self.prev_user_streak_info.pop((user_id, group_id))
+                # 延长连胜
+                delta = 0
+                streak_times += -delta # 补上比天数多的连胜部分，后面还要再加上天数连胜
+
+            if delta == 0:
+                streak_times += (today_date_datetime - datetime.datetime.strptime(str(achieved_date), '%Y%m%d')).days # 连续天数增加
+                self.member_groups[idx] = (streak_times, completed_times_start, start_date, today_date, duration_days)
+                self.member_groups_buffer.append((user_id, group_id, streak_times, completed_times_start, start_date, today_date, duration_days))
+            else: # 增加新纪录
+                if completed_time == 0: # 默认当天打卡，为了防止不打卡用户产生碎片数据，只有打了卡才能开始第一天连胜
+                    return
+                if completed_times == duration_days:
+                    calc_start_date = int((today_date_datetime - datetime.timedelta(days=completed_times-1)).strftime('%Y%m%d')) # 有可能记录有缺失，所以不一定是今天退出重进的，要严格用倒推法
+                    if calc_start_date != start_date: # 如果相等，则说明当天退出重进，只保留新的记录，不更新prev_user_streak_info（数据库同START_DATE会被REPLACE掉，无需处理）
+                        self.prev_user_streak_info[(user_id, group_id)] = (streak_times, completed_times_start, start_date, achieved_date, duration_days_old)
+                    self.member_groups[(user_id, group_id)] = (completed_times, 1, calc_start_date, today_date, duration_days)
+                    self.member_groups_buffer.append((user_id, group_id, completed_times, 1, calc_start_date, today_date, duration_days))
+                else:
+                    if today_date != start_date:
+                        self.prev_user_streak_info[(user_id, group_id)] = (streak_times, completed_times_start, start_date, achieved_date, duration_days_old)
+                    self.member_groups[(user_id, group_id)] = (1, completed_times, today_date, today_date, duration_days)
+                    self.member_groups_buffer.append((user_id, group_id, 1, completed_times, today_date, today_date, duration_days))
+
+                    
     # 打卡状态检查链接：https://group.baicizhan.com/group/study_words_together_home_page
     def check_if_daka(self, user_cookie):
         headers = getHeaders('$group', user_cookie, int(time.time()), index = 1)
@@ -922,6 +991,7 @@ class daka_list_class:
     def add_warning(self, content):
         time_str = datetime.datetime.now().strftime('%Y-%m-%d %H-%M-%S')
         self.warnings.append(f'[Warning][{time_str}] {content}\n')
+        self.logger.warn(content)
 
     def add_log(self, date_str, name, unique_id, msg):
         self.logs.append(f'[{date_str}] {name}({unique_id})日志：\n{msg}\n')
@@ -945,6 +1015,12 @@ class daka_list_class:
     
     def get_user_cnt(self):
         return self.user_dict_obj.get_count()
+    
+    def has_user(self, unique_id):
+        return False if self.user_dict_obj.get_index_by_unique_id(unique_id) is None else True
+    
+    def get_access_token(self, unique_id):
+        return self.user_dict_obj.get_access_token_by_unique_id(unique_id)
 
     def get_user_dict(self, unique_id=0):
         index = self.user_dict_obj.get_index_by_unique_id(unique_id)
@@ -963,6 +1039,8 @@ class daka_list_class:
         self.user_dict_obj = user_dict()
 
     def get_class_list(self, rank, user_cookie): # 此函数无需等待初始化完成
+        if rank == 2048:
+            return self.class_list_2048
         class_list = []
         current_data_time = datetime.datetime.now().strftime('%Y-%m-%d')
         if rank not in self.class_list or current_data_time != self.class_list[rank]['data_time']:
@@ -985,7 +1063,7 @@ class daka_list_class:
         with self.lock:
             if len(self.daka_list) == 0:
                 self.logger.info('daka_list time start!')
-                self.time_start = time.time()
+                self.time_start = int(time.time())
             self.daka_list.append(unique_id)
 
     def remove(self,unique_id):
@@ -996,7 +1074,6 @@ class daka_list_class:
                 self.logger.info('daka_list is empty!')
                 self.last_remove_timestamp = time.time()
                 threading.Thread(target=self.closing_count_down).start()
-                self.logger.info(f'总耗时{time.time() - self.time_start}秒')
 
     def query(self, unique_id):
         return unique_id in self.daka_list
@@ -1168,7 +1245,7 @@ class notice_subscriber:
                     'shareKey': group_share_key,
                     'nickname': content,
                 }
-                response_json = self.http2_client_obj.send_http2_request('POST', f'https://group.baicizhan.com/group/set_nickname', headers=headers, content = json.dumps(payload, ensure_ascii=False)).json()
+                response_json = self.http2_client_obj.send_http2_request('POST', f'https://group.baicizhan.com/group/set_nickname', headers=headers, content = payload).json()
                 if response_json['code'] == 1:
                     result_str = '回复成功<br>'
                     status_1 = 1
@@ -1190,7 +1267,7 @@ class notice_subscriber:
                 self.logger.error(f'获取{unique_id}的{group_share_key}的公告失败{response_json["message"]}')
                 return f'获取{unique_id}的{group_share_key}的公告失败{response_json["message"]}<br>', 0
             # 收到
-            response_json = self.http2_client_obj.send_http2_request('POST', f'https://group.baicizhan.com/group/receive_notice?groupId={group_id}', headers=headers, content='{}').json()
+            response_json = self.http2_client_obj.send_http2_request('POST', f'https://group.baicizhan.com/group/receive_notice?groupId={group_id}', headers=headers, content={}).json()
             if response_json['code'] == 1:
                 result_str += '收到成功<br>'
                 status_1 &= 1
@@ -1208,12 +1285,17 @@ class notice_subscriber:
 def heartbeat_demon( daka_list: daka_list_class, user_cookie, user_config, http2_client_obj: http2_client):
     unique_id = user_config['unique_id']
     time.sleep(random.randint(10, 100) / 10) # 随机延时，防止同时启动多个心跳线程
-    while daka_list.query(unique_id):
-        payload=[
-            {"index":0}
-        ]
-        report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=0)
-        time.sleep(30)
+    try:
+        while daka_list.query(unique_id):
+            payload=[
+                {"index":0}
+            ]
+            report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=0)
+            for i in range(10):
+                time.sleep(3)
+                http2_client_obj.check_closing_state()
+    except AssertionError:
+        return
 
 
     
@@ -1248,7 +1330,7 @@ def pkonline(user_cookie, user_config, http2_client_obj: http2_client, daka_list
         # https://pkonline1.baicizhan.com/api/contest/2024/prepare/useBlindBox
         headers = getHeaders("$pkonline1", user_cookie, int(time.time()), index=1)
         url = f'https://{headers["Host"]}/api/contest/2024/prepare/useBlindBox'
-        response = http2_client_obj.send_http2_request('POST', url, headers, content='{}')
+        response = http2_client_obj.send_http2_request('POST', url, headers, content={})
         data = response.json()['data']
         yield f'领取{data["name"]}成功:{data["url"]}，剩余{cnt-1}个'
 
@@ -1358,7 +1440,7 @@ def pkonline(user_cookie, user_config, http2_client_obj: http2_client, daka_list
             report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=1)
 
             post_headers = getHeaders("$pkonline1", user_cookie, int(time.time()), index=3)
-            post_headers['content-type'] = 'application/json'
+            post_headers['Content-Type'] = 'application/json'
             options_headers = getHeaders("$pkonline1", user_cookie, int(time.time()), index=2)# 这两个请求头一直使用到结束
             time.sleep(3)
 
@@ -1371,12 +1453,11 @@ def pkonline(user_cookie, user_config, http2_client_obj: http2_client, daka_list
                 content = {
                     "challengeId": challenge_id
                 }
-                content_str = json.dumps(content)
-                response = http2_client_obj.send_http2_request('POST', url, post_headers, content_str)
+                response = http2_client_obj.send_http2_request('POST', url, post_headers, content=content)
                 data = response.json()['data']
                 order = data['order']
                 while order == 0 or order == prev_order:
-                    response = http2_client_obj.send_http2_request('POST', url, post_headers, content_str)
+                    response = http2_client_obj.send_http2_request('POST', url, post_headers, content=content)
                     data = response.json()['data']
                     order = data['order']
                     time.sleep(1)
@@ -1390,7 +1471,7 @@ def pkonline(user_cookie, user_config, http2_client_obj: http2_client, daka_list
                 session_delay = response_delay % 1000
                 for i in range(session_cnt):
                     time.sleep(1)
-                    response = http2_client_obj.send_http2_request('POST', url, post_headers, content_str)
+                    response = http2_client_obj.send_http2_request('POST', url, post_headers, content = content)
                     rival_escaped = response.json()['data']['rivalEscaped']
                     if rival_escaped:
                         break
@@ -1400,8 +1481,7 @@ def pkonline(user_cookie, user_config, http2_client_obj: http2_client, daka_list
                     "order": order,
                     "answer": ans
                 }
-                ans_content_str = json.dumps(ans_content)
-                response = http2_client_obj.send_http2_request('POST', url, post_headers, ans_content_str)
+                response = http2_client_obj.send_http2_request('POST', url, post_headers, ans_content)
                 data = response.json()['data']
                 rival_escaped = data['rivalEscaped']
                 payload = [
@@ -1411,7 +1491,7 @@ def pkonline(user_cookie, user_config, http2_client_obj: http2_client, daka_list
                 if data['rivalAnswer'] is None and not rival_escaped:
                 # 等待对手作答
                     while True:
-                        response = http2_client_obj.send_http2_request('POST', url, post_headers, content_str)
+                        response = http2_client_obj.send_http2_request('POST', url, post_headers, content)
                         data = response.json()['data']
                         if data['rivalAnswer'] is not None or data['rivalEscaped']:
                             break
@@ -1454,6 +1534,26 @@ def pkonline(user_cookie, user_config, http2_client_obj: http2_client, daka_list
                     return
                 time.sleep(random.randint(1,4))
 
+def check_and_charge_pk_energy(user_cookie, user_config, http2_client_obj: http2_client, session_id):
+    '''检查并充能PK能量'''
+    # https://pk.baicizhan.com/api/rankpk/energy?time=&activity_id=0&session_id=
+    time_long = int(time.time() * 1000)
+    time_short = int(time.time())
+    headers = getHeaders("$pk", user_cookie, time_short, index=1)
+    url = f'https://{headers["Host"]}/api/rankpk/energy?time={time_long}&activity_id=0&session_id={session_id}'
+    response = http2_client_obj.send_http2_request('GET', url, headers, None)
+    data = response.json()
+    if data.get('data', {}).get('full_seconds', 0) < 0:
+        return True
+    # https://pk.baicizhan.com/api/rankpk/charge?time=&activity_id=0&session_id=
+    headers = getHeaders("$pk", user_cookie, time_short, index=1)
+    url = f'https://{headers["Host"]}/api/rankpk/charge?time={time_long}&activity_id=0&session_id={session_id}'
+    response = http2_client_obj.send_http2_request('GET', url, headers, content={})
+    json = response.json()
+    if json.get('code', False) == True and json.get('data', {}).get('full_seconds', 0) < 0:
+        return True
+    return False
+
 pkonline2_lock = threading.Lock() # 防止多账号同时开始匹配
 def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_list:daka_list_class, max_round=3, max_win_round=3, allow_self=False):
     '''单词对战''' # max_round无论输赢，但是体力值不足时，会自动退出
@@ -1466,7 +1566,7 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
     # https://pk.baicizhan.com/api/rankpk/v2/current_session?time=1728962138173
     pk_get_headers = getHeaders("$pk", user_cookie, time_short, index=1, quote=True)
     pk_post_headers = getHeaders("$pk", user_cookie, time_short, index=1, quote=True)
-    pk_post_headers['content-type'] = 'application/json'
+    pk_post_headers['Content-Type'] = 'application/json'
 
     total_round = 0
     total_win_round = 0
@@ -1506,9 +1606,16 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
                 break
         energy_cost = current_level_dict['energy_cost']
         if current_energy < energy_cost:
-            yield f'体力{current_energy}不足{energy_cost}，结束<br>'
-            return
+            yield f'体力{current_energy}不足{energy_cost}，充能中<br>'
+            if not check_and_charge_pk_energy(user_cookie, user_config, http2_client_obj, session_id):
+                yield f'充能失败，退出<br>'
+                return
+            yield f'充能成功，继续<br>'
+            continue
         rank_name_en = current_level_dict['name_en']
+        if max_win_round == 6666 and rank_name_en != 'king':
+            yield f'Err_not_king' # 只有king段位可以执行arbiter功能
+            return
 
         if reward_available:
             yield f'正在领取'
@@ -1610,9 +1717,8 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
                     "submit": None,
                     "session_id": session_id
                 }
-                content_str = json.dumps(content)
                 while True:
-                    response = http2_client_obj.send_http2_request('POST', url, pk_post_headers, content_str)
+                    response = http2_client_obj.send_http2_request('POST', url, pk_post_headers, content=content)
                     time.sleep(0.5)
                     data = response.json()['data']
                     if data['order'] != order:
@@ -1632,23 +1738,29 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
                 rival_answer = data['rival']['answer']
 
                 yield f'第{order}题 {msg}<br>'
-                if unique_id in daka_list.pk_whitelist:
-                    penalty = 0
-                elif unique_id in daka_list.pk_blacklist:
-                    penalty = rival_score - 180 * (order - 1)
+                if unique_id in daka_list.pk_blacklist:
+                    penalty = rival_score - 180 * (order - 1) # 反挂
                 else:
-                    penalty = rival_score - 188 * (order - 1)
-                lb = 7100
-                if rival_score + 32 <= my_score:
-                    lb -= min((my_score - rival_score - 32) * 20, 1500) # 5600
-                elif my_score < rival_score + 32:
-                    lb += min((rival_score + 32 - my_score) * 40, 500) # 7600
-                ub = max(lb + 500, 8600 - chosen_id * 300 + min(0, rival_score - my_score) * 40)
-                target_time = random.randint(lb, ub) # 分数=答对100+剩余时间/100，每题满分200
+                    if max_win_round == 6666 or unique_id in daka_list.pk_whitelist: # 单次arbiter模式，锁定166
+                        penalty = 0
+                    else:
+                        penalty = rival_score - 188 * (order - 1)
+
                 if penalty > 0:
-                    target_time = min(8600 + penalty*200, 9999)
-                    lb = ub = target_time
+                    lb = ub = min(8600 + penalty*200, 9999)
                     yield '[AC]'
+                else:
+                    if max_win_round == 6666:
+                        lb = ub = 6666
+                    else:
+                        lb = 7100
+                        if rival_score + 32 <= my_score:
+                            lb -= min((my_score - rival_score - 32) * 20, 1500) # 5600
+                        elif my_score < rival_score + 32:
+                            lb += min((rival_score + 32 - my_score) * 40, 500) # 7600
+                        ub = max(lb + 500, 8600 - chosen_id * 300 + min(0, rival_score - my_score) * 40)
+                
+                target_time = random.randint(lb, ub) # 分数=答对100+剩余时间/100，每题满分200
                 yield f'目标{int(100 + target_time/100)}({lb}-{ub})delta{max(penalty*1, 0)}<br>'
                 
                 current_time = data['puzzle']['cd']
@@ -1663,11 +1775,10 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
                     },
                     "session_id": session_id
                 }
-                content_ans_str = json.dumps(content)
                 modem_simulate = (random.randint(1, 5) == 1)
 
                 while True:
-                    response = http2_client_obj.send_http2_request('POST', url, pk_post_headers, content_str)
+                    response = http2_client_obj.send_http2_request('POST', url, pk_post_headers, content)
                     data = response.json()['data']
                     current_time = data['puzzle']['cd']
                     rival_answer = data['rival']['answer']
@@ -1683,15 +1794,15 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
                     time.sleep(0.4)
                 
 
-                response = http2_client_obj.send_http2_request('POST', url, pk_post_headers, content_ans_str)
+                response = http2_client_obj.send_http2_request('POST', url, pk_post_headers, content)
                 time.sleep(0.2)
-                response = http2_client_obj.send_http2_request('POST', url, pk_post_headers, content_ans_str)
+                response = http2_client_obj.send_http2_request('POST', url, pk_post_headers, content)
                 time.sleep(0.2)
                 data = response.json()['data']
                 my_answer = data['me']['answer']
                 fail_cnt = 0
                 while my_answer is None:
-                    response = http2_client_obj.send_http2_request('POST', url, pk_post_headers, content_ans_str)
+                    response = http2_client_obj.send_http2_request('POST', url, pk_post_headers, content)
                     time.sleep(0.2)
                     data = response.json()['data']
                     my_answer = data['me']['answer']
@@ -1715,9 +1826,8 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
                     "submit": None,
                     "session_id": session_id
                 }
-                content_str = json.dumps(content)
                 while rival_answer is None and not rival_escaped and current_time > 0:
-                    response = http2_client_obj.send_http2_request('POST', url, pk_post_headers, content_str)
+                    response = http2_client_obj.send_http2_request('POST', url, pk_post_headers, content)
                     time.sleep(0.5)
                     data = response.json()['data']
                     rival_answer = data['rival']['answer']
@@ -1740,7 +1850,7 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
                 daka_list.word_lookup_patcher(data['puzzle'], right_answer, topic_id, rank_name_en, score_delta)
                 # 等待直到current_time为0
                 while True:
-                    response = http2_client_obj.send_http2_request('POST', url, pk_post_headers, content_str)
+                    response = http2_client_obj.send_http2_request('POST', url, pk_post_headers, content)
                     time.sleep(0.5)
                     data = response.json()['data']
                     current_time = data['puzzle']['cd']
@@ -1835,7 +1945,7 @@ def yzdd(user_cookie, user_config, http2_client_obj: http2_client, daka_list: da
             "qid": data['qid'],
             "answer": random.randint(1, 4)
         }
-        response = http2_client_obj.send_http2_request('POST', url, headers, json.dumps(payload))
+        response = http2_client_obj.send_http2_request('POST', url, headers, payload)
         time.sleep(0.9)
 
         # 重新请求题目
@@ -1874,7 +1984,7 @@ def deskmate_pk(cookie, config, http2_client_obj: http2_client):
     time_long = int(time.time() * 1000)
     headers = getHeaders('$social', cookie, time_long, index = 1)
     headers['Content-Type'] = 'application/json'
-    response = http2_client_obj.send_http2_request('POST',f'https://{headers["Host"]}/api/deskmate/game/start_word_match_game', headers, '{}')
+    response = http2_client_obj.send_http2_request('POST',f'https://{headers["Host"]}/api/deskmate/game/start_word_match_game', headers, {})
     yield (f'{name} 开始每周双人战{response.json()}<br>')
     if response.json()['code'] == 100:
         yield f'出现问题，请检查<br>'
@@ -1900,7 +2010,7 @@ def deskmate_pk(cookie, config, http2_client_obj: http2_client):
         headers = getHeaders('$social', cookie, time_long, index = 1)
         headers['Content-Type'] = 'application/json'
         time.sleep(4)
-        response = http2_client_obj.send_http2_request('POST',f'https://{headers["Host"]}/api/deskmate/game/finish_new_user_guide', headers, '{}')
+        response = http2_client_obj.send_http2_request('POST',f'https://{headers["Host"]}/api/deskmate/game/finish_new_user_guide', headers, {})
 
     finish_all = False
     if time.localtime().tm_wday in [5,6]:
@@ -1941,7 +2051,7 @@ def deskmate_pk(cookie, config, http2_client_obj: http2_client):
             time_long = int(time.time() * 1000)
             headers = getHeaders('$social', cookie, time_long, index = 1)
             headers['Content-Type'] = 'application/json'
-            response = http2_client_obj.send_http2_request('POST',f'https://{headers["Host"]}/api/deskmate/game/word_match', headers, json.dumps({"topicId":topic_id,"topicOption":topic_option}, ensure_ascii=False))
+            response = http2_client_obj.send_http2_request('POST',f'https://{headers["Host"]}/api/deskmate/game/word_match', headers, {"topicId":topic_id,"topicOption":topic_option})
             response_json = response.json()['data']
             # 刷新
             while True:
@@ -1969,7 +2079,7 @@ def deskmate_pk(cookie, config, http2_client_obj: http2_client):
             time_long = int(time.time() * 1000)
             headers = getHeaders('$social', cookie, time_long, index = 1)
             headers['Content-Type'] = 'application/json'
-            response = http2_client_obj.send_http2_request('POST',f'https://{headers["Host"]}/api/deskmate/game/send_word_match_reward', headers, '{}')
+            response = http2_client_obj.send_http2_request('POST',f'https://{headers["Host"]}/api/deskmate/game/send_word_match_reward', headers, {})
 
             # 检验是否领取成功
             # https://social.baicizhan.com/api/deskmate/game/get_word_match_info
@@ -1987,11 +2097,10 @@ def deskmate_pk(cookie, config, http2_client_obj: http2_client):
         yield ('03 等待同桌完成 <br>')
 
 
-def get_class_range(user_config, total_user_cnt = 18, max_rank_cnt = 1000):
+def get_class_range(user_config, total_user_cnt, max_rank_cnt = 1000):
     user_index = int(user_config['user_index'])
-    total_user_cnt = total_user_cnt
     # 获取今日日期
-    today = datetime.datetime.now().strftime('%Y%m%d')
+    # today = datetime.datetime.now().strftime('%Y%m%d')
     # 获取日期最后一位
     # date_last_num = int(today[-1])
     # date_last_num = 0
@@ -2000,7 +2109,7 @@ def get_class_range(user_config, total_user_cnt = 18, max_rank_cnt = 1000):
     num_start = int(cnt * (user_index) + 1)
     num_end = int(cnt * (user_index + 1) )
     if user_index == total_user_cnt - 1:
-        num_end = max_rank_cnt - 1
+        num_end = max_rank_cnt
     # 组成班级范围
     # num_start += date_last_num * 100
     # num_end += date_last_num * 100
@@ -2061,7 +2170,7 @@ def task_center(user_cookie, user_config, http2_client_obj: http2_client, daka_l
         time_long = int(time.time() * 1000)
         headers = getHeaders("$social", user_cookie, int(time.time()), index=1)
         headers['Content-Type']= 'application/json'
-        response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/api/task/v2/getAward?userTaskId={user_task_id}', headers, content = '{}')
+        response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/api/task/v2/getAward?userTaskId={user_task_id}', headers, content = {})
         data = response.json()
         if data.get('code', 0) == 1:
             return get_award_str(task_award_list)
@@ -2343,7 +2452,7 @@ def learn_words(user_cookie, user_config, http2_client_obj: http2_client, daka_l
                     "topicId": int(topic_id),
                     "costMilliseconds": int(sleep_time_ms)
                 }
-            response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/api/study/xMode/saveStudyRecord', headers, content=json.dumps(payload))
+            response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/api/study/xMode/saveStudyRecord', headers, content=payload)
             
         yield ' 复习拼写'
         for word in yesterday_list:
@@ -2407,7 +2516,7 @@ def learn_words(user_cookie, user_config, http2_client_obj: http2_client, daka_l
         }
         headers = getHeaders("$learn", user_cookie, int(time.time()), index=1)
         headers['Content-Type']= 'application/json'
-        response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/api/study/reportFinishDailyPlan', headers, content = json.dumps(payload))
+        response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/api/study/reportFinishDailyPlan', headers, content = payload)
         return response.json()
     
     report_finish_daily_plan_desc(user_config['book_id'], word_count, word_count + review_count, book_finished)
@@ -2533,7 +2642,7 @@ def check_study_cheat(date_str, members, user_cookie, http2_client_obj: http2_cl
             headers = getHeaders("$group", user_cookie, int(time.time()), index=1)
             headers['Content-Type']= 'application/json'
             time.sleep(random.randint(14, 28)/10)
-            response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/group/user_report', headers, content=json.dumps(payload))
+            response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/group/user_report', headers, content=payload)
             print(f'用户{member["uniqueId"]}\033[1;33m疑似刷词{member["todayWordCount"]}个\033[0m，已举报')
             daka_list.track_cheat_user(date_str, member['uniqueId'], member['todayWordCount'], member['completedTime'], 0)
             need_recheck = True
@@ -2564,7 +2673,9 @@ def notice_and_rank(user_cookie, user_config, http2_client_obj: http2_client, to
         headers = getHeaders("$group", user_cookie, int(time.time()), index=1)
         try:
             share_key = target_class_list[i - 1]['shareKey']
-            response_json = http2_client_obj.send_http2_request('GET', f'https://{headers["Host"]}/group/information?shareKey={share_key}', headers, None, True)
+            response = http2_client_obj.send_http2_request('GET', f'https://{headers["Host"]}/group/information?shareKey={share_key}', headers, None)
+            response_json = response.json()
+
             group_info = response_json['data']['groupInfo']
             group_info['members'] = response_json['data']['members']
 
@@ -2582,15 +2693,12 @@ def notice_and_rank(user_cookie, user_config, http2_client_obj: http2_client, to
             if VERBOSE:
                 print(f'{target_rank}.{i}.{group_info["name"]}<br>')
             if DEBUG:
-                print(f'WARNING: DEBUG MODE<br>')
+                print(f'WARNING: \033[1;31mDEBUG MODE\033[0m<br>')
         except Exception as e:
-            print(f'❌ → 获取到排名{target_rank}的班级列表失败，请检查网络或排名是否存在')
-            print(f'({class_rank_start}, {class_rank_end}, {len(target_class_list)})')
-            print(traceback.format_exc())
-            yield (f'❌ → 获取到排名{target_rank}的班级列表失败，请检查网络或排名是否存在')
-            yield f'({class_rank_start}, {class_rank_end}, {len(target_class_list)})'
-            yield traceback.format_exc()
-        time.sleep(random.randint(20, 30) / 10)
+            err_str = f'''❌ → 获取到{target_rank}段排名{i}的班级列表失败，请检查网络或排名是否存在\nrange=({class_rank_start}, {class_rank_end}, {len(target_class_list)}\n{traceback.format_exc()}'''
+            print(err_str)
+            yield err_str
+        time.sleep(random.randint(25, 35) / 10)
 
     time.sleep(2)
     for i in recheck_data_index:
@@ -2598,7 +2706,8 @@ def notice_and_rank(user_cookie, user_config, http2_client_obj: http2_client, to
         headers = getHeaders("$group", user_cookie, int(time.time()), index=1)
         try:
             share_key = target_class_list[i - 1]['shareKey']
-            response_json = http2_client_obj.send_http2_request('GET', f'https://{headers["Host"]}/group/information?shareKey={share_key}', headers, None, True)
+            response = http2_client_obj.send_http2_request('GET', f'https://{headers["Host"]}/group/information?shareKey={share_key}', headers, None)
+            response_json = response.json()
             group_info = response_json['data']['groupInfo']
             group_info['members'] = response_json['data']['members']
             if not DEBUG and check_study_cheat(date_str, group_info['members'], user_cookie, http2_client_obj, daka_list):
@@ -2614,15 +2723,19 @@ def notice_and_rank(user_cookie, user_config, http2_client_obj: http2_client, to
             if VERBOSE:
                 print(f'2> {target_rank}.{i}.{group_info["name"]}<br>')
         except :
-            yield (f'❌ → (二次获取)获取到排名{target_rank}的班级列表失败，请检查网络或排名是否存在')
-            yield f'({class_rank_start}, {class_rank_end}, {len(target_class_list)})'
-        time.sleep(random.randint(20, 30) / 10)
+            err_str = f'''❌ → (二次获取)获取到{target_rank}段排名{i}的班级列表失败，请检查网络或排名是否存在\nrange=({class_rank_start}, {class_rank_end}, {len(target_class_list)}\n{traceback.format_exc()}'''
+            print(err_str)
+            yield err_str
+        time.sleep(random.randint(25, 35) / 10)
 
     if VERBOSE:
         print(f'🌟 → 开始储存数据')
+    daka_list.wait()
     
     data_time = int(datetime.datetime.now().timestamp())
-    today_date = int(datetime.datetime.now().strftime('%m%d'))
+    today_date_datetime = datetime.datetime.now() # 不用%m%d是为了方便计算start_date，不用%m%d%Y是为了方便strptime
+    today_date = int(today_date_datetime.strftime('%Y%m%d')) # MEMBERS_GROUPS表的日期字段
+    today_date_mmdd = int(today_date_datetime.strftime('%m%d')) # MEMBERS表的日期字段
     # 暂不再保存班级排名信息
     # if rank_type == 7 or rank_type == 6:
     #     # 对第六段位，只保存前100名
@@ -2650,7 +2763,7 @@ def notice_and_rank(user_cookie, user_config, http2_client_obj: http2_client, to
         members = group_info['members']
         leader_id, leader_name = group_info['leader_id'], group_info['leader_name']
         for member in members:
-            daka_list.store_member(today_date, member['uniqueId'], group_id, member['completedTime'], today_date, member['todayWordCount'], member['todayStudyCheat'], member['completedTimes'], member['durationDays'], member['bookName'], member['nickname'], member['avatar'])
+            daka_list.store_member(member['uniqueId'], group_id, member['completedTime'], today_date, today_date_mmdd, today_date_datetime, member['todayWordCount'], member['todayStudyCheat'], member['completedTimes'], member['durationDays'], member['bookName'], member['nickname'], member['avatar'])
 
         # hash_value = group_info['hash_value']
         # 检查GROUP_NAME表中是否有这个班级
@@ -2682,12 +2795,12 @@ def notice_and_rank(user_cookie, user_config, http2_client_obj: http2_client, to
         lock.release()
 
 
-def watch_daily_sentences(user_cookie, user_config, http2_client_obj):
+def watch_daily_sentences(user_cookie, user_config, http2_client_obj:http2_client):
     '''观看每日句子精讲'''
     # https://learn.baicizhan.com/api/activity/sentence/list
     headers = getHeaders("$learn", user_cookie, int(time.time()), index=1)
     headers['Content-Type']= 'application/json'
-    response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/api/activity/sentence/list', headers, '{"size":20}')
+    response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/api/activity/sentence/list', headers, content={"size":20})
     data = response.json()['data']['data']
     for sentence in data:
         sentence_id = sentence['id']
@@ -2701,7 +2814,7 @@ def watch_daily_sentences(user_cookie, user_config, http2_client_obj):
         # https://learn.baicizhan.com/api/activity/sentence/sentence_daka
         headers = getHeaders("$learn", user_cookie, int(time.time()), index=1)
         headers['Content-Type']= 'application/json'
-        response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/api/activity/sentence/sentence_daka', headers, content = f'{{"sentenceId":{sentence_id}}}')
+        response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/api/activity/sentence/sentence_daka', headers, content = {"sentenceId":sentence_id})
         if response.json()['code'] == 1:
             yield ' 打卡成功 '
         # https://learn.baicizhan.com/api/activity/sentence/detail?sentenceId=882
@@ -2736,7 +2849,7 @@ def setGroupOnlyInviteCodeJoin(share_key: str, user_cookie: str, http2_client_ob
     headers = getHeaders('$group', user_cookie, int(time.time()), index=1)
     headers['Content-Type'] = 'application/json; charset=UTF-8'
     # https://group.baicizhan.com/group/set_only_public_key_join?shareKey=
-    response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/group/set_only_public_key_join?shareKey={share_key}', content='{}', headers=headers)
+    response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/group/set_only_public_key_join?shareKey={share_key}', content={}, headers=headers)
     if response.json().get("code",0) != 1:
         return (f"切换小班是否仅允许邀请码加入失败，请检查{response.json()}<br>")
     return (f"<span style='color:green'>切换小班是否仅允许邀请码加入成功</span><br>")
@@ -2776,7 +2889,7 @@ def notice_checker(daka_list: daka_list_class, user_cookie, user_config, http2_c
             "notice": content
         }
         # https://group.baicizhan.com/group/set_notice
-        response_json = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/group/set_notice', content=json.dumps(payload, ensure_ascii=False), headers=headers).json()
+        response_json = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/group/set_notice', content=payload, headers=headers).json()
         if response_json['message'] == None:
             message_str += f'通知发送成功<br>'
             yield message_str
@@ -2812,7 +2925,7 @@ def notice_checker(daka_list: daka_list_class, user_cookie, user_config, http2_c
                     }
                     headers = getHeaders('$group', user_cookie, time_long, index = 1)
                     headers['Content-Type'] = 'application/json; charset=UTF-8'
-                    response_json = http2_client_obj.send_http2_request('POST', f'https://group.baicizhan.com/group/set_notice', content=json.dumps(payload, ensure_ascii=False), headers=headers).json()
+                    response_json = http2_client_obj.send_http2_request('POST', f'https://group.baicizhan.com/group/set_notice', content=payload, headers=headers).json()
                     if response_json['message'] == None:
                         message_str += f'{response_json["message"]}<br>{content}<u>{check_part}</u><s>{content_accept_part}</s><br>'
                         yield message_str
@@ -2850,7 +2963,7 @@ def notice_checker(daka_list: daka_list_class, user_cookie, user_config, http2_c
                     }
                     headers = getHeaders('$group', user_cookie, time_long, index = 1)
                     headers['Content-Type'] = 'application/json; charset=UTF-8'
-                    response_json = http2_client_obj.send_http2_request('POST', f'https://group.baicizhan.com/group/set_notice', content=json.dumps(payload, ensure_ascii=False), headers=headers).json()
+                    response_json = http2_client_obj.send_http2_request('POST', f'https://group.baicizhan.com/group/set_notice', content=payload, headers=headers).json()
                     if response_json['message'] == None:
                         message_str += f'{response_json["message"]}<br><s>{content_accept_part}</s><u>{check_part}</u>{content}<br>'
                         yield message_str
@@ -2948,12 +3061,12 @@ def daka(daka_list: daka_list_class, user_cookie, user_config, http2_client_obj:
         # https://social.baicizhan.com/api/task/accept_task
         headers = getHeaders("$social", user_cookie, int(time.time()), index=1)
         headers['Content-Type'] = 'application/json; charset=UTF-8'
-        response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/api/task/accept_task', headers, '{}')
+        response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/api/task/accept_task', headers, {})
 
         # https://social.baicizhan.com/api/task/finish_task # 发一次空接收、完成请求以完成签到
         headers = getHeaders("$social", user_cookie, int(time.time()), index=1)
         headers['Content-Type'] = 'application/json; charset=UTF-8'
-        response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/api/task/finish_task', headers, '{}')
+        response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/api/task/finish_task', headers, {})
         
         #  https://group.baicizhan.com/group/study_words_together_home_page
         headers = getHeaders("$group", user_cookie, int(time.time()), index=1)
@@ -3002,7 +3115,7 @@ def daka(daka_list: daka_list_class, user_cookie, user_config, http2_client_obj:
         headers = getHeaders("$social", user_cookie, int(time.time()), index=1)
         headers['Content-Type'] = 'application/json; charset=UTF-8'
         payload = {"taskId": 1, "receptionTime": client_date}
-        response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/api/task/get_task_reward', headers, json.dumps(payload))
+        response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/api/task/get_task_reward', headers, payload)
         return response.json()
     
     if not daily_reward_obtained and get_task_reward_desc(client_date)['code'] == 1:
@@ -3023,7 +3136,7 @@ def daka(daka_list: daka_list_class, user_cookie, user_config, http2_client_obj:
         time_long = int(time.time() * 1000)
         headers = getHeaders("$social", user_cookie, int(time.time()), index=1)
         headers['Content-Type'] = 'application/json; charset=UTF-8'
-        response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/api/deskmate/daka_reward?type={type}', headers, '{}')
+        response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/api/deskmate/daka_reward?type={type}', headers, {})
         return response.json()['data']
 
 
@@ -3147,16 +3260,20 @@ segments = [ # 用于拟合每天各时段打卡时间分布
     {"range": (0.65, 0.85), "function": square_gaussian_with_constant, "params": [465, 0.7770, 0.0322, 22537, -27939, 8726]},
     {"range": (0.85, 1.0), "function": square_gaussian_with_constant, "params": [105, 0.9155, 0.0145, -195883, 353421, -157605]},
 ]
-def daka_headless(daka_list: daka_list_class, user_cookie, user_config, http2_client_obj: http2_client, user_cnt, only_rank_and_notice, random_delay=1800, generator=False):
+def daka_headless(daka_list: daka_list_class, user_cookie, user_config, http2_client_obj: http2_client, user_cnt, only_rank_and_notice, random_delay=1800):
     # 获取到今天0点的秒数
     today_seconds = (datetime.datetime.now() - datetime.datetime.combine(datetime.date.today(), datetime.time(0, 0, 0))).total_seconds()
-    delay = 0 if random_delay <= 0 else (int(generate_random(today_seconds / 86400, random_delay / 86400, segments) * 86400 - today_seconds) + random.randint(0, 100) / 10)
+    user_index = user_config['user_index']
     name = user_config.get('name', '未知')
+    delay = 0 if random_delay <= 0 or user_index == 0 else (int(generate_random(today_seconds / 86400, random_delay / 86400, segments) * 86400 - today_seconds) + random.randint(0, 100) / 10)
     unique_id = user_config.get('unique_id', '未知')
-    message = f"开始打卡:{name}，延迟{delay}s"
-    print(message)
-    if generator:
+    try:
+        message = f"{unique_id}#开始打卡:{name}，延迟{delay}s"
+        print(message)
         yield message
+    except:
+        daka_list.add_warning(f'{name}链接中断 {traceback.format_exc()}')
+        pass
     try:
         if delay < 0:
             daka_list.add_warning(f'{name} {delay} < 0')
@@ -3164,31 +3281,32 @@ def daka_headless(daka_list: daka_list_class, user_cookie, user_config, http2_cl
             time.sleep(delay)
         for msg in daka(daka_list, user_cookie, user_config, http2_client_obj, total_user_cnt=user_cnt, only_rank_and_notice=only_rank_and_notice):
             message = msg
-            if generator:
-                yield message
+            yield message
+    except AssertionError as e:
+        daka_list.add_warning(f'{name}打卡中止 {e}')
+        daka_list.remove(unique_id) # remove会触发自动保存，延迟中止速度
     except Exception as e:
         err_str = traceback.format_exc()
         message += f'<br>${name}打卡失败{e}<br>{err_str}'
-        if generator:
-            yield message
+        yield message
         daka_list.add_warning(message.replace('<br>', '\n'))
         daka_list.remove(unique_id)
     daka_list.add_log(datetime.datetime.now().strftime('%Y-%m-%d %H-%M-%S'), name, unique_id, f"延迟{delay}s后打卡\n{message}".replace('<br>', '\n'))
 
-def generator_wrapper(func, *args, **kwargs):
+def generator_wrapper(messages: queue.Queue, unique_id: int, func, *args, **kwargs):
     try:
         for msg in func(*args, **kwargs):
-            ...
+            messages.put(('msg', unique_id, msg))
     except Exception as e:
         pass
 
-def daka_all_headless(daka_list: daka_list_class, http2_client_obj, only_rank_and_notice, user_dict_list=[], random_delay=1800):
+def daka_all_headless(user_messages: queue.Queue, daka_list: daka_list_class, http2_client_obj, only_rank_and_notice, user_dict_list=[], random_delay=1800):
     if user_dict_list == []:
         user_dict_list = daka_list.get_user_dict_list()
     user_cnt = len(user_dict_list)
     for user_dict in user_dict_list:
         if only_rank_and_notice == -1 and user_dict['config'].get('can_daka') == 0:
             continue
-        threading.Thread(target=generator_wrapper, args=(daka_headless, daka_list, user_dict['cookie'], user_dict['config'], http2_client_obj, user_cnt, only_rank_and_notice, random_delay, False)).start()
+        threading.Thread(target=generator_wrapper, args=(user_messages, user_dict['config']['unique_id'], daka_headless, daka_list, user_dict['cookie'], user_dict['config'], http2_client_obj, user_cnt, only_rank_and_notice, random_delay)).start()
 
 
