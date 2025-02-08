@@ -28,6 +28,7 @@ class Config:
             'archiever_enable': False,
             'class_list_2048': [],
             'stargazer_enable': True,
+            'stargazer_db': 'stargazer.db',
         }
         self.initConfig()
         self.raw = self.read()
@@ -48,6 +49,7 @@ class Config:
         self.archiever_enable = self.raw.get('archiever_enable', False)
         self.class_list_2048 = self.raw.get('class_list_2048', [])
         self.stargazer_enable = self.raw.get('stargazer_enable', True)
+        self.stargazer_db = self.raw.get('stargazer_db', 'stargazer.db')
         self.verify()
 
     def initConfig(self):
@@ -171,3 +173,8 @@ class Config:
             value = self.default_config_dict[key]
             self.save(key, value)
             self.stargazer_enable = value
+        if self.stargazer_db == '':
+            key ='stargazer_db'
+            value = self.default_config_dict[key]
+            self.save(key, value)
+            self.stargazer_db = value

@@ -4,7 +4,7 @@ import queue
 from src.thrift_utils import report_event, social_send_share_success, user_study, user_dict, http2_client
 from src.config import Config
 from src.get_headers import getHeaders
-from src.avatar import find_unique_id
+# from src.avatar import find_unique_id
 from src.notice_parser import NoticeParser
 import zipfile
 import os
@@ -25,6 +25,14 @@ DEBUG_SIZE = 1
 LOAD_MEMBER_TABLE = True # 如果要一天获取多次，请设置为True
 MEMBERS_GROUPS_LIMIT = 2147483647 # 数据库循环队列的大小（旧的会被删除）
 DICT_DB_PATH = 'lookup.db'
+
+# 以下是反挂配置
+ARBITER_SIZE = 10 # 如果size太小，人多时很难catch，如果size太大，会对网络要求较高
+ARBITER_OFFSET = 2 # 发射前等待ARBITER_OFFSET秒
+ARBITER_INTERVAL = 1 # 发射总时长：ARBITER_SIZE * ARBITER_INTERVAL 单位s
+ARBITER_INDEX = 10**(ARBITER_SIZE-1)
+DO_NOT_CHARGE_PK_ENERGY = True # 不使用铜板充能
+AC_POWER = 30 # 在对手差距大于AC_POWER时，取消反挂(而是采用跟随分数)，当最大60时，一开始就会打出199的分数，0时一开始185
 
 # 功能开关
 BCZ_NCSVC = False # 已于12.5结束
@@ -83,20 +91,20 @@ def get_history_learnt_list(unique_id, delta=1):
 
 from src.bcz import getRandomWordIDInBook
 
-class stargazer_class:
-    def __init__(self, logger, http2_client_obj: http2_client, config: Config):
-        self.http2_client_obj = http2_client_obj
-        self.logger = logger
-        self.stargazer_list = config.pk_blacklist
-
-    def start(self):
-        ...
-
 class daka_list_class:
+    def is_default_avatar(avatar_url: str):
+        return avatar_url.endswith('default_avatar_new2.png') or avatar_url.endswith('default_avatar.png')
+
     def __init__(self, logger, http2_client_obj: http2_client, config: Config):
         self.http2_client_obj = http2_client_obj
         self.logger = logger
-        self.daka_list = []
+        self.daka_list = set()
+        self.daka_pk_status = {} # 0未启动，-1匹配中，1对战中
+        self.daka_pk_status_expire_time = {}
+        self.current_matching_king_id = set()
+        self.current_rivals = set()
+        self.pk_results = []
+        self.is_king = {}
         self.logs = []
         self.warnings = []
         self.class_list_2048 = []
@@ -219,6 +227,59 @@ class daka_list_class:
 
         # 创建线程来执行耗时的初始化任务
         self.__not_prepared = True
+    
+    def set_is_king(self, unique_id, is_king):
+        self.is_king[unique_id] = is_king
+
+    def query_is_king(self, unique_id):
+        return self.is_king.get(unique_id, False)
+    
+    def set_pk_status(self, unique_id, status, expire_time=-1):
+        self.daka_pk_status[unique_id] = status
+        self.daka_pk_status_expire_time[unique_id] = expire_time
+        if status == -1:
+            self.current_matching_king_id.add(unique_id)
+        elif status == 1 or status == 0:
+            try:
+                self.current_matching_king_id.remove(unique_id)
+            except:
+                pass
+    
+    def query_pk_status(self, unique_id):
+        expire_time = self.daka_pk_status_expire_time.get(unique_id, -1)
+        if expire_time != -1 and expire_time < time.time():
+            self.set_pk_status(unique_id, 0)
+        return self.daka_pk_status.get(unique_id, 0)
+    
+    def query_current_matching_king_id(self):
+        return self.current_matching_king_id
+    
+    def add_rival(self, unique_id):
+        self.current_rivals.add(unique_id)
+    
+    def remove_rival(self, unique_id):
+        try:
+            if unique_id != -1:
+                self.current_rivals.remove(unique_id)
+        except:
+            pass
+    
+    def record_pk_result(self, my_name, rival_id, rival_name, my_score, rival_score):
+        self.pk_results.append((my_name, rival_id, rival_name, my_score, rival_score))
+        if len(self.pk_results) > 300:
+            self.save_pk_result()
+
+    def save_pk_result(self):
+        if self.pk_results == []:
+            return
+        # pk_%Y-%m-%d %H-%M-%S.csv
+        file_name = f'pk_{datetime.datetime.now().strftime("%Y-%m-%d %H-%M-%S")}.csv'
+        with open(os.path.join(self.log_dir, file_name), 'w', encoding='utf-8', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['我的名字', '对手ID', '对手名字', '我的分数', '对手分数'])
+            for row in self.pk_results:
+                writer.writerow(row)
+        self.pk_results = []
 
     def delete_accounts(self, unique_id):
         '''删除账号'''
@@ -258,6 +319,14 @@ class daka_list_class:
         cursor.execute('''PRAGMA cache_size = -100000''')
         # 读取需要检查的notice
         self.check_list = []
+        # 加载king状态
+        try:
+            with open('king_status.json', 'r', encoding='utf-8') as f:
+                self.is_king = json.load(f)
+            # 将所有key转为int
+            self.is_king = {int(k):v for k,v in self.is_king.items()}
+        except:
+            self.is_king = {}
         # 加载坏词
         try:
             with open('tmp_bad_words.json', 'r', encoding='utf-8') as f:
@@ -281,22 +350,31 @@ class daka_list_class:
             cnt += 1
         logger.info(f'notice_list共加载{cnt}条({len(self.notice_list)}班)')
         # 加载小班信息
-        self.group_infos = {} # GROUP_ID:(GROUP_NAME, GROUP_INTRODUCTION)
+        self.group_infos = {} # GROUP_ID:(GROUP_ID, GROUP_NAME, GROUP_INTRODUCTION)
         cursor.execute('''SELECT GROUP_ID, SHARE_KEY, MONITOR_ID, GROUP_NAME, GROUP_INTRODUCTION, GROUP_AVATAR FROM GROUP_NAME''')
         for row in cursor.fetchall():
             self.group_infos[row[0]] = (row[0], row[1], row[2], row[3], row[4], row[5])
         logger.info(f'group_infos共加载{len(self.group_infos)}班')
         # 加载用户信息
-        self.user_infos = {} # USER_ID:(NICKNAME,)
+        self.user_infos = {} # USER_ID:(USER_ID, NICKNAME, USER_AVATAR)
+        self.user_infos_from_avatar = {} # USER_AVATAR:USER_ID
         cursor.execute('''SELECT USER_ID, NICKNAME, USER_AVATAR FROM USER_NAME''')
         for row in cursor.fetchall():
             self.user_infos[row[0]] = (row[0], row[1], row[2])
+            avatar = row[2]
+            if not avatar:
+                continue
+            if daka_list_class.is_default_avatar(avatar):# 要同时用名字和头像判断用户
+                self.user_infos_from_avatar[(avatar, row[1])] = row[0]
+            else:
+                self.user_infos_from_avatar[avatar] = row[0]
+            
         logger.info(f'user_infos共加载{len(self.user_infos)}个用户')
         # 加载成员信息
         if LOAD_MEMBER_TABLE:
             self.load_member_list(cursor, int(datetime.datetime.now().strftime('%m%d')))
         else:
-            self.member_list = {} # USER_ID: (COMPLETED_TIME, TODAY_DATE, WORD_COUNT, STUDY_CHEAT, BOOK_NAME)
+            self.member_list = {} # USER_ID: (USER_ID, COMPLETED_TIME, TODAY_DATE, WORD_COUNT, STUDY_CHEAT, BOOK_NAME)
             self.member_groups = {}
             self.prev_user_streak_info = {}
         # 加载书本信息
@@ -381,34 +459,30 @@ class daka_list_class:
         while self.__not_prepared:
             time.sleep(1)
         date_int = int(datetime.datetime.now().strftime('%m%d'))
+    
+    def find_unique_id(self, avatar: str, nickname):
+        '''查找唯一id'''
+        try:
+            unique_id = avatar.split('/')[4]
+            if unique_id.isdigit():
+                result = int(unique_id)
+                return result
+        except:
+            pass
+        self.wait()
+        if daka_list_class.is_default_avatar(avatar): # 不能根据default头像判断唯一id
+            result = self.user_infos_from_avatar.get((avatar, nickname))
+        else:
+            result = self.user_infos_from_avatar.get(avatar)
+        if result == 0:
+            raise Exception(f'用户{nickname}的头像链接{avatar}爆0')
+            result = None
+        return result
 
-    def close(self):
+    def close(self, no_check_daka=False):
         self.wait()
         close_start_time = int(time.time())
         now = datetime.datetime.now()
-        # 删除35天前的日志
-        self.delete_old_logs() # 这家伙也是log很多（故意的）
-        self.logger.info(f'35天前的日志删除完毕')
-        # 检查未打卡用户
-        not_daka_users = []
-        if close_start_time - self.latest_check_user_timestamp > 3600:
-            not_daka_users = self.check_not_daka_users(include_not_daka=False) # 有网络请求，要放在close前面，防止log太多
-            self.latest_check_user_timestamp = close_start_time
-        else:
-            self.logger.info(f'最近{close_start_time - self.latest_check_user_timestamp}秒前检测过 未打卡用户，不重复检查')
-        self.logger.info(f'本轮{self.get_user_cnt()}个账号，有{len(not_daka_users)}人未打卡，共耗时{close_start_time - self.time_start}秒')
-        for user in not_daka_users:
-            self.logger.warning(f'未打卡用户：{user["config"].get("name")}({user["config"].get("unique_id")})')
-        # 保存用户配置
-        self.user_dict_obj.save()
-        self.logger.info(f'用户配置保存完毕')
-        # 写入作弊检测self.cheat_tracker结果到csv
-        if len(self.cheat_tracker) > 0:
-            with open(f'{self.log_dir}cheat-tracker_{self.cheat_tracker_date_str} .csv', 'w', encoding='utf-8', newline='') as f:
-                writer = csv.writer(f)
-                writer.writerow(['bcz_id', 'word_cnt', 'time','study_cheat'])
-                for user_id, (word_count, time_, status) in self.cheat_tracker.items():
-                    writer.writerow([user_id, word_count, time_, status])
         # 写入缓冲区到数据库
         # 写入puzzle_buffer
         if BCZ_NCSVC and len(self.puzzle_buffer) > 0:
@@ -427,13 +501,41 @@ class daka_list_class:
             patch_conn.close()
             self.logger.info(f'写入{len(self.patch_buffer)}条patch')
             self.patch_buffer = []
-
-
-        # 将公告检测结果存入notice_and_rank_path
-        cnt = 0
+        
         conn = sqlite3.connect(self.notice_and_rank_path)
         cursor = conn.cursor()
         self.save_other_info(cursor)
+        # 删除35天前的日志
+        self.delete_old_logs() # 这家伙也是log很多（故意的）
+        self.logger.info(f'35天前的日志删除完毕')
+        # 写入king状态
+        with open('king_status.json', 'w', encoding='utf-8') as f:
+            json.dump(self.is_king, f, ensure_ascii=False)
+        self.logger.info(f'king_status.json保存完毕')
+        # 检查未打卡用户
+        not_daka_users = []
+        if close_start_time - self.latest_check_user_timestamp > 3600 and not no_check_daka:
+            not_daka_users = self.check_not_daka_users(include_not_daka=False) # 有网络请求，要放在close前面，防止log太多
+            self.latest_check_user_timestamp = close_start_time
+        else:
+            self.logger.info(f'最近{close_start_time - self.latest_check_user_timestamp}秒前检测过 未打卡用户，不重复检查')
+        self.logger.info(f'本轮{self.get_user_cnt()}个账号，有{len(not_daka_users)}人未打卡，共耗时{close_start_time - self.time_start}秒')
+        for user in not_daka_users:
+            self.logger.warning(f'未打卡用户：{user["config"].get("name")}({user["config"].get("unique_id")})')
+        # 保存用户配置
+        self.user_dict_obj.save()
+        self.logger.info(f'用户配置保存完毕')
+        # 保存pk结果
+        self.save_pk_result()
+        # 写入作弊检测self.cheat_tracker结果到csv
+        if len(self.cheat_tracker) > 0:
+            with open(f'{self.log_dir}cheat-tracker_{self.cheat_tracker_date_str} .csv', 'w', encoding='utf-8', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(['bcz_id', 'word_cnt', 'time','study_cheat'])
+                for user_id, (word_count, time_, status) in self.cheat_tracker.items():
+                    writer.writerow([user_id, word_count, time_, status])
+        # 将公告检测结果存入notice_and_rank_path
+        cnt = 0
         for i, check_item in enumerate(self.check_list):
             if check_item['modified'] and check_item['valid']:
                 cursor.execute(f'''UPDATE notice SET CHECKED = ? WHERE GROUP_ID == ? AND DATE == ?''', (check_item['checked']*100000000 + check_item['cursorA'] * 10000 + check_item['cursorB'], check_item['group_id'], check_item['date']))
@@ -539,16 +641,17 @@ class daka_list_class:
         conn.close()
         self.logger.info("数据库已保存")
         # 写入日志
-        with open(f'{self.log_dir}log_{now.strftime("%Y-%m-%d %H-%M-%S")}.{self.latest_check_user_timestamp}.{len(self.logs)}.txt', 'w', encoding='utf-8') as f:
-            for msg in self.logs:
-                f.write(msg)
-            for msg in self.warnings:
-                f.write(msg)
-        self.logger.info(f'写入了{len(self.logs)}条日志，{len(self.warnings)}条警告如下：')
-        self.logs = []
-        for warning in self.warnings:
-            self.logger.warning(warning)
-        self.warnings = []
+        if len(self.logs) > 0 or len(self.warnings) > 0:
+            with open(f'{self.log_dir}log_{now.strftime("%Y-%m-%d %H-%M-%S")}.{self.latest_check_user_timestamp}.{len(self.logs)}.txt', 'w', encoding='utf-8') as f:
+                for msg in self.logs:
+                    f.write(msg)
+                for msg in self.warnings:
+                    f.write(msg)
+            self.logger.info(f'写入了{len(self.logs)}条日志，{len(self.warnings)}条警告如下：')
+            self.logs = []
+            for warning in self.warnings:
+                self.logger.warning(warning)
+            self.warnings = []
         self.logger.info(f'全部保存操作已完成')
     
     def closing_count_down(self):
@@ -863,12 +966,13 @@ class daka_list_class:
         '''self.wait() before calling this function''' # 在notice_and_rank函数中已经调用了
         with self.lock:
             def store_user_info(user_id, nickname, user_avatar):
-                user_avatar = None
+                # user_avatar = None
                 current_data = self.user_infos.get(user_id, (None,None,None))
                 if current_data[1] == nickname and current_data[2] == user_avatar:
                     return
                 new_tp = (user_id, nickname, user_avatar)
                 self.user_infos[user_id] = new_tp
+                self.user_infos_from_avatar[user_avatar] = user_id
                 self.user_info_buffer.append(new_tp)
             # 先存储用户信息
             store_user_info(user_id, nickname, user_avatar)
@@ -1064,7 +1168,7 @@ class daka_list_class:
             if len(self.daka_list) == 0:
                 self.logger.info('daka_list time start!')
                 self.time_start = int(time.time())
-            self.daka_list.append(unique_id)
+            self.daka_list.add(unique_id)
 
     def remove(self,unique_id):
         with self.lock:
@@ -1077,6 +1181,10 @@ class daka_list_class:
 
     def query(self, unique_id):
         return unique_id in self.daka_list
+    
+    def get_not_running_arbiter(self, cnt, except_ids: set):
+        '''返回cnt个未在运行的arbiter，如果不足，则返回剩余的'''
+        return self.user_dict_obj.get_except_from_arbiter(self.daka_list, cnt, except_ids, self.daka_pk_status)
     
     def get_bad_words(self, has_mid=True): # 获取检查结果
         # 拼接状态为1的notice
@@ -1117,6 +1225,308 @@ class daka_list_class:
     
     def is_empty(self):
         return len(self.daka_list) == 0
+
+
+class stargazer_class:
+    def __init__(self, logger, http2_client_obj: http2_client, config: Config, daka_list_obj: daka_list_class, messages: queue.Queue):
+        self.http2_client_obj = http2_client_obj
+        self.messages = messages
+        self.logger = logger
+        self.stargazer_list = config.pk_blacklist
+        self.stargazer_set = set(self.stargazer_list)
+        self.stargazer_cnt = len(self.stargazer_list)
+        self.stargazer_db = config.stargazer_db
+        self.stargazers = {}
+        self.daka_list_obj = daka_list_obj
+        self.session_id = None
+        self.buffer = []  # (TIMESTAMP, STAR, RANK, ACTION)
+        self.action_buffer = {} # (TIMESTAMP, USER_ID):ACTION
+        self.token_user_dict_list = []
+
+    def init_db(self):
+        conn = sqlite3.connect(self.stargazer_db)
+        cursor = conn.cursor()
+        for unique_id in self.stargazer_list:
+            cursor.execute(f'''CREATE TABLE IF NOT EXISTS star_{unique_id} (
+                TIMESTAMP INTEGER,
+                STAR INTEGER,
+                RANK INTEGER,
+                ACTION INTEGER) -- -1TRACKING，1MISS，2CAUGHT，-2WIN，-3DRAW，-4LOSS
+            ''')
+        conn.commit()
+        # 读取数据
+        # for unique_id in self.stargazer_list:
+        #     result = cursor.execute(f'''SELECT STAR FROM star_{unique_id} ORDER BY TIMESTAMP DESC LIMIT 1''').fetchone()
+        #     if result:
+        #         self.stargazers[unique_id] = {"stars": result[0], "rank": None}# 未上榜不追踪
+        #     else:
+        #         self.stargazers[unique_id] = {"stars": 0, "rank": None}
+        conn.close()
+
+    def get_session_id(self):
+        if self.session_id:
+            return self.session_id
+        time_long = int(time.time() * 1000)
+        time_short = int(time.time())
+        pk_get_headers = getHeaders("$pk", self.token_user_dict_list[0]['cookie'], time_short, index=1, quote=True)
+        # http2://pk.baicizhan.com/api/rankpk/v2/current_session?time=
+        url = f'https://{pk_get_headers["Host"]}/api/rankpk/v2/current_session?time={time_long}'
+        response = self.http2_client_obj.send_http2_request('GET', url, pk_get_headers, None)
+        data = response.json()['data']
+        if time_long > data['session']['endTime']:
+            self.logger.warning(f'当前PK赛季已结束')
+        self.session_id = data["session"]["sessionId"]
+        return self.session_id
+
+    def refresh_token(self):
+        '''获取ARBITER_SIZE个未在运行的arbiter token'''
+        new_token_user_dict_list = []
+        new_ids = set()
+        for i in range(ARBITER_SIZE):
+            try:
+                my_unique_id = self.token_user_dict_list[i]['config']['unique_id']
+                if not self.daka_list_obj.query_is_king(my_unique_id):
+                    threading.Thread(target=self.prepare_arbiter_wrapper, args=(self.token_user_dict_list[i],)).start()
+                    self.logger.info(f'为arbiter上段 {my_unique_id}')
+                    time.sleep(0.5)
+                    continue
+                if not self.daka_list_obj.query(my_unique_id):
+                    if self.daka_list_obj.query_pk_status(my_unique_id) != 2: # 2=能量耗尽
+                        new_token_user_dict_list.append(self.token_user_dict_list[i])
+                    new_ids.add(my_unique_id)
+            except IndexError:
+                pass
+        if len(new_token_user_dict_list) < ARBITER_SIZE:
+            demand = ARBITER_SIZE - len(new_token_user_dict_list)
+            new_arbiters = self.daka_list_obj.get_not_running_arbiter(demand, new_ids)
+            if new_arbiters == []:
+                if new_token_user_dict_list != []:
+                    self.token_user_dict_list = new_token_user_dict_list
+                    return # 有但是不足ARBITER_SIZE个，照样发射
+                while new_arbiters == []: # 真的一个都没有，至少要一个
+                    self.logger.info(f'没有可用的arbiter，等待1.5秒后重试')
+                    time.sleep(1.5)
+                    new_arbiters = self.daka_list_obj.get_not_running_arbiter(demand, new_ids)
+            new_token_user_dict_list.extend(new_arbiters)
+            self.token_user_dict_list = new_token_user_dict_list
+            self.refresh_token() # 检查新获取的token是否可用，否则要重新获取
+
+
+    def refresh_stars(self, refresher_dict) -> list:
+        '''刷新星星数，返回+2的用户列表（在stargazer_list中的）'''
+        time_long = int(time.time() * 1000)
+        time_short = int(time.time())
+        user_cookie = refresher_dict['cookie']
+        pk_get_headers = getHeaders("$pk", user_cookie, time_short, index=1, quote=True)
+        session_id = self.get_session_id()
+        # https://pk.baicizhan.com/api/rankpk/session_ranking_list?time=&session_id=&offset=0
+        url = f'https://{pk_get_headers["Host"]}/api/rankpk/session_ranking_list?time={time_long}&session_id={session_id}&offset=0'
+        response = self.http2_client_obj.send_http2_request('GET', url, pk_get_headers, None)
+        data = response.json()['data']
+        modified_users = []
+        current_timestamp = int(time.time())
+        for item in data['rank_users']:
+            bcz_id = item['bczId']
+            # print('\033[32m' + f'[{bcz_id}]' + '\033[0m' + f' {item["rank"]} {item["stars"]} {item["nickname"]}')
+            if bcz_id in self.stargazer_set:
+                stars = item['stars']
+                prev_stars = self.stargazers.get(bcz_id, {}).get('stars', 0)
+                if prev_stars == stars:
+                    continue
+                if bcz_id not in self.stargazers:
+                    self.stargazers[bcz_id] = {} # 未上榜不追踪
+                self.stargazers[bcz_id]['active'] = current_timestamp # 首次出现在排行榜，视为一次活跃
+                self.stargazers[bcz_id]['stars'] = stars
+                self.stargazers[bcz_id]['rank'] = item['rank']
+                if prev_stars + 2 == stars:
+                    modified_users.append(bcz_id) # 此处不save到数据库，交给后面的处理器
+                else:
+                    self.save_to_db(current_timestamp, bcz_id, -1)
+        self.logger.info(f'刷新星星数成功：{self.stargazers}')
+        return modified_users
+    
+    def save_to_db(self, timestamp, target_id, action):
+        if action > 0: # 累计ARBITER_SIZE位后一次性写入
+            id = (timestamp, target_id)
+            if id not in self.action_buffer:
+                self.action_buffer[id] = action
+            else:
+                self.action_buffer[id] = self.action_buffer[id] * 10 + action
+            if self.action_buffer[id] < ARBITER_INDEX:
+                return
+            action = self.action_buffer[id] # 累计达到ARBITER_SIZE位后，写入数据库
+            del self.action_buffer[id]
+        self.buffer.append((timestamp, self.stargazers[target_id]['stars'], self.stargazers[target_id]['rank'], action))
+        if len(self.buffer) >= 1:
+            conn = sqlite3.connect(self.stargazer_db)
+            cursor = conn.cursor()
+            for item in self.buffer:
+                cursor.execute(f'''INSERT INTO star_{target_id} (TIMESTAMP, STAR, RANK, ACTION) VALUES (?,?,?,?)''', item)
+            conn.commit()
+            self.buffer = []
+            conn.close()
+    
+    def arbiter_wrapper(self, token_user_dict, target_id, start_time):
+        '''反挂的包装器'''
+        result_str = ''
+        user_cookie = token_user_dict['cookie']
+        user_config = token_user_dict['config']
+        unique_id = token_user_dict['config']['unique_id']
+        try:
+            if self.daka_list_obj.query(unique_id):
+                return
+            self.daka_list_obj.add(unique_id)
+            # time.sleep(random.randint(10, 100) / 10) # 随机延时
+            rival_id = 0
+            for msg in pkonline2(user_cookie, user_config, self.http2_client_obj, self.daka_list_obj, max_round=1, max_win_round=6666, allow_self=True):
+                result_str += msg
+                if len(result_str) > 2048:
+                    # 只保留最后2048个字符
+                    result_str = result_str[-2048:]
+                self.messages.put(('msg', unique_id, result_str))
+                if msg.startswith('<font color="'):
+                    flag = msg[13:].split('"')[0]
+                    if flag == 'lemonchiffon':
+                        try:
+                            rival_id = int(msg[27:-11]) # 有可能是“未找到”
+                        except:
+                            rival_id = -1
+                        if rival_id == target_id:
+                            self.logger.info(f'匹配到目标rival_id:{rival_id}')
+                            self.save_to_db(start_time, target_id, 2)
+                        else:
+                            self.logger.info(f'rival_id:{rival_id}不是目标rival_id:{target_id}') # MISS
+                            self.save_to_db(start_time, target_id, 1)
+                        continue
+                    if rival_id != target_id:
+                        continue # 不是目标rival_id，不记录结果
+                    self.refresh_stars(token_user_dict)
+                    if flag == 'green':
+                        self.save_to_db(int(time.time()), target_id, -2)
+                    elif flag == 'red':
+                        self.save_to_db(int(time.time()), target_id, -4)
+                        continue # 输了，由主线程start_arbiter
+                    elif flag == 'yellow':
+                        self.save_to_db(int(time.time()), target_id, -3)
+
+                    self.start_arbiter(rival_id, int(time.time()))
+                    
+        except AssertionError: # 快速关闭
+            pass
+        except Exception as e:
+            self.daka_list_obj.add_warning(f'反挂器出错：{traceback.format_exc()}')
+            self.messages.put(('error', unique_id, traceback.format_exc()))
+        finally:
+            result_str = result_str.replace('<br>', '\n')
+            self.daka_list_obj.add_log(datetime.datetime.now().strftime('%Y-%m-%d'), user_config['name'], user_config['unique_id'], result_str)
+            self.daka_list_obj.remove(unique_id)
+
+
+    def prepare_arbiter_wrapper(self, token_user_dict):
+        '''PK赛事反挂上段的包装器'''
+        result_str = ''
+        unique_id = token_user_dict['config']['unique_id']
+        user_cookie = token_user_dict['cookie']
+        user_config = token_user_dict['config']
+        try:
+            if self.daka_list_obj.query(unique_id):
+                return
+            self.daka_list_obj.add(unique_id)
+            time.sleep(random.randint(0, 500) / 10) # 随机延时
+            for msg in pkonline2(user_cookie, user_config, self.http2_client_obj, self.daka_list_obj, max_round=9999, max_win_round=9999):
+                result_str += msg
+                if len(result_str) > 2048:
+                    # 只保留最后2048个字符
+                    result_str = result_str[-2048:]
+                self.messages.put(('msg', unique_id, result_str))
+        except AssertionError: # 快速关闭
+            pass
+        except Exception as e:
+            self.daka_list_obj.add_warning(f'PK赛事反挂上段器出错：{traceback.format_exc()}')
+            self.messages.put(('error', unique_id, traceback.format_exc()))
+        finally:
+            result_str = result_str.replace('<br>', '\n')
+            self.daka_list_obj.add_log(datetime.datetime.now().strftime('%Y-%m-%d'), user_config['name'], user_config['unique_id'], result_str)
+            self.daka_list_obj.remove(unique_id)
+
+    def start_arbiter(self, user_id, current_timestamp):
+        '''启动反挂器'''
+        time.sleep(ARBITER_OFFSET)
+        for token_user_dict in self.token_user_dict_list:
+            self.daka_list_obj.set_pk_status(token_user_dict['config']['unique_id'], -1)
+            threading.Thread(target=self.arbiter_wrapper, args=(token_user_dict, user_id, current_timestamp)).start()
+            self.logger.info(f'启动arbiter {token_user_dict["config"]["name"]} -> {user_id}')
+            time.sleep(ARBITER_INTERVAL)
+        
+        # 当前token_list已经发射完毕，获取新的token_list
+        try:
+            self.refresh_token()
+        except AssertionError: # 快速关闭
+            return
+        
+        while len(self.daka_list_obj.query_current_matching_king_id()) > 0:
+            self.logger.info(f'king正在匹配中，等待...{self.daka_list_obj.query_current_matching_king_id()}')
+            time.sleep(1) # 等待king匹配完成
+            if (time.time()) - current_timestamp > 60:
+                return # 超过60秒，退出
+
+    def run(self):
+        active = True
+        try:
+            self.refresh_token()
+        except AssertionError: # 快速关闭
+            return
+        self.refresh_stars(self.token_user_dict_list[0])
+        time.sleep(2)
+        while True:
+            modified_users = self.refresh_stars(self.token_user_dict_list[0])
+            current_timestamp = int(time.time())
+            for user_id in modified_users:
+                self.start_arbiter(user_id, current_timestamp)
+
+            active = False
+
+            tracking_cnt = len(self.stargazer_set.difference(self.daka_list_obj.current_rivals))
+            while (tracking_cnt == 0):
+                self.logger.info('所有人都已经被匹配，等待...')
+                time.sleep(1.5) # 所有人都已经被匹配，等待
+                try:
+                    self.http2_client_obj.check_closing_state()
+                except AssertionError: # 快速关闭
+                    return
+                tracking_cnt = len(self.stargazer_set.difference(self.daka_list_obj.current_rivals))
+            for user_id, user in self.stargazers.items():
+                if current_timestamp - user.get('active', 0) < 180: # 超过3分钟，自动退出
+                    active = True
+                    break
+            if not active:
+                self.logger.info('没有被跟踪者上线，等待30秒后重试...')
+                for i in range(random.randint(18, 22)):
+                    time.sleep(1.5)
+                    try:
+                        self.http2_client_obj.check_closing_state()
+                    except AssertionError: # 快速关闭
+                        return
+            else:
+                self.logger.info(f'正在跟踪中...匹配{self.stargazer_cnt - tracking_cnt}，跟踪{tracking_cnt}')
+                time.sleep(random.randint(12, 18) / 10)
+                try:
+                    self.http2_client_obj.check_closing_state()
+                except AssertionError: # 快速关闭
+                    return
+            
+
+
+    def start(self):
+        if self.session_id == None: # 初始化
+            self.init_db()
+            self.logger.info(f'初始化stargazer成功')
+            time.sleep(1)
+        if len(self.stargazer_list) == 0:
+            self.logger.info('没有stargazer，退出')
+            return
+        threading.Thread(target=self.run).start()
+
     
 
 class notice_subscriber:
@@ -1308,7 +1718,7 @@ def print_puzzle(puzzle_dict):
     result = f'{question}({chn_mean})('
     for i, option in enumerate(option_list):
         if i == answer - 1:
-            result += f'<font color="green">{option}</font>/'
+            result += f'<font  color="green">{option}</font>/'
         else:
             result += f'{option}/'
     result += ')'
@@ -1517,7 +1927,7 @@ def pkonline(user_cookie, user_config, http2_client_obj: http2_client, daka_list
                 {"index": 37, "extra_info": "{\"CurrentRound\":%d}" % current_round} # pk结束
             ]
             report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=1)
-            # https://pkonline1.baicizhan.com/api/contest/practice/result?contestId=null&challengeId=15133142&code=mB5AG9fCzo
+            # https://pkonline1.baicizhan.com/api/contest/practice/result?contestId=null&challengeId=&code=mB5AG9fCzo
             time_long = int(time.time() * 1000)
             headers = getHeaders("$pkonline1", user_cookie, int(time.time()), index=3)
             url = f'https://{headers["Host"]}/api/contest/practice/result?contestId=null&challengeId={challenge_id}&code=mB5AG9fCzo'
@@ -1536,6 +1946,8 @@ def pkonline(user_cookie, user_config, http2_client_obj: http2_client, daka_list
 
 def check_and_charge_pk_energy(user_cookie, user_config, http2_client_obj: http2_client, session_id):
     '''检查并充能PK能量'''
+    if DO_NOT_CHARGE_PK_ENERGY:
+        return False
     # https://pk.baicizhan.com/api/rankpk/energy?time=&activity_id=0&session_id=
     time_long = int(time.time() * 1000)
     time_short = int(time.time())
@@ -1554,13 +1966,16 @@ def check_and_charge_pk_energy(user_cookie, user_config, http2_client_obj: http2
         return True
     return False
 
-pkonline2_lock = threading.Lock() # 防止多账号同时开始匹配
+pkonline2_king_lock = threading.Lock() # 防止多账号同时开始匹配
+pkonline2_lock = threading.Lock()
 def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_list:daka_list_class, max_round=3, max_win_round=3, allow_self=False):
     '''单词对战''' # max_round无论输赢，但是体力值不足时，会自动退出
-    if user_config.get('can_pk', True) == False:
+    if user_config.get('can_pk', 1) == 0:
         yield f'{user_config["name"]}不参加pk'
         return
+    rival_escaped_notified = False
     name = user_config['name']
+    unique_id = user_config['unique_id']
     time_short = int(time.time())
     time_long = int(time.time() * 1000) # 只有report_event的cookie和url需要更新time_long，其余均不需要
     # https://pk.baicizhan.com/api/rankpk/v2/current_session?time=1728962138173
@@ -1570,15 +1985,17 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
 
     total_round = 0
     total_win_round = 0
+    rival_id = 0
     while True:
         total_round += 1
         if total_round > max_round or total_win_round >= max_win_round:
+            daka_list.set_pk_status(unique_id, 0)
             return
         url = f'https://{pk_get_headers["Host"]}/api/rankpk/v2/current_session?time={time_long}'
         response = http2_client_obj.send_http2_request('GET', url, pk_get_headers, None)
         data = response.json()['data']
         current_user_info = data['currentRankUserInfo']
-        end_time_str = time.strftime('%Y-%m-%d %H-%M-%S', time.localtime(data['session']['endTime'] // 1000))# auditEndTime=1731772799000
+        end_time_str = time.strftime('%Y-%m-%d %H-%M-%S', time.localtime(data['session']['endTime'] // 1000))# auditEndTime=
         session_id = data["session"]["sessionId"]
         current_level = current_user_info["currentLevel"]
         current_star = current_user_info["currentStar"]
@@ -1587,9 +2004,11 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
         state = data['session']['state']
         if state == 3:
             yield f'单词pk赛季清扫中，结束<br>'
+            daka_list.set_pk_status(unique_id, 0)
             return
         if state != 2:
             yield f'<p style="color:red">单词pk赛季状态{state}，请检查</p>'
+            daka_list.set_pk_status(unique_id, 0)
             return
         # https://pk.baicizhan.com/api/rankpk/main?time=1728962138249&activity_id=0&session_id=40
         url = f'https://{pk_get_headers["Host"]}/api/rankpk/main?time={time_long}&activity_id=0&session_id={session_id}'
@@ -1609,13 +2028,19 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
             yield f'体力{current_energy}不足{energy_cost}，充能中<br>'
             if not check_and_charge_pk_energy(user_cookie, user_config, http2_client_obj, session_id):
                 yield f'充能失败，退出<br>'
+                daka_list.set_pk_status(unique_id, 2, int(time.time()+60*(energy_cost - current_energy))) # 能量耗尽
                 return
             yield f'充能成功，继续<br>'
             continue
         rank_name_en = current_level_dict['name_en']
-        if max_win_round == 6666 and rank_name_en != 'king':
-            yield f'Err_not_king' # 只有king段位可以执行arbiter功能
+        is_king = rank_name_en == 'king'
+        daka_list.set_is_king(unique_id, is_king)
+        if not is_king and max_win_round == 6666:
+            max_win_round = 9999
+        if max_win_round == 9999 and is_king: # 为arbiter上段
+            daka_list.set_pk_status(unique_id, 0)
             return
+
 
         if reward_available:
             yield f'正在领取'
@@ -1623,7 +2048,7 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
                 {"index": 38}
             ]
             report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=0)
-            # https://pk.baicizhan.com/api/rankpk/get_reward?time=1728962144814&session_id=40
+            # https://pk.baicizhan.com/api/rankpk/get_reward?time=&session_id=40
             url = f'https://{pk_get_headers["Host"]}/api/rankpk/get_reward?time={time_long}&session_id={session_id}'
             response = http2_client_obj.send_http2_request('GET', url, pk_get_headers, None)
             data = response.json()['data']
@@ -1648,7 +2073,14 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
         rival_name = ''
         rival_avatar = ''
         time_start = time.time()
-        if not allow_self:
+        # if total_round == 1 and daka_list.query_pk_status(unique_id) != 0:
+        #     raise Exception('pk_status_not_0')
+
+        daka_list.set_pk_status(unique_id, -1)
+        if rank_name_en == 'king':
+            if not allow_self:
+                pkonline2_king_lock.acquire()
+        elif not allow_self:
             pkonline2_lock.acquire()
         while True:
             # https://pk.baicizhan.com/api/rankpk/challenge/match?challenge_type=word&challenge_level=wood&time=1728962245954&activity_id=0&session_id=40
@@ -1663,21 +2095,39 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
                 rival_avatar = data['rival']['avatar']
                 break
             time.sleep(1)
-        yield f'匹配对手:{rival_name}<br>'
-        if not allow_self:
+        daka_list.set_pk_status(unique_id, 1)
+        if rank_name_en == 'king':
+            if not allow_self:
+                pkonline2_king_lock.release()
+        elif not allow_self:
             pkonline2_lock.release()
-        unique_id = find_unique_id(rival_avatar, nickname=rival_name)
-        if unique_id != 'None':
-            yield f'对手bczId:<font color="lemonchiffon">{unique_id}</font><br>'
+        yield f'匹配对手:{rival_name}<br>对手bczId:'
+
+        
+        
+        current_rival_id = daka_list.find_unique_id(rival_avatar, rival_name)
+        rival_status = 0 # -1黑名单，1白名单，0正常
+        if current_rival_id:
+            yield f'<font color="lemonchiffon">{current_rival_id}</font><br>' # 谨慎修改！[27:-11]用于传递信息
+            daka_list.add_rival(current_rival_id)
+            rival_id = current_rival_id
+            
+            if rival_id in daka_list.pk_whitelist:
+                yield f'白名单用户💖<br>'
+                rival_status = 1
+                daka_list.add_warning(f'{name}遇到了白名单用户{rival_name}{rival_id}')
+            elif rival_id in daka_list.pk_blacklist:
+                yield f'黑名单用户🚫<br>'
+                rival_status = -1
+                daka_list.add_warning(f'{name}遇到了黑名单用户{rival_name}{rival_id}')
+            elif rival_id in daka_list.user_dict_obj.arbiter_unique_ids:
+                yield f'arbiter用户🤖<br>'
+                if rival_id > unique_id: # 避免出现DRAW
+                    rival_status = 6666
         else:
-            yield f'未找到对手bczId<br>'
-        if unique_id in daka_list.pk_whitelist:
-            yield f'白名单用户💖<br>'
-            daka_list.add_warning(f'{name}遇到了白名单用户{rival_name}{unique_id}')
-        elif unique_id in daka_list.pk_blacklist:
-            yield f'黑名单用户🚫<br>'
-            daka_list.add_warning(f'{name}遇到了黑名单用户{rival_name}{unique_id}')
-        # yield f'共{puzzle_count}题'
+            yield f'<font color="lemonchiffon">未找到</font><br>'
+            rival_id = -1
+        
         payload = [ # 匹配成功
             {"index": 40, "extra_info": "{\"trace\":\"together_tab\",\"session_id\":\"%d\",\"pk_rank\":\"%d\",\"challenge_type\":\"排位赛\",\"challenge_id\":%d,\"cost_time\":%d}"% (session_id, current_level, challenge_id, int(time.time() - time_start))}
         ]
@@ -1738,20 +2188,24 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
                 rival_answer = data['rival']['answer']
 
                 yield f'第{order}题 {msg}<br>'
-                if unique_id in daka_list.pk_blacklist:
-                    penalty = rival_score - 180 * (order - 1) # 反挂
+                if rival_status == -1:
+                    penalty = rival_score - my_score + AC_POWER # 反挂
                 else:
-                    if max_win_round == 6666 or unique_id in daka_list.pk_whitelist: # 单次arbiter模式，锁定166
+                    if max_win_round == 6666 or rival_status == 1: # 单次arbiter模式，锁定166
                         penalty = 0
                     else:
                         penalty = rival_score - 188 * (order - 1)
 
                 if penalty > 0:
-                    lb = ub = min(8600 + penalty*200, 9999)
+                    lb = ub = min(8500 + penalty*25, 9999)
                     yield '[AC]'
                 else:
-                    if max_win_round == 6666:
-                        lb = ub = 6666
+                    if rival_status == 6666:
+                        lb = 7777
+                        ub = 7999
+                    elif max_win_round == 6666:
+                        lb = 6666
+                        ub = 6999
                     else:
                         lb = 7100
                         if rival_score + 32 <= my_score:
@@ -1766,7 +2220,7 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
                 current_time = data['puzzle']['cd']
                 
                 # {"challenge_id":421585,"nvcVal":"","submit":{"order":1,"answer":3},"session_id":40}
-                content = {
+                content_with_ans = {
                     "challenge_id": challenge_id,
                     "nvcVal": "",
                     "submit": {
@@ -1794,22 +2248,24 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
                     time.sleep(0.4)
                 
 
-                response = http2_client_obj.send_http2_request('POST', url, pk_post_headers, content)
+                response = http2_client_obj.send_http2_request('POST', url, pk_post_headers, content_with_ans)
                 time.sleep(0.2)
-                response = http2_client_obj.send_http2_request('POST', url, pk_post_headers, content)
+                response = http2_client_obj.send_http2_request('POST', url, pk_post_headers, content_with_ans)
                 time.sleep(0.2)
                 data = response.json()['data']
                 my_answer = data['me']['answer']
                 fail_cnt = 0
                 while my_answer is None:
-                    response = http2_client_obj.send_http2_request('POST', url, pk_post_headers, content)
+                    response = http2_client_obj.send_http2_request('POST', url, pk_post_headers, content_with_ans)
                     time.sleep(0.2)
                     data = response.json()['data']
                     my_answer = data['me']['answer']
                     me_escaped = data['meEscaped']
                     fail_cnt += 1
                     if me_escaped or fail_cnt > 5:
-                        yield f'<font color="red">掉线，本轮结束</font><br>'
+                        yield f'<font  color="red">掉线</font><br>'
+                        daka_list.record_pk_result(name, rival_id, rival_name, my_score, rival_score)
+                        daka_list.remove_rival(rival_id)
                         return
                 score_delta = data['me']['score'] - my_score
                 my_score = data['me']['score']
@@ -1837,6 +2293,9 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
                 rival_score = data['rival']['score']
                 if rival_escaped:
                     yield f'对手逃跑<br>'
+                    if not rival_escaped_notified:
+                        yield f'<font color="green">对手逃跑</font><br>'
+                        rival_escaped_notified = True
                     score_delta = -1
                 elif rival_answer is None:
                     yield f'未作答<br>'
@@ -1882,8 +2341,10 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
         my_score = data['me']['score']
         rival_score = data['rival']['score']
         yield f' {my_score} - {rival_score} - '
+        daka_list.record_pk_result(name, rival_id, rival_name, my_score, rival_score)
+        daka_list.remove_rival(rival_id)
         if my_score > rival_score:
-            yield f'<font color="green">WIN</font><br>'
+            yield f'<font color="green">WIN</font><br>' # 此处有stargazer的信息
             total_win_round += 1
         elif my_score < rival_score:
             yield f'<font color="red">LOSE</font><br>'
@@ -1894,12 +2355,14 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
         ]
         report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=0)
         yield "<br><br>"
-        delay = random.randint(3,6)
-        for i in range(delay):
-            yield f'.'
-            time.sleep(1)
-
-    return
+        if max_win_round != 6666: # arbiter模式不等待
+            delay = random.randint(3,6)
+            for i in range(delay):
+                yield f'.'
+                time.sleep(1)
+        if max_win_round == 6666 and rival_status != -1:
+            daka_list.set_pk_status(unique_id, 0) # arbiter没有遇到黑名单用户，直接结束
+            return
 
 def yzdd(user_cookie, user_config, http2_client_obj: http2_client, daka_list: daka_list_class):
     '''一站到底'''
@@ -2625,7 +3088,7 @@ def check_study_cheat(date_str, members, user_cookie, http2_client_obj: http2_cl
         if member['todayStudyCheat']:
             daka_list.track_cheat_user(date_str, member['uniqueId'], member['todayWordCount'], member['completedTime'], 1) # 1表示刷词，0表示认真学
             continue
-        if member['todayWordCount'] >= 500: # 如果用户已被跟踪，则已经举报过，证明是认真学的
+        if member['todayWordCount'] > 500: # 如果用户已被跟踪，则已经举报过，证明是认真学的
             if daka_list.user_tracked(member['uniqueId']):
                 # 已经举报过，证明不是刷词
                 print(f'用户{member["uniqueId"]}\033[1;32m已举报过，不是刷词\033[0m')
@@ -2843,8 +3306,11 @@ def getGroupInfo(share_key: str, user_cookie, http2_client_obj:http2_client) -> 
 # imported from shadlc_BCZ_Group_Manager/src/bcz.py
 def setGroupOnlyInviteCodeJoin(share_key: str, user_cookie: str, http2_client_obj:http2_client) -> str:
     '''设置小班仅允许邀请码加入'''
-    if getGroupInfo(share_key, user_cookie, http2_client_obj)['groupInfo']['onlyPublicKeyJoin']:
-        return '已设置仅邀请<br>'
+    try:
+        if getGroupInfo(share_key, user_cookie, http2_client_obj)['groupInfo']['onlyPublicKeyJoin']:
+            return '已设置仅邀请<br>'
+    except: # 无效的小班
+        return 'INVALID'
 
     headers = getHeaders('$group', user_cookie, int(time.time()), index=1)
     headers['Content-Type'] = 'application/json; charset=UTF-8'
@@ -2859,7 +3325,9 @@ def notice_checker(daka_list: daka_list_class, user_cookie, user_config, http2_c
     message_str = ''
     for group_share_key in user_config.get('own_groups',[]):
         # 设置小班仅允许邀请码加入，防止被检查公告泄露
-        message_str += setGroupOnlyInviteCodeJoin(group_share_key, user_cookie, http2_client_obj)
+        tmp_str = setGroupOnlyInviteCodeJoin(group_share_key, user_cookie, http2_client_obj)
+        if tmp_str == 'INVALID':
+            daka_list.add_warning(f'{user_config["name"]}的小班{group_share_key}不存在，请检查配置')
         # 获取一个待检测的通知
         while True:
             item = daka_list.get_check_notice()

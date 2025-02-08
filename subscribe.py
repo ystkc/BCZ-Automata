@@ -3,7 +3,9 @@ import time
 import requests
 import argparse
 from textwrap import dedent
-base_url = "http://127.0.0.1:8850"
+from src.config import Config
+config = Config()
+base_url = f"http://{config.host}:{config.port}"
 
 def fetch_data(url):
     """获取JSON数据"""

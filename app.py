@@ -51,7 +51,6 @@ logger = logging.getLogger('BCZ-Automata')
 logger.setLevel(level)
 
 http2_client_obj = http2_client()
-star_gazer = stargazer_class()
 daka_list_obj = daka_list_class(logger, http2_client_obj, config)
 
 @asynccontextmanager
@@ -84,6 +83,8 @@ notice_subscriber_obj = notice_subscriber(logger, http2_client_obj, config)
 connected_clients = []
 # 抽象行为：=[WebSocket] (相当于在里面插入一个抽象基类！笨蛋)
 user_messages = queue.Queue()
+star_gazer = stargazer_class(logger, http2_client_obj, config, daka_list_obj, user_messages)
+
 
 @app.websocket('/ws')
 async def websocket_endpoint(websocket: WebSocket):
@@ -160,7 +161,7 @@ async def reload_http2(request: Request):
 @app.get('/save')
 async def save_config(request: Request):
     '''立即保存配置'''
-    daka_list_obj.close()
+    daka_list_obj.close(no_check_daka=True)
     return restful(200, '保存成功')
 
 @app.get('/check_daka')
@@ -774,7 +775,7 @@ def shutdown():
         return
     try:
         logger.info('BCZ-Automata 关闭中...')
-        if os.system("shutdown -s -t 600"):
+        if os.system("shutdown -s -t 900"):
             logger.error('关闭失败')
         else:
             logger.info('BCZ-Automata 关闭命令执行成功')
@@ -815,7 +816,7 @@ def shutdown_sallow_unotice_getuv(): # 在每天的59 23 * * 运行，根据星�
     elif weekday >= 0 and weekday <= 5: # 星期一到星期六晚上
         # parse_notice_online(only_raw_notice=True)
         shutdown()
-        time.sleep(500)
+        time.sleep(800)
         allow_sleep()
 
 def buka():
@@ -846,7 +847,7 @@ def schedule_task():
         if '--test' in sys.argv:
             Schedule("* * * * * tester", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=2048, random_delay=21))
         if config.archiever_enable: # 收集打卡数据、公告数据
-            Schedule("30-59 23 * * * rank_and_notice_bronze", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=1, random_delay=168))
+            Schedule("30-59 23 * * * rank_and_notice_bronzccce", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=1, random_delay=168))
             Schedule("33-59 23 * * * rank_and_notice_silver", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=2, random_delay=168))
             Schedule("36-59 23 * * * rank_and_notice_gold", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=3, random_delay=168))
             Schedule("39-59 23 * * * rank_and_notice_platinum", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=4, random_delay=168))

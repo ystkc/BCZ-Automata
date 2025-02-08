@@ -42,23 +42,36 @@ class user_dict:
             self.__user_dict_list = []
 
         self.modified = False
+        self.arbiter_unique_ids = set()
+        self.unique_id_index = {}
         # 给用户分配索引（从0开始）
         for i in range(len(self.__user_dict_list)):
             self.__user_dict_list[i]['config']['user_index'] = i
+            unique_id = self.__user_dict_list[i]['config']['unique_id']
+            if self.__user_dict_list[i]['config']['arbiter']:
+                self.arbiter_unique_ids.add(unique_id)
+            self.unique_id_index[unique_id] = i
 
-    def get_index_by_unique_id(self, unique_id=0):
-        unique_id = int(unique_id)
-        if unique_id == 0:
-            return 0
-        for i in range(len(self.__user_dict_list)):
-            if self.__user_dict_list[i]['config']['unique_id'] == unique_id:
-                return i
-        return None
+    def get_index_by_unique_id(self, unique_id:int =0):
+        return self.unique_id_index.get(int(unique_id), None)
     
-    def get_access_token_by_unique_id(self, unique_id=0):
+    def get_access_token_by_unique_id(self, unique_id:int =0):
         index = self.get_index_by_unique_id(unique_id)
         return self.__user_dict_list[index]['cookie']['access_token']
     
+    def get_except_from_arbiter(self, unique_ids: set, cnt, except_unique_id: set, daka_pk_status: dict): # return the dict
+        available = self.arbiter_unique_ids.difference(unique_ids).difference(except_unique_id)
+        results = []
+        for id in available:
+            index = self.unique_id_index[id]
+            if daka_pk_status.get(self.__user_dict_list[index]['config']['unique_id'], 0) == 2:
+                continue # 能量耗尽的用户不参与选取
+            results.append(self.__user_dict_list[index])
+            cnt -= 1
+            if cnt == 0:
+                break
+        return results
+            
     def get_count(self):
         return len(self.__user_dict_list)
     

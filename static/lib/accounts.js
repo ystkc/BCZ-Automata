@@ -7,7 +7,7 @@ let socket = null;
 function connect_ws() {
   socket = new WebSocket(`ws://${location.host}/ws`);
   socket.onmessage = function(event) {
-    console.log(event.data); // 如果不知道是谁在打卡，可以查看控制台（说白了：懒）
+    // console.log(event.data); // 如果不知道是谁在打卡，可以查看控制台（说白了：懒）
     msg = event.data;
       msg_info = msg.split('#')
       unique_id = msg_info[0];

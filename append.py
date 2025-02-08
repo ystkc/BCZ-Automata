@@ -5,7 +5,7 @@ import json
 
 def append_user_data(text=None):
     '''用于导入以及更新user_cookie.json文件'''
-    print("数据格式: can_daka(0/1)\tunique_id\tname\tword_count(新学词数)\tcooper(None)\tcan_pk(0/1)\tarbitor(0/1,是否允许PK反挂)\ttidal_group_limit(可用班位数)\t是否订阅该账户公告")
+    print("数据格式: can_daka(0/1)\tunique_id\tname\tword_count(新学词数)\tcooper(None)\tcan_pk(0/1)\tarbiter(0/1,是否允许PK反挂)\ttidal_group_limit(可用班位数)\t是否订阅该账户公告")
     
     template = {
             "cookie": {
@@ -101,7 +101,7 @@ def append_user_data(text=None):
                 "word_count": int(i[3]) if i[3] != '' else 5,
                 # "cooper": int(i[4]), # read only
                 "can_pk": int(i[6]) if i[6] != '' else 0,
-                "arbitor": int(i[7]) if i[7] != '' else 0, # arbitor
+                "arbiter": int(i[7]) if i[7] != '' else 0, # arbiter
                 "tidal_group_limit": int(i[8]) if i[8] != '' else 0,
                 "subscribe_notice": int(i[9]) if i[9] != '' else 0,
             }
