@@ -1,4 +1,5 @@
 # stargazer.py
+'''【独立工具】跟踪指定黑名单用户，并尝试匹配之。'''
 from src.config import Config
 from src.daka_utils import daka_list_class, stargazer_class
 from src.http2_client import http2_client

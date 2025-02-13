@@ -28,7 +28,7 @@
  ./yzdd.db(硬编码 暂不支持更改 仅开启YZDD功能后生成)
  config.puzzle_path(默认值 ./puzzle.db 仅开启BCZ_NCSVC功能后生成)
  config.dict_patch_db_path(默认值 ./lookup_patch.db)
-
+ config.stargazer_db(默认值 ./stargazer.db)
 
  - 生成的但不重要、无需备份的文件如下：
  ./lookup.db(由lookup.rar解压)
@@ -70,7 +70,35 @@
  - **`archiever_enable`** 是否启用排行榜班级信息备份功能（每天晚上23点半左右开始，本地模式下完成后自动关机）默认False。
  - **`class_list_2048`** 自定义班级列表，在archiever_enable为true时会一并备份。
 
-## 
+## 独立工具清单
+ - **`append.py`** 用于导入以及更新user_cookie.json文件，用法同启动后访问/append。
+ - **`cheat.py`** 绘图显示昨日500词以上用户的作弊、爆破情况，来自目录下的"cheat_tracker.%YY-%MM-%DD.csv"文件，数据来源于automata的notice_and_rank
+ - **`cooper.py`** 
+ - **`copy_log.py`** 
+ - **`dk.py`** 
+ - **`escape.py`** 
+ - **`extract.py`** 
+ - **`fit.py`** 
+ - **`flag.py`** 
+ - **`hex_transmute.py`** 
+ - **`lm.py`** 
+ - **`lp.py`** 
+ - **`magic_proxy.py`** 
+ - **`notice.py`** 
+ - **`pk_result_query.py`** 
+ - **`read_thrift.py`** 
+ - **`stargazer.py`** 
+ - **`subscribe.py`** 
+ - **`team.py`** 
+ - **`total_length.py`** 
+ - **`uv.py`** 
+ - **`word_match.py`** 
+ - **`xhcx.py`** 
+
+## 待办事项
+ - member_class_storage 类
+ - 更新Notice-Examiner的页面
+ - 学习单词时，改为从服务器获取学习记录（本地瞎选可能有点问题，而且新词书会bug）
  
 ## 部分活动的API，使用频率较低，不提供自动化
 

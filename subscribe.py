@@ -1,3 +1,5 @@
+# subscribe.py
+'''【独立工具】查询已订阅的用户加入小班的公告更新'''
 import os
 import time
 import requests
