@@ -104,6 +104,7 @@ def append_user_data(text=None):
                 "arbiter": int(i[7]) if i[7] != '' else 0, # arbiter
                 "tidal_group_limit": int(i[8]) if i[8] != '' else 0,
                 "subscribe_notice": int(i[9]) if i[9] != '' else 0,
+                "check_notice": int(i[10]) if i[10] != '' else 0,
             }
             user_cookie = {
                 "access_token": i[5],

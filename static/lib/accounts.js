@@ -1,5 +1,6 @@
 // 页面加载后，请求账号列表
 let daka = 0, not_daka = 0, not_loaded = 0; // 总账号数=daka+not_daka，总班位数=总账号数*6
+let focused_id = -1;
 let groups_list = []; // 加入的班级列表，{name: 'xxx', count: 有多少个账号加入该班级, include_leader: true/false}
 let notice_groups_count = 0, not_notice_groups_count = 0; // 加入的青铜班级（用于更公告）数量
 let all_groups_count = 0; // 总现在开了的班位数量
@@ -240,6 +241,13 @@ function showOwnGroups(data, unique_id) {
   table_element.id = `table${unique_id}`;
   table_element.innerHTML = table;
   document.querySelector(`#group${unique_id}`).appendChild(table_element);
+}
+function changeAvatar(unique_id){
+  focused_id = unique_id;
+  var dropArea = document.getElementById('dropzone');
+  dropArea.style.display = 'flex';
+  dropArea.innerHTML = `更换用户${unique_id}的头像<br>拖动文件到此处，或点击取消`;
+  dropArea.scrollIntoView();
 }
 function changeNotice(group_share_key, unique_id, group_id=''){
   let op1_button = document.querySelector(`#op1${unique_id}${group_share_key}`);
@@ -605,6 +613,55 @@ function deleteAccount(unique_id) {
 
 // 页面加载完成后，调用 loadAccountList 函数
 window.onload = function() {
+  var dropArea = document.getElementById('dropzone');
+  ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+    dropArea.addEventListener(eventName, preventDefaults, false)
+  });
+
+  function preventDefaults(e) {
+      e.preventDefault()
+      e.stopPropagation()
+  }
+
+  ['dragenter', 'dragover'].forEach(eventName => {
+      dropArea.classList.add('highlight')
+  });
+
+  ['dragleave', 'drop'].forEach(eventName => {
+      dropArea.classList.remove('highlight')
+  });
+  
+  dropArea.addEventListener('drop', handleDrop, false)
+  function handleDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    // 判断是否是一个图片
+    if (e.dataTransfer.files.length !== 1 || !e.dataTransfer.files[0].type.startsWith('image')) {
+      alert('请拖入一个图片文件');
+      return;
+    }
+    // 发送文件数据到/api/change_avatar?unique_id=${focused_id}
+    let file = e.dataTransfer.files[0];
+    let formData = new FormData();
+    formData.append('img_data', file);
+
+    fetch('/api/change_avatar?unique_id=' + focused_id, {
+      method: 'POST',
+      body: formData
+    })
+    .then(function(response) {
+      return response.json();
+    })
+    .then(function(data) {
+      alert(data.msg);
+      document.getElementById('dropzone').style.display = 'none';
+      loadOwnGroups(focused_id);
+    })
+    .catch(function(error) {
+      console.error(error);
+    });
+  }
+
   connect_ws();
   loadAccountList();
 }

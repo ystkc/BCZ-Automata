@@ -33,8 +33,8 @@ for dir in result: # 按格式dates-uvs读取文件夹名
     date, uv = dir
     date = str(date)
     uv = int(uv)
-    if date < thirty_days_ago:
-        continue
+    # if date < thirty_days_ago:
+    #     continue
     try:
         index = dates.index(date)
         uvs[index] = max(uvs[index], int(uv))

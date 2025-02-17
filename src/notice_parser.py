@@ -182,7 +182,7 @@ class NoticeParser:
 
         for char in invalid_chars:
             filtered_string = filtered_string.replace(char, '')
-        return filtered_string
+        return filtered_string.lower()
 
     def parse_text(self, text: str) -> list:
         '''将文本解析长度为2的所有字串列表'''

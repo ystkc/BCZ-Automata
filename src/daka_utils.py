@@ -3320,10 +3320,30 @@ def setGroupOnlyInviteCodeJoin(share_key: str, user_cookie: str, http2_client_ob
         return (f"切换小班是否仅允许邀请码加入失败，请检查{response.json()}<br>")
     return (f"<span style='color:green'>切换小班是否仅允许邀请码加入成功</span><br>")
 
+def get_own_bronze_groups_share_key(user_cookie, http2_client_obj:http2_client) -> list:
+    '''获取自己的青铜小班分享码'''
+    # https://group.baicizhan.com/group/own_groups?uniqueId=0
+    headers = getHeaders("$group", user_cookie, int(time.time()), index=1)
+    response = http2_client_obj.send_http2_request('GET', f'https://{headers["Host"]}/group/own_groups?uniqueId=0', headers, None)
+    if response.status_code != 200 or response.json().get('code') != 1:
+        msg = f'获取自己的青铜小班分享码失败! 请检查{response.text}'
+        print(f'{msg}\n{response.text}')
+        return []
+    result = []
+    data = response.json()['data']
+    for group in data['list']:
+        if group['rank'] == 1 and group['leader']:
+            result.append(group['shareKey'])
+    return result
+
 def notice_checker(daka_list: daka_list_class, user_cookie, user_config, http2_client_obj:http2_client):
     '''检查通知'''
     message_str = ''
-    for group_share_key in user_config.get('own_groups',[]):
+    if not user_config.get('check_notice', False):
+        return
+    own_groups_share_key = get_own_bronze_groups_share_key(user_cookie, http2_client_obj)
+    print(f'{user_config["name"]}的青铜小班分享码：{own_groups_share_key}')
+    for group_share_key in own_groups_share_key:
         # 设置小班仅允许邀请码加入，防止被检查公告泄露
         tmp_str = setGroupOnlyInviteCodeJoin(group_share_key, user_cookie, http2_client_obj)
         if tmp_str == 'INVALID':
@@ -3766,7 +3786,9 @@ def generator_wrapper(messages: queue.Queue, unique_id: int, func, *args, **kwar
         for msg in func(*args, **kwargs):
             messages.put(('msg', unique_id, msg))
     except Exception as e:
-        pass
+        with open('error.log', 'a', encoding='utf-8') as f:
+            f.write(f'{datetime.datetime.now().strftime("%Y-%m-%d %H-%M-%S")} {unique_id} {e} {traceback.format_exc()}\n')
+        messages.put(('err', unique_id, f'{e}'))
 
 def daka_all_headless(user_messages: queue.Queue, daka_list: daka_list_class, http2_client_obj, only_rank_and_notice, user_dict_list=[], random_delay=1800):
     if user_dict_list == []:

@@ -1,21 +1,26 @@
 <!DOCTYPE html>
+<meta charset="utf-8">
 <html>
 <head><title>账号信息配置</title></head>
 <body>
+    <a id="download" href="#" download="账号信息配置模板.csv">下载模板</a>
+    <br>
     <textarea name="content" rows="50" cols="100"></textarea>
     <br>
     <button onclick="submit()">提交</button>
     <div id="result"></div>
 </body>
 <script>
+    // 下载模板
+    document.getElementById('download').onclick = function() {
+        const contentWithBOM = '\uFEFF' + "说明：请先在excel编辑好，一行一个账号，然后粘贴到/append/的文本框中再点提交\n每行的格式如下（无需复制表头，带*为必填）\n请务必拷贝所有列，否则无法识别\n是否代卡*(0/1),百词斩id*(留空无效),百词斩昵称*(无需和bcz一致),每日新学词数,铜板(留空),令牌*,是否允许每日任务pk0/1(默认否),是否允许pk反挂0/1(默认否),最大可用班位数(默认6，如果不足6个会自动缩小),是否订阅公告更新0/1(默认否),允许青铜班用于查公告0/1(不会影响非青铜班)默认否";
+        const blob = new Blob([contentWithBOM], { type: 'text/csv;charset=UTF-8' });
+        const url = URL.createObjectURL(blob);
+        this.href = url;
+        this.download = '账号信息配置模板.csv';
+    };
     // 新增placeholder
-    document.querySelector('textarea[name="content"]').placeholder = `请先在excel编辑好，一行一个账号，然后粘贴到此处
-每行的格式如下（无需复制表头，带*为必填）：
-
-是否代卡*(0/1)    百词斩id*(留空无效)    百词斩昵称*(无需和bcz一致)    每日新学词数    铜板(留空)    令牌*    是否允许每日任务pk(默认否)    是否允许pk反挂(默认否)    可用班位数(默认0)    是否订阅公告更新(默认否)
-
-
-请务必拷贝所有列，否则无法识别`
+    document.querySelector('textarea[name="content"]').placeholder = `请下载模板查看说明`
     // 监听提交事件
     function submit() {
         // 阻止默认行为

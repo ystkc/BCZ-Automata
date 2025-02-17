@@ -6,6 +6,7 @@ import time
 import sqlite3
 import logging
 import queue
+from urllib import parse
 
 debug = True
 if '--debug' in sys.argv:
@@ -15,7 +16,7 @@ else:
     level = logging.INFO
     debug = False
 
-from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect, File, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -151,6 +152,11 @@ async def index(request: Request):
 
 
 # 以下是调试接口
+@app.get('/buka')
+async def buka(request: Request):
+    '''测试接口'''
+    return restful(200, f'buka cnt:{buka()}')
+
 @app.get('/reload')
 async def reload_http2(request: Request):
     '''重新加载http2客户端'''
@@ -503,7 +509,35 @@ async def subscribe_reply(request: Request, item: dict, unique_id: str='', group
     user_dict = daka_list_obj.get_user_dict(unique_id)
     code, result_str = notice_subscriber_obj.read_reply_and_ack(unique_id, user_dict, group_share_key, group_id, notice_hash, reply_content, correspond)
     return restful(code, result_str)
-    
+
+@app.post('/api/change_avatar')
+async def change_avatar(request: Request, unique_id: str='', img_data: UploadFile=File(...)):
+    '''将用户头像上传到服务器'''
+    try:
+        if not unique_id:
+            return restful(400, '调用方法异常Σ(っ °Д °;)っ')
+        user_dict = daka_list_obj.get_user_dict(unique_id)
+        if not user_dict:
+            return restful(400, '用户不存在')
+        access_token = parse.unquote(user_dict['cookie']['access_token']).encode('utf-8')
+        boundary = b'0xKhTmLbOuNdArY-12EA39A8-13AD-4DD1-A552-9E9D3F35390A'
+        img_content = await img_data.read()
+        form_data = b"--" + boundary + b"\r\nContent-Disposition: form-data; name=\"token\"\r\n\r\n" + access_token + b"\r\n--" + boundary + b"\r\nContent-Disposition: form-data; name=\"image\"; filename=\"avatar.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n" + img_content + b"\r\n--" + boundary + b"--\r\n"
+        headers = {
+            'Cookie': f'access_token={access_token}',
+            'Content-Type': 'multipart/form-data; charset=utf-8; boundary=0xKhTmLbOuNdArY-12EA39A8-13AD-4DD1-A552-9E9D3F35390A',
+            'User-Agent': 'Dalvik/2.1.0 (Linux; U; Android 12; DCO-AL00 Build/9aaea7d.0)',
+            'Host': 'avatar.baicizhan.com',
+            'Connection': 'Keep-Alive',
+            'Accept-Encoding': 'gzip',
+            'Content-Length': str(len(form_data))
+        }
+        response = http2_client_obj.post('https://avatar.baicizhan.com/avatar/upload', headers=headers, json=form_data)
+        result_json = response.json()
+        return restful(200, str(result_json), result_json)
+    except Exception as e:
+        return restful(400, f'{e}')
+
 @app.get("/own_groups")  
 async def own_groups(request: Request, unique_id: str=''):
     # return restful(200, '获取用户群组成功', [{'name': '用户年级组10', 'share_key': '', 'rank': '10已打卡于2022-01-01 00:00:00', 'introduction': '加入上限10', 'notice': '授权上限10', 'group_nickname': ''}])
@@ -566,8 +600,9 @@ async def own_groups(request: Request, unique_id: str=''):
         user_dict['config']['grade'] = data['grade']
         cooper = user_dict['config'].get('cooper', -1)
         daka_list_obj.update_user_dict(user_dict)
+        unique_id = user_dict['config']['unique_id']
         groups.append({
-            'name': f'用户年级{data["grade"]}书本{user_dict["config"]["book_id"]}/{user_ip_desc}',
+            'name': f'<img src="{result.user_info.avatar}" style="width: 30px; height: 30px;" onclick="changeAvatar({unique_id})"/><br>({result.user_info.nickname})<br>年级{data["grade"]}书本{user_dict["config"]["book_id"]}(新学{result.learn_info.daily_plan_count}复习{result.learn_info.review_plan_count})/{user_ip_desc}',
             'share_key': '',
             'rank': f'{today_daka}于{date}<br>+<span class="cooper">{cooper}</span>',
             'introduction': data["groupLimiteNumber"],
@@ -824,6 +859,7 @@ def buka():
     print(f"正在为{len(not_daka_users)}人补卡")
     if len(not_daka_users) > 0: # -1 正常打卡，-2 补卡
         daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=-2, user_dict_list=not_daka_users, random_delay=180)
+    return len(not_daka_users)
 
 def sync_and_subscribe():
     '''同步和订阅服务'''
