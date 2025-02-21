@@ -53,22 +53,30 @@
 5.如果需要配合fiddler使用魔法令牌，请安装fiddler的CA证书，并配置fiddler代理到本地8080端口+忽略服务器证书错误，且移动端或移动端模拟器代理到本地8888端口
 
 ## config.json配置说明
- - **`host` `port`** 服务器运行的端口，默认127.0.0.1:8850
- - **`database_path`** 公告和班级信息数据库路径（自动生成）默认../BCZ-Notice-Examiner/bcz_notice.db
- - **`dict_patch_db_path`** 词库补丁数据库路径（自动生成）默认./lookup_patch.db
- - **`puzzle_path`** BCZ_NCSVC题库数据库路径（自动生成）默认./puzzle.db
- - **`main_token`** 某有效账号的access_token，应当使用未加入任何小班的账号，否则昵称获取会不准确
- - **`sync_command`** 自动备份命令，每天早上执行一次，可以手动添加备份命令，或启动订阅公告start subscribe.py等方便管理的小工具。仅local为true时生效。
- - **`prevent_sleep_command`** 防止系统休眠命令，默认timeout，仅在win11下测试有效。仅local为true时生效。
- - **`allow_sleep_command`** 允许系统休眠命令，默认timeout reverse，仅在win11下测试有效。仅local为true时生效。
- - **`local`** 是否为本地运行，True时会晚上23:59自动运行关机命令，更改系统休眠设置，并在早上自动运行备份命令。
- - **`log_dir`** 日志目录，默认./logs/
- - **`check_notice_pace`** 公告坏词检查步长，单位为字符(中英文emoji都是1个字符)。
- - **`pk_blacklist`** 单词pk黑名单，如果对手分数>180，将会触发反挂机。（默认>188触发反挂机）
- - **`pk_whitelist`** 单词pk白名单，无论对手分数，都不会触发反挂机。
- - **`shutdown_command`** 关机命令，默认shutdown -s -t 120，仅在local为true时生效。
- - **`archiever_enable`** 是否启用排行榜班级信息备份功能（每天晚上23点半左右开始，本地模式下完成后自动关机）默认False。
- - **`class_list_2048`** 自定义班级列表，在archiever_enable为true时会一并备份。
+ - **`host`** 服务器地址，默认127.0.0.1
+ - **`port`** 服务器端口，默认8850
+ - **`main_token`** 主账号令牌，可用试用账号令牌
+ - **`database_path`** archiever储存库，含公告、用户、班级、连胜信息，默认../BCZ-Notice-Examiner/bcz_notice.db
+ - **`archiever_enable`** archiever开关，开启时每天固定时间爬取信息并储存，默认False
+ - **`class_list_2048`** 如果要archiever额外爬取不在榜上的小班，可以加入此处。不受archiever开关控制。
+ - **`dict_patch_db_path`** pk补丁包，记录做过的题，减少查询和错误，默认./lookup_patch.db
+ - **`puzzle_path`** YZDD记录表，默认./puzzle.db
+ - **`local`** 本地模式。开启时会每天固定时间执行同步、阻止休眠、允许休眠和关机命令，默认False
+ - **`sync_command`** 每天早上执行一次，可以手动添加备份命令，或启动如订阅公告start subscribe.py等方便管理的小工具，默认[]
+ - **`prevent_sleep_command`** 每天傍晚执行一次，防止在晚上爬取数据时本地设备休眠而无法正常运行，功能：设置笔记本合盖操作无，睡眠永不，休眠永不，默认timeout
+ - **`allow_sleep_command`** 每天半夜数据爬取结束后执行一次，功能：睡眠3分钟，休眠3分钟，默认timeout reverse
+ - **`shutdown_command`** 每天半夜数据爬取结束后执行一次，建议：定时900s以上关机，默认shutdown -s -t 900
+ - **`log_dir`** 日志目录，包括daka、pk、subscribe、stargazer、cheat_tracker，默认./logs/
+ - **`check_notice_pace`** 涉嫌违禁公告自动后往前查违禁步长。在公告前面加上#可以取消自动，加>改方向为前往后，默认3
+ - **`pk_blacklist`** pk黑名单，遇到后改为强反挂模式。但属于被动反挂，对于极端挂无法获胜。反极端挂请使用stargazer，默认[]
+ - **`pk_whitelist`** pk白名单，遇到后禁用反挂，即便对方开挂也只会跟随分数，默认[]
+ - **`stargazer_enable`** 启动stargazer功能，默认True
+ - **`stargazer_db`** stargazer跟踪记录，默认stargazer.db
+ - **`anticheat_power`** 初始反挂力度，最低0时第一手188，最高25时第一手199，建议5-10，默认10
+ - **`do_not_charge_pk_energy`** 不使用铜板充能，默认True
+ - **`arbiter_interval`** arbiter发车时间间隔，单位秒，发车总时长=arbiter_size * arbiter_interval + arbiter_offset，默认1
+ - **`arbiter_offset`** arbiter胜利后，开始下一轮的延迟，单位秒，默认2
+ - **`arbiter_size`** 建议最大值：总账号数 / (60秒每体力 * 10体力每次) * 30s每局 * 2，理论最大值18，还要测试确保带宽足够，默认8
 
 ## 独立工具清单
  - **`append.py`** 用于导入以及更新user_cookie.json文件，用法同启动后访问/append。

@@ -810,7 +810,7 @@ def shutdown():
         return
     try:
         logger.info('BCZ-Automata 关闭中...')
-        if os.system("shutdown -s -t 900"):
+        if os.system(config.shutdown_command):
             logger.error('关闭失败')
         else:
             logger.info('BCZ-Automata 关闭命令执行成功')
@@ -876,7 +876,7 @@ def schedule_task():
         Schedule("58-59 23 * * 0-6 shutdown_sallow_unotice_getuv", lambda: shutdown_sallow_unotice_getuv())
 
         Schedule("* 4-8 * * 0 daka_schedule", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj,http2_client_obj,-1, random_delay=3000))
-        Schedule("* 5-8 * * 1-6 daka_schedule", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj,http2_client_obj,-1, random_delay=2000))
+        Schedule("* 5-10 * * 1-6 daka_schedule", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj,http2_client_obj,-1, random_delay=2000))
         Schedule("* 6-8 * * 0-6 sync_and_subscribe", lambda: sync_and_subscribe())
         Schedule("* 4-8,21-23 * * 0-6 prevent_sleep", lambda: prevent_sleep())
 

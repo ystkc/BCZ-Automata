@@ -13,43 +13,55 @@ class Config:
         self.default_config_dict = {
             'host': '127.0.0.1',
             'port': 8850,
-            'database_path': '../BCZ-Notice-Examiner/bcz_notice.db',
-            'dict_patch_db_path': 'lookup_patch.db',
-            'puzzle_path': 'puzzle.db',
-            'main_token': '',
-            'sync_command': [], # 每天早上执行一次，可以手动添加备份命令，或启动订阅公告start subscribe.py等方便管理的小工具
-            'prevent_sleep_command': 'timeout',
-            'allow_sleep_command': 'timeout reverse',
-            'local': False,
-            'log_dir': './logs/',
-            'check_notice_pace': 3,
-            'pk_blacklist': [],
-            'pk_whitelist': [],
-            'archiever_enable': False,
-            'class_list_2048': [],
-            'stargazer_enable': True,
-            'stargazer_db': 'stargazer.db',
+            'main_token': '', # 试用账号令牌
+            'database_path': '../BCZ-Notice-Examiner/bcz_notice.db', # archiever储存库，含公告、用户、班级、连胜信息
+            'archiever_enable': False, # archiever开关，开启时每天固定时间爬取信息并储存
+            'class_list_2048': [], # 如果要archiever额外爬取不在榜上的小班，可以加入此处。不受archiever开关控制。
+            'dict_patch_db_path': 'lookup_patch.db', # pk补丁包，记录做过的题，减少查询和错误
+            'puzzle_path': 'puzzle.db', # YZDD记录表
+            'local': False, # 本地模式。开启时会每天固定时间执行同步、阻止休眠、允许休眠和关机命令
+            'sync_command': [], # 每天早上执行一次，可以手动添加备份命令，或启动如订阅公告start subscribe.py等方便管理的小工具
+            'prevent_sleep_command': 'timeout', # 每天傍晚执行一次，防止在晚上爬取数据时本地设备休眠而无法正常运行，功能：设置笔记本合盖操作无，睡眠永不，休眠永不
+            'allow_sleep_command': 'timeout reverse', # 每天半夜数据爬取结束后执行一次，功能：睡眠3分钟，休眠3分钟
+            'shutdown_command': 'shutdown -s -t 900', # 每天半夜数据爬取结束后执行一次，建议：定时900s以上关机
+            'log_dir': './logs/', # 日志目录，包括daka、pk、subscribe、stargazer、cheat_tracker
+            'check_notice_pace': 3, # 涉嫌违禁公告自动后往前查违禁步长。在公告前面加上#可以取消自动，加>改方向为前往后
+            'pk_blacklist': [], # pk黑名单，遇到后改为强反挂模式。但属于被动反挂，对于极端挂无法获胜。反极端挂请使用stargazer
+            'pk_whitelist': [], # pk白名单，遇到后禁用反挂，即便对方开挂也只会跟随分数
+            'stargazer_enable': True, # 启动stargazer功能
+            'stargazer_db': 'stargazer.db', # stargazer跟踪记录
+            'anticheat_power': 10, # 初始反挂力度，最低0时第一手188，最高25时第一手199，建议5-10
+            'do_not_charge_pk_energy': True, # 不使用铜板充能
+            'arbiter_interval': 1, # arbiter发车时间间隔，单位秒，发车总时长=arbiter_size * arbiter_interval + arbiter_offset
+            'arbiter_offset': 2, # arbiter胜利后，开始下一轮的延迟，单位秒
+            'arbiter_size': 8, # 建议最大值：总账号数 / (60秒每体力 * 10体力每次) * 30s每局 * 2，理论最大值18，还要测试确保带宽足够
         }
         self.initConfig()
         self.raw = self.read()
-        self.host = self.raw.get('host', '')
-        self.port = self.raw.get('port', '')
-        self.database_path = self.raw.get('database_path', '')
+        self.host = self.raw.get('host', '127.0.0.1')
+        self.port = self.raw.get('port', 8850)
         self.main_token = self.raw.get('main_token', '')
+        self.database_path = self.raw.get('database_path', '../BCZ-Notice-Examiner/bcz_notice.db')
         self.local = self.raw.get('local', False)
         self.sync_command = self.raw.get('sync_command', [])
-        self.prevent_sleep_command = self.raw.get('prevent_sleep_command', '')
-        self.allow_sleep_command = self.raw.get('allow_sleep_command', '')
-        self.log_dir = self.raw.get('log_dir', '')
+        self.prevent_sleep_command = self.raw.get('prevent_sleep_command', 'timeout')
+        self.allow_sleep_command = self.raw.get('allow_sleep_command', 'timeout reverse')
+        self.shutdown_command = self.raw.get('shutdown_command','shutdown -s -t 900')
+        self.log_dir = self.raw.get('log_dir', './logs/')
         self.check_notice_pace = self.raw.get('check_notice_pace', 3)
         self.puzzle_path = self.raw.get('puzzle_path', 'puzzle.db')
-        self.pk_blacklist = self.raw.get('pk_blacklist', [])
-        self.pk_whitelist = self.raw.get('pk_whitelist', [])
-        self.dict_patch_db_path = self.raw.get('dict_patch_db_path', '')
+        self.dict_patch_db_path = self.raw.get('dict_patch_db_path', 'lookup_patch.db')
         self.archiever_enable = self.raw.get('archiever_enable', False)
         self.class_list_2048 = self.raw.get('class_list_2048', [])
+        self.pk_blacklist = self.raw.get('pk_blacklist', [])
+        self.pk_whitelist = self.raw.get('pk_whitelist', [])
         self.stargazer_enable = self.raw.get('stargazer_enable', True)
-        self.stargazer_db = self.raw.get('stargazer_db', 'stargazer.db')
+        self.stargazer_db = self.raw.get('stargazer_db','stargazer.db')
+        self.anticheat_power = self.raw.get('anticheat_power', 10)
+        self.do_not_charge_pk_energy = self.raw.get('do_not_charge_pk_energy', True)
+        self.arbiter_interval = self.raw.get('arbiter_interval', 1)
+        self.arbiter_offset = self.raw.get('arbiter_offset', 2)
+        self.arbiter_size = self.raw.get('arbiter_size', 8)
         self.verify()
 
     def initConfig(self):
@@ -88,93 +100,3 @@ class Config:
     def verify(self):
         '''验证配置文件的完整性'''
         value = None
-        if self.host == '':
-            key = 'host'
-            value = self.default_config_dict[key]
-            self.save(key, value)
-            self.host = value
-        if self.port == '':
-            key = 'port'
-            value = self.default_config_dict[key]
-            self.save(key, value)
-            self.port = value
-        if self.database_path == '':
-            key = 'database_path'
-            value = self.default_config_dict[key]
-            self.save(key, value)
-            self.database_path = value
-        if self.main_token == '':
-            key ='main_token'
-            value = self.default_config_dict[key]
-            self.save(key, value)
-            self.main_token = value
-        if self.local == '':
-            key = 'local'
-            value = self.default_config_dict[key]
-            self.save(key, value)
-            self.local = value
-        if self.sync_command == []:
-            key ='sync_command'
-            value = self.default_config_dict[key]
-            self.save(key, value)
-            self.sync_command = value
-        if self.prevent_sleep_command == '':
-            key = 'prevent_sleep_command'
-            value = self.default_config_dict[key]
-            self.save(key, value)
-            self.prevent_sleep_command = value
-        if self.allow_sleep_command == '':
-            key = 'allow_sleep_command'
-            value = self.default_config_dict[key]
-            self.save(key, value)
-            self.allow_sleep_command = value
-        if self.log_dir == '':
-            key = 'log_dir'
-            value = self.default_config_dict[key]
-            self.save(key, value)
-            self.log_dir = value
-        if self.check_notice_pace == '':
-            key = 'check_notice_pace'
-            value = self.default_config_dict[key]
-            self.save(key, value)
-            self.check_notice_pace = value
-        if self.puzzle_path == '':
-            key = 'puzzle_path'
-            value = self.default_config_dict[key]
-            self.save(key, value)
-            self.puzzle_path = value
-        if self.pk_blacklist == []:
-            key = 'pk_blacklist'
-            value = self.default_config_dict[key]
-            self.save(key, value)
-            self.pk_blacklist = value
-        if self.pk_whitelist == []:
-            key = 'pk_whitelist'
-            value = self.default_config_dict[key]
-            self.save(key, value)
-            self.pk_whitelist = value
-        if self.dict_patch_db_path == '':
-            key = 'dict_patch_db_path'
-            value = self.default_config_dict[key]
-            self.save(key, value)
-            self.dict_patch_db_path = value
-        if self.archiever_enable == '':
-            key = 'archiever_enable'
-            value = self.default_config_dict[key]
-            self.save(key, value)
-            self.archiever_enable = value
-        if self.class_list_2048 == []:
-            key = 'class_list_2048'
-            value = self.default_config_dict[key]
-            self.save(key, value)
-            self.class_list_2048 = value
-        if self.stargazer_enable == '':
-            key ='stargazer_enable'
-            value = self.default_config_dict[key]
-            self.save(key, value)
-            self.stargazer_enable = value
-        if self.stargazer_db == '':
-            key ='stargazer_db'
-            value = self.default_config_dict[key]
-            self.save(key, value)
-            self.stargazer_db = value

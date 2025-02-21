@@ -26,14 +26,6 @@ LOAD_MEMBER_TABLE = True # 如果要一天获取多次，请设置为True
 MEMBERS_GROUPS_LIMIT = 2147483647 # 数据库循环队列的大小（旧的会被删除）
 DICT_DB_PATH = 'lookup.db'
 
-# 以下是反挂配置
-ARBITER_SIZE = 10 # 如果size太小，人多时很难catch，如果size太大，会对网络要求较高
-ARBITER_OFFSET = 2 # 发射前等待ARBITER_OFFSET秒
-ARBITER_INTERVAL = 1 # 发射总时长：ARBITER_SIZE * ARBITER_INTERVAL 单位s
-ARBITER_INDEX = 10**(ARBITER_SIZE-1)
-DO_NOT_CHARGE_PK_ENERGY = True # 不使用铜板充能
-AC_POWER = 30 # 在对手差距大于AC_POWER时，取消反挂(而是采用跟随分数)，当最大60时，一开始就会打出199的分数，0时一开始185
-
 # 功能开关
 BCZ_NCSVC = False # 已于12.5结束
 YZDD = False # 2024.12.2已经结束
@@ -110,6 +102,8 @@ class daka_list_class:
         self.class_list_2048 = []
         for share_key in config.class_list_2048:
             self.class_list_2048.append({'shareKey': share_key, 'score': None})
+        self.anticheat_power = config.anticheat_power
+        self.do_not_charge_pk_energy = config.do_not_charge_pk_energy
         self.lock = threading.Lock()
         self.patch_list = [] # 公告块，切分合并成1000长度(每次检测最多1000个)，检测后切除通过的部分，得到坏词
         self.status = [] # 标记每个patch_list中的检查状态：0未检查，1已从后检查，2已双向检查
@@ -222,6 +216,15 @@ class daka_list_class:
             with zipfile.ZipFile('lookup.rar', 'r') as z:
                 z.extractall()
                 logger.info('解压lookup.rar成功')
+        
+        # 加载king状态
+        try:
+            with open('king_status.json', 'r', encoding='utf-8') as f:
+                self.is_king = json.load(f)
+            # 将所有key转为int
+            self.is_king = {int(k):v for k,v in self.is_king.items()}
+        except:
+            self.is_king = {}
         self.latest_check_notice_timestamp = 0
         self.notice_parser = NoticeParser()
 
@@ -319,14 +322,6 @@ class daka_list_class:
         cursor.execute('''PRAGMA cache_size = -100000''')
         # 读取需要检查的notice
         self.check_list = []
-        # 加载king状态
-        try:
-            with open('king_status.json', 'r', encoding='utf-8') as f:
-                self.is_king = json.load(f)
-            # 将所有key转为int
-            self.is_king = {int(k):v for k,v in self.is_king.items()}
-        except:
-            self.is_king = {}
         # 加载坏词
         try:
             with open('tmp_bad_words.json', 'r', encoding='utf-8') as f:
@@ -571,9 +566,9 @@ class daka_list_class:
             cursor.execute('''DELETE FROM MEMBERS WHERE TODAY_DATE < ?''', (thresh_date_int,))
 
         # 删除notice中DATE<thresh_date_int且(LATEST_DATE 是None或<thresh_date_int)的记录
-        cursor.execute('''SELECT COUNT(*) FROM notice WHERE DATE < ? AND (LATEST_DATE IS NULL OR LATEST_DATE < ?)''', (thresh_date_int_timestamp, thresh_date_int_timestamp))
-        print(f'删除{thresh_date.strftime("%Y-%m-%d")}前的notice数据{cursor.fetchone()[0]}条')
-        cursor.execute('''DELETE FROM notice WHERE DATE < ? AND (LATEST_DATE IS NULL OR LATEST_DATE < ?)''', (thresh_date_int_timestamp, thresh_date_int_timestamp))
+        # cursor.execute('''SELECT COUNT(*) FROM notice WHERE DATE < ? AND (LATEST_DATE IS NULL OR LATEST_DATE < ?)''', (thresh_date_int_timestamp, thresh_date_int_timestamp))
+        # print(f'删除{thresh_date.strftime("%Y-%m-%d")}前的notice数据{cursor.fetchone()[0]}条')
+        # cursor.execute('''DELETE FROM notice WHERE DATE < ? AND (LATEST_DATE IS NULL OR LATEST_DATE < ?)''', (thresh_date_int_timestamp, thresh_date_int_timestamp))
         # 删除MEMBERS_GROUPS中ACHIEVED_DATE在7天前且STREAK_TIMES<7的记录
         thresh_date_int = int((now - datetime.timedelta(days=7)).strftime('%Y%m%d'))
         cursor.execute('''SELECT COUNT(*) FROM MEMBERS_GROUPS WHERE ACHIEVED_DATE < ? AND STREAK_TIMES < ?''', (thresh_date_int, 7))
@@ -1236,6 +1231,10 @@ class stargazer_class:
         self.stargazer_set = set(self.stargazer_list)
         self.stargazer_cnt = len(self.stargazer_list)
         self.stargazer_db = config.stargazer_db
+        self.arbiter_offset = config.arbiter_offset
+        self.arbiter_interval = config.arbiter_interval
+        self.arbiter_size = config.arbiter_size
+        self.arbiter_index = 10**(self.arbiter_size-1)
         self.stargazers = {}
         self.daka_list_obj = daka_list_obj
         self.session_id = None
@@ -1282,7 +1281,7 @@ class stargazer_class:
         '''获取ARBITER_SIZE个未在运行的arbiter token'''
         new_token_user_dict_list = []
         new_ids = set()
-        for i in range(ARBITER_SIZE):
+        for i in range(self.arbiter_size):
             try:
                 my_unique_id = self.token_user_dict_list[i]['config']['unique_id']
                 if not self.daka_list_obj.query_is_king(my_unique_id):
@@ -1296,8 +1295,8 @@ class stargazer_class:
                     new_ids.add(my_unique_id)
             except IndexError:
                 pass
-        if len(new_token_user_dict_list) < ARBITER_SIZE:
-            demand = ARBITER_SIZE - len(new_token_user_dict_list)
+        if len(new_token_user_dict_list) < self.arbiter_size:
+            demand = self.arbiter_size - len(new_token_user_dict_list)
             new_arbiters = self.daka_list_obj.get_not_running_arbiter(demand, new_ids)
             if new_arbiters == []:
                 if new_token_user_dict_list != []:
@@ -1352,7 +1351,7 @@ class stargazer_class:
                 self.action_buffer[id] = action
             else:
                 self.action_buffer[id] = self.action_buffer[id] * 10 + action
-            if self.action_buffer[id] < ARBITER_INDEX:
+            if self.action_buffer[id] < self.arbiter_index:
                 return
             action = self.action_buffer[id] # 累计达到ARBITER_SIZE位后，写入数据库
             del self.action_buffer[id]
@@ -1451,12 +1450,12 @@ class stargazer_class:
 
     def start_arbiter(self, user_id, current_timestamp):
         '''启动反挂器'''
-        time.sleep(ARBITER_OFFSET)
+        time.sleep(self.arbiter_offset)
         for token_user_dict in self.token_user_dict_list:
             self.daka_list_obj.set_pk_status(token_user_dict['config']['unique_id'], -1)
             threading.Thread(target=self.arbiter_wrapper, args=(token_user_dict, user_id, current_timestamp)).start()
             self.logger.info(f'启动arbiter {token_user_dict["config"]["name"]} -> {user_id}')
-            time.sleep(ARBITER_INTERVAL)
+            time.sleep(self.arbiter_interval)
         
         # 当前token_list已经发射完毕，获取新的token_list
         try:
@@ -1946,8 +1945,6 @@ def pkonline(user_cookie, user_config, http2_client_obj: http2_client, daka_list
 
 def check_and_charge_pk_energy(user_cookie, user_config, http2_client_obj: http2_client, session_id):
     '''检查并充能PK能量'''
-    if DO_NOT_CHARGE_PK_ENERGY:
-        return False
     # https://pk.baicizhan.com/api/rankpk/energy?time=&activity_id=0&session_id=
     time_long = int(time.time() * 1000)
     time_short = int(time.time())
@@ -2025,6 +2022,9 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
                 break
         energy_cost = current_level_dict['energy_cost']
         if current_energy < energy_cost:
+            if daka_list.do_not_charge_pk_energy:
+                yield f'体力{current_energy}不足{energy_cost}，退出<br>'
+                return
             yield f'体力{current_energy}不足{energy_cost}，充能中<br>'
             if not check_and_charge_pk_energy(user_cookie, user_config, http2_client_obj, session_id):
                 yield f'充能失败，退出<br>'
@@ -2106,6 +2106,8 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
         
         
         current_rival_id = daka_list.find_unique_id(rival_avatar, rival_name)
+        rival_score = 0
+        rival_score_max = 0 # 对手最高分，自己也不能超过
         rival_status = 0 # -1黑名单，1白名单，0正常
         if current_rival_id:
             yield f'<font color="lemonchiffon">{current_rival_id}</font><br>' # 谨慎修改！[27:-11]用于传递信息
@@ -2122,8 +2124,14 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
                 daka_list.add_warning(f'{name}遇到了黑名单用户{rival_name}{rival_id}')
             elif rival_id in daka_list.user_dict_obj.arbiter_unique_ids:
                 yield f'arbiter用户🤖<br>'
-                if rival_id > unique_id: # 避免出现DRAW
-                    rival_status = 6666
+                if rival_id > unique_id: # 避免出现DRAW，逃跑
+                    time_long = int(time.time() * 1000)
+                    url = f'https://{pk_get_headers["Host"]}/api/rankpk/v2/current_session?time={time_long}'
+                    response = http2_client_obj.send_http2_request('GET', url, pk_get_headers, None)
+                    url = f'https://{pk_get_headers["Host"]}/api/rankpk/main?time={time_long}&activity_id=0&session_id={session_id}'
+                    response = http2_client_obj.send_http2_request('GET', url, pk_get_headers, None)
+                    return
+                rival_status = 6666
         else:
             yield f'<font color="lemonchiffon">未找到</font><br>'
             rival_id = -1
@@ -2152,8 +2160,6 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
         current_time = 10000
         my_score = 0
         score_delta = 0
-        rival_score = 0
-        penalty = 0 # 对于过分快对手，提高速度
         my_penalty = 0 # 对于自己打错的，不计入分差
         topic_id = 0
         time_start = time.time()
@@ -2189,33 +2195,20 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
 
                 yield f'第{order}题 {msg}<br>'
                 if rival_status == -1:
-                    penalty = rival_score - my_score + AC_POWER # 反挂
-                else:
-                    if max_win_round == 6666 or rival_status == 1: # 单次arbiter模式，锁定166
-                        penalty = 0
-                    else:
-                        penalty = rival_score - 188 * (order - 1)
-
-                if penalty > 0:
-                    lb = ub = min(8500 + penalty*25, 9999)
                     yield '[AC]'
+                    ub = 8749 + 50 * min(max(rival_score - my_score + daka_list.anticheat_power, -25), 25) # 8749-9999
+                    if rival_score_max and ub > rival_score_max + 500:
+                        ub = rival_score_max + 500
+                    lb = ub
+                elif max_win_round == 6666 or rival_status == 1: # 跟踪模式没有遇到被跟踪对象或遇到白名单用户，禁用反挂
+                    lb = 6666
+                    ub = lb + 500
                 else:
-                    if rival_status == 6666:
-                        lb = 7777
-                        ub = 7999
-                    elif max_win_round == 6666:
-                        lb = 6666
-                        ub = 6999
-                    else:
-                        lb = 7100
-                        if rival_score + 32 <= my_score:
-                            lb -= min((my_score - rival_score - 32) * 20, 1500) # 5600
-                        elif my_score < rival_score + 32:
-                            lb += min((rival_score + 32 - my_score) * 40, 500) # 7600
-                        ub = max(lb + 500, 8600 - chosen_id * 300 + min(0, rival_score - my_score) * 40)
+                    lb = 7500 + 50 * min(max(rival_score - my_score, -25), 25) # 6250-8750
+                    ub = lb + 500
                 
                 target_time = random.randint(lb, ub) # 分数=答对100+剩余时间/100，每题满分200
-                yield f'目标{int(100 + target_time/100)}({lb}-{ub})delta{max(penalty*1, 0)}<br>'
+                yield f'目标{int(100 + target_time/100)}({lb}-{ub})<br>'
                 
                 current_time = data['puzzle']['cd']
                 
@@ -2239,8 +2232,8 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
                     rival_escaped = data['rivalEscaped']
                     
                     if current_time < target_time or (rival_answer is not None and rival_answer == chosen_id):
-                        # if modem_simulate and penalty < 3:  # 模拟网络意外延时，反挂除外
-                            # time.sleep(0.5)
+                        if modem_simulate and target_time < 9000:  # 模拟网络意外延时，反挂除外
+                            time.sleep(0.5)
                         break
                     if current_time - 500 <= target_time and current_time < 10000:
                         time.sleep((current_time - target_time) / 1000)
@@ -2303,6 +2296,7 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
                 else:
                     if rival_answer == right_answer:
                         yield f'✓{rival_score}(+{score_delta})<br>'
+                        rival_score_max = max(rival_score_max, (score_delta-100)*100)
                     else:
                         my_penalty -= 150
                         yield f'×{rival_score}(+{score_delta})<br>'
@@ -2606,7 +2600,8 @@ def task_center(user_cookie, user_config, http2_client_obj: http2_client, daka_l
     for person in data['rank']['rankList']:
         if person.get('score', 0) > score:
             level_in_rank += 1
-
+    if win_streak_days == 0:
+        daka_list_obj.add_warning(f"用户{user_config['name']}的不断电上传失败，请注意")
     yield f'{win_streak_days}天<br>学习分{score}排{rank}段第{level_in_rank}名'
     time.sleep(react_wait_seconds)
 

@@ -10,7 +10,7 @@ with open('user_cookie.json', 'r', encoding='utf-8') as f:
     cookie = json.load(f)
 
 
-id = input('请输入立flag活动编号（如11）：')
+id = input('请输入立flag活动编号（如20250217活动13）：')
 for user in cookie:
     config = user['config']
     cookie = user['cookie']

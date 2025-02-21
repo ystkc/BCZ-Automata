@@ -106,6 +106,8 @@ def append_user_data(text=None):
                 "subscribe_notice": int(i[9]) if i[9] != '' else 0,
                 "check_notice": int(i[10]) if i[10] != '' else 0,
             }
+            if user_config['word_count'] < 5:
+                user_config['word_count'] = 5
             user_cookie = {
                 "access_token": i[5],
             }
@@ -169,4 +171,10 @@ def append_user_data(text=None):
     else:
         return result_str
 if __name__ == '__main__':
-    append_user_data()
+    try:
+        import os
+        # 设置启动目录
+        os.chdir(os.path.dirname(os.path.abspath(__file__)))
+        append_user_data()
+    finally:
+        input("Press any key to exit.")
