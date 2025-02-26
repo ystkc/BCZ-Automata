@@ -242,7 +242,7 @@ class daka_list_class:
         self.daka_pk_status_expire_time[unique_id] = expire_time
         if status == -1:
             self.current_matching_king_id.add(unique_id)
-        elif status == 1 or status == 0:
+        elif status == 1 or status == 0 or status == 2: # 0未启动，-1匹配中，1对战中，2体力不足
             try:
                 self.current_matching_king_id.remove(unique_id)
             except:
@@ -531,12 +531,20 @@ class daka_list_class:
                     writer.writerow([user_id, word_count, time_, status])
         # 将公告检测结果存入notice_and_rank_path
         cnt = 0
+        rest = 0
         for i, check_item in enumerate(self.check_list):
-            if check_item['modified'] and check_item['valid']:
-                cursor.execute(f'''UPDATE notice SET CHECKED = ? WHERE GROUP_ID == ? AND DATE == ?''', (check_item['checked']*100000000 + check_item['cursorA'] * 10000 + check_item['cursorB'], check_item['group_id'], check_item['date']))
+            if not check_item['valid']:
+                continue
+            if check_item['modified']:
+                if check_item['group_id'] is None:
+                    cursor.execute(f'''UPDATE notice SET CHECKED = ? WHERE GROUP_ID IS ? AND DATE == ?''', (check_item['checked']*100000000 + check_item['cursorA'] * 10000 + check_item['cursorB'], check_item['group_id'], check_item['date']))
+                else:
+                    cursor.execute(f'''UPDATE notice SET CHECKED = ? WHERE GROUP_ID == ? AND DATE == ?''', (check_item['checked']*100000000 + check_item['cursorA'] * 10000 + check_item['cursorB'], check_item['group_id'], check_item['date']))
                 check_item['modified'] = False
                 cnt += 1
-        self.logger.info(f'本轮检查{cnt}条notice')
+            if check_item['checked'] < 2:
+                rest += 1
+        self.logger.info(f'本轮检查{cnt}条notice，剩余{rest}条')
         if cnt > 0:
             bad_words = self.get_bad_words(has_mid=False)
             # 获取一下今天有没有新的坏词
@@ -628,7 +636,7 @@ class daka_list_class:
         conn.commit()
         self.logger.info(f'缓冲区写入完毕')
         if close_start_time - self.latest_check_notice_timestamp > 3600:
-            self.notice_parser.update_notice(conn, only_raw_notice=True)
+            self.notice_parser.update_notice(conn, only_raw_notice=False)
             self.latest_check_notice_timestamp = close_start_time
             self.logger.info(f'notice_parser检查库已更新')
         else:
@@ -1231,11 +1239,13 @@ class stargazer_class:
         self.stargazer_set = set(self.stargazer_list)
         self.stargazer_cnt = len(self.stargazer_list)
         self.stargazer_db = config.stargazer_db
-        self.arbiter_offset = config.arbiter_offset
+        self.arbiter_offset_win = config.arbiter_offset_win
+        self.arbiter_offset_lose = config.arbiter_offset_lose
         self.arbiter_interval = config.arbiter_interval
         self.arbiter_size = config.arbiter_size
         self.arbiter_index = 10**(self.arbiter_size-1)
         self.stargazers = {}
+        self.success_timestamp = set()
         self.daka_list_obj = daka_list_obj
         self.session_id = None
         self.buffer = []  # (TIMESTAMP, STAR, RANK, ACTION)
@@ -1250,7 +1260,7 @@ class stargazer_class:
                 TIMESTAMP INTEGER,
                 STAR INTEGER,
                 RANK INTEGER,
-                ACTION INTEGER) -- -1TRACKING，1MISS，2CAUGHT，-2WIN，-3DRAW，-4LOSS
+                ACTION INTEGER) -- -1TRACKING，1MISS，2CAUGHT，3NO_ENERGY，4SKIPPED，9NO_ACCOUNT，-2WIN，-3DRAW，-4LOSS
             ''')
         conn.commit()
         # 读取数据
@@ -1390,8 +1400,12 @@ class stargazer_class:
                             rival_id = int(msg[27:-11]) # 有可能是“未找到”
                         except:
                             rival_id = -1
-                        if rival_id == target_id:
+                        if rival_id == -2:
+                            self.logger.info(f'体力不足')
+                            self.save_to_db(start_time, target_id, 3)
+                        elif rival_id == target_id:
                             self.logger.info(f'匹配到目标rival_id:{rival_id}')
+                            self.success_timestamp.add(start_time)
                             self.save_to_db(start_time, target_id, 2)
                         else:
                             self.logger.info(f'rival_id:{rival_id}不是目标rival_id:{target_id}') # MISS
@@ -1402,11 +1416,13 @@ class stargazer_class:
                     self.refresh_stars(token_user_dict)
                     if flag == 'green':
                         self.save_to_db(int(time.time()), target_id, -2)
+                        time.sleep(self.arbiter_offset_lose) # 对方输了
                     elif flag == 'red':
                         self.save_to_db(int(time.time()), target_id, -4)
                         continue # 输了，由主线程start_arbiter
                     elif flag == 'yellow':
                         self.save_to_db(int(time.time()), target_id, -3)
+                        time.sleep(self.arbiter_offset_lose) # 等同于对方输了
 
                     self.start_arbiter(rival_id, int(time.time()))
                     
@@ -1450,13 +1466,21 @@ class stargazer_class:
 
     def start_arbiter(self, user_id, current_timestamp):
         '''启动反挂器'''
-        time.sleep(self.arbiter_offset)
         for token_user_dict in self.token_user_dict_list:
+            if current_timestamp in self.success_timestamp: # 已经成功过，不再发射
+                self.save_to_db(current_timestamp, user_id, 4) # SKIPPED
+                continue
             self.daka_list_obj.set_pk_status(token_user_dict['config']['unique_id'], -1)
             threading.Thread(target=self.arbiter_wrapper, args=(token_user_dict, user_id, current_timestamp)).start()
             self.logger.info(f'启动arbiter {token_user_dict["config"]["name"]} -> {user_id}')
             time.sleep(self.arbiter_interval)
-        
+        try:
+            self.success_timestamp.remove(current_timestamp)
+        except KeyError:
+            pass
+        delta = self.arbiter_size - len(self.token_user_dict_list)
+        for i in range(delta):
+            self.save_to_db(current_timestamp, user_id, 9) # 补充缺失的位
         # 当前token_list已经发射完毕，获取新的token_list
         try:
             self.refresh_token()
@@ -1465,7 +1489,8 @@ class stargazer_class:
         
         while len(self.daka_list_obj.query_current_matching_king_id()) > 0:
             self.logger.info(f'king正在匹配中，等待...{self.daka_list_obj.query_current_matching_king_id()}')
-            time.sleep(1) # 等待king匹配完成
+            time.sleep(random.randint(12, 18) / 10) # 等待king匹配完成
+            self.refresh_stars(self.token_user_dict_list[0])
             if (time.time()) - current_timestamp > 60:
                 return # 超过60秒，退出
 
@@ -1480,8 +1505,11 @@ class stargazer_class:
         while True:
             modified_users = self.refresh_stars(self.token_user_dict_list[0])
             current_timestamp = int(time.time())
-            for user_id in modified_users:
+            def start_arbiter_with_delay(user_id, current_timestamp):
+                time.sleep(self.arbiter_offset_win)
                 self.start_arbiter(user_id, current_timestamp)
+            for user_id in modified_users:
+                threading.Thread(target=start_arbiter_with_delay, args=(user_id, current_timestamp)).start()
 
             active = False
 
@@ -2024,10 +2052,13 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
         if current_energy < energy_cost:
             if daka_list.do_not_charge_pk_energy:
                 yield f'体力{current_energy}不足{energy_cost}，退出<br>'
+                yield f'<font color="lemonchiffon">-2</font><br>'
+                daka_list.set_pk_status(unique_id, 2, int(time.time()+60*(energy_cost - current_energy))) # 能量耗尽
                 return
             yield f'体力{current_energy}不足{energy_cost}，充能中<br>'
             if not check_and_charge_pk_energy(user_cookie, user_config, http2_client_obj, session_id):
                 yield f'充能失败，退出<br>'
+                yield f'<font color="lemonchiffon">-2</font><br>'
                 daka_list.set_pk_status(unique_id, 2, int(time.time()+60*(energy_cost - current_energy))) # 能量耗尽
                 return
             yield f'充能成功，继续<br>'
@@ -2196,9 +2227,9 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
                 yield f'第{order}题 {msg}<br>'
                 if rival_status == -1:
                     yield '[AC]'
-                    ub = 8749 + 50 * min(max(rival_score - my_score + daka_list.anticheat_power, -25), 25) # 8749-9999
-                    if rival_score_max and ub > rival_score_max + 500:
-                        ub = rival_score_max + 500
+                    ub = 8749 + 50 * min(max(rival_score - my_score + daka_list.anticheat_power * order, -25), 25) # 8749-9999
+                    if rival_score_max and ub > rival_score_max + 300:
+                        ub = rival_score_max + 300
                     lb = ub
                 elif max_win_round == 6666 or rival_status == 1: # 跟踪模式没有遇到被跟踪对象或遇到白名单用户，禁用反挂
                     lb = 6666
@@ -3373,6 +3404,12 @@ def notice_checker(daka_list: daka_list_class, user_cookie, user_config, http2_c
         }
         # https://group.baicizhan.com/group/set_notice
         response_json = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/group/set_notice', content=payload, headers=headers).json()
+        while response_json['message'] == '公告不能超过1000个字': # 可能是某些偶然bug导致略微超出1000，缩一下就好
+            payload = {
+                "shareKey": group_share_key,
+                "notice": content[:-1]
+            }
+            response_json = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/group/set_notice', content=payload, headers=headers).json()
         if response_json['message'] == None:
             message_str += f'通知发送成功<br>'
             yield message_str
@@ -3748,7 +3785,14 @@ def daka_headless(daka_list: daka_list_class, user_cookie, user_config, http2_cl
     today_seconds = (datetime.datetime.now() - datetime.datetime.combine(datetime.date.today(), datetime.time(0, 0, 0))).total_seconds()
     user_index = user_config['user_index']
     name = user_config.get('name', '未知')
-    delay = 0 if random_delay <= 0 or user_index == 0 else (int(generate_random(today_seconds / 86400, random_delay / 86400, segments) * 86400 - today_seconds) + random.randint(0, 100) / 10)
+    delay = 0
+    if random_delay <= 0 or user_index == 0:
+        delay = 0
+    elif name[-1] == '*':
+        delay = random_delay # 强制最大延迟，可以用于测试或者用于固定账号使用
+    else:
+        delay = (int(generate_random(today_seconds / 86400, random_delay / 86400, segments) * 86400 - today_seconds) + random.randint(0, 100) / 10)
+    
     unique_id = user_config.get('unique_id', '未知')
     try:
         message = f"{unique_id}#开始打卡:{name}，延迟{delay}s"

@@ -67,7 +67,7 @@ class http2_client:
                 if client.is_closed:
                     client = self.get_http2_client()
                     continue
-                time.sleep(10)
+                time.sleep(1.2)
                 failed_count += 1
                 if failed_count > 7:
                     Warning('http2 error, failed_count > 7')
@@ -94,7 +94,7 @@ class http2_client:
                 if client.is_closed:
                     client = self.get_http2_client()
                     continue
-                time.sleep(10)
+                time.sleep(1.2)
                 failed_count += 1
                 if failed_count > 7:
                     Warning('http2 error, failed_count > 7')
@@ -119,7 +119,7 @@ class http2_client:
                 if client.is_closed:
                     client = self.get_http2_client()
                     continue
-                time.sleep(10)
+                time.sleep(1.2)
                 failed_count += 1
                 if failed_count > 7:
                     Warning('http2 error, failed_count > 7')
@@ -157,7 +157,7 @@ class http2_client:
                 if client.is_closed:
                     client = self.get_http2_client(async_client=True)
                     continue
-                await asyncio.sleep(10)
+                await asyncio.sleep(1.2)
                 failed_count += 1
                 if failed_count > 7:
                     Warning('async http2 error, failed_count > 7')
@@ -181,7 +181,7 @@ class http2_client:
                 if client.is_closed:
                     client = self.get_http2_client(async_client=True)
                     continue
-                await asyncio.sleep(10)
+                await asyncio.sleep(1.2)
                 failed_count += 1
                 if failed_count > 7:
                     Warning('async http2 error, failed_count > 7')
@@ -204,7 +204,7 @@ class http2_client:
                 if client.is_closed:
                     client = self.get_http2_client(async_client=True)
                     continue
-                await asyncio.sleep(10)
+                await asyncio.sleep(1.2)
                 failed_count += 1
                 if failed_count > 7:
                     Warning('async http2 error, failed_count > 7')

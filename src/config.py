@@ -32,8 +32,9 @@ class Config:
             'stargazer_db': 'stargazer.db', # stargazer跟踪记录
             'anticheat_power': 10, # 初始反挂力度，最低0时第一手188，最高25时第一手199，建议5-10
             'do_not_charge_pk_energy': True, # 不使用铜板充能
-            'arbiter_interval': 1, # arbiter发车时间间隔，单位秒，发车总时长=arbiter_size * arbiter_interval + arbiter_offset
-            'arbiter_offset': 2, # arbiter胜利后，开始下一轮的延迟，单位秒
+            'arbiter_interval': 4.5, # arbiter发车时间间隔，单位秒，发车总时长=arbiter_size * arbiter_interval + arbiter_offset
+            'arbiter_offset_win': 3, # arbiter对方胜利（或发现对方+2）后，开始下一轮的延迟，单位秒
+            'arbiter_offset_lose': 2, # arbiter对方失败（或平局）后，开始下一轮的延迟，单位秒
             'arbiter_size': 8, # 建议最大值：总账号数 / (60秒每体力 * 10体力每次) * 30s每局 * 2，理论最大值18，还要测试确保带宽足够
         }
         self.initConfig()
@@ -60,7 +61,8 @@ class Config:
         self.anticheat_power = self.raw.get('anticheat_power', 10)
         self.do_not_charge_pk_energy = self.raw.get('do_not_charge_pk_energy', True)
         self.arbiter_interval = self.raw.get('arbiter_interval', 1)
-        self.arbiter_offset = self.raw.get('arbiter_offset', 2)
+        self.arbiter_offset_win = self.raw.get('arbiter_offset_win', 2)
+        self.arbiter_offset_lose = self.raw.get('arbiter_offset_lose', 2)
         self.arbiter_size = self.raw.get('arbiter_size', 8)
         self.verify()
 
