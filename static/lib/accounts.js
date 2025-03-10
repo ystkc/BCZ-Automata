@@ -352,22 +352,53 @@ function showNickNameList(group_share_key, unique_id){
      document.querySelector(`#notice${unique_id}${group_share_key}`).appendChild(nickname_list);
      // data是{uniqueId:{nickname:nickname, group_nickname:group_nickname, two_week_daka_dates:two_week_daka_dates[14]}}
      data = data.group_nickname;
-     for (let user_unique_id in data){
-       // console.log(data[user_unique_id]);
-       // console.log(data[user_unique_id].two_week_daka_dates);
-       let nickname_li = document.createElement('li'), tmp_str = '';
-       // 第一行显示昵称+(uniqueId)，第二行显示组内昵称，第三行显示两周打卡天数的前7位，第四行显示两周打卡天数的后7位
-       if (op1_button.textContent == "发送") // 编辑公告时，点击昵称插入到公告中at
-         tmp_str = `<span onclick="insertNickname('${unique_id}', '${user_unique_id}', '${group_share_key}', '${data[user_unique_id].group_nickname}')">`;
-       else
-         tmp_str = `<span>`;
-        tmp_str += `${data[user_unique_id].nickname}(${user_unique_id})[${data[user_unique_id].completed_times}/${data[user_unique_id].duration_days}]:<br>`;
-        tmp_str += `${data[user_unique_id].group_nickname}<br>`;
-        tmp_str += `${data[user_unique_id].two_week_daka_dates.slice(0,7)}<br>`;
-        tmp_str += `${data[user_unique_id].two_week_daka_dates.slice(7)}</span>`;
-       nickname_li.innerHTML = tmp_str;
-       nickname_list.appendChild(nickname_li);
+     // 查找公告和昵称中是否含有“下次互动字母”（如果都有，以昵称为准）
+     var next_letter = '';
+     var content = document.querySelector(`#notice${unique_id}${group_share_key}`).innerHTML;
+     var index = content.indexOf('下次互动字母');
+     if (index != -1){
+       next_letter = content.slice(index+6, index+7);
      }
+     if (my_reply.startsWith('下次互动字母')) {
+       next_letter = my_reply.slice(6, 7);
+     }
+     var is_edit_notice_mode = op1_button.textContent == "发送";
+     // 将以next_letter开头的昵称优先显示在列表前面
+     function get_square_brackets(daka_info_list){ // -2、-1：透明方块，0：灰色方块，1：绿色方块
+      var tmp_str = '<div class="squares">';
+      daka_info_list.forEach(function(daka_info){
+        if (daka_info == 0)
+          tmp_str += '<div class="gray square"></div>';
+        else if (daka_info == 1)
+          tmp_str += '<div class="green square"></div>';
+        else
+          tmp_str += '<div class="transparent square"></div>';
+      });
+      return tmp_str + '</div>';
+     }
+     function get_nickname_str(unique_id, user_unique_id, group_share_key, user_data, is_edit_notice_mode) {
+      var tmp_str = '';
+      // 第一行显示昵称+(uniqueId)，第二行显示组内昵称，第三行显示两周打卡天数的前7位，第四行显示两周打卡天数的后7位
+      if (is_edit_notice_mode) // 编辑公告时，点击昵称插入到公告中at
+        tmp_str = `<span onclick="insertNickname('${unique_id}', '${user_unique_id}', '${group_share_key}', '${user_data.group_nickname}')">`;
+      else
+        tmp_str = `<span>`;
+      tmp_str += `${user_data.nickname}(${user_unique_id})[${user_data.completed_times}/${user_data.duration_days}]:<br>`;
+      tmp_str += `${user_data.group_nickname}<br>`;
+      tmp_str += `${get_square_brackets(user_data.two_week_daka_dates.slice(0, 7))}<br>`;
+      tmp_str += `${get_square_brackets(user_data.two_week_daka_dates.slice(7))}</span>`;
+      return tmp_str;
+     }
+     for (let user_unique_id in data){
+      if (data[user_unique_id].group_nickname[0] == next_letter){
+        nickname_list.innerHTML += get_nickname_str(unique_id, user_unique_id, group_share_key, data[user_unique_id], is_edit_notice_mode);
+      }
+     }
+     for (let user_unique_id in data){
+      if (data[user_unique_id].group_nickname[0] != next_letter){
+       nickname_list.innerHTML += get_nickname_str(unique_id, user_unique_id, group_share_key, data[user_unique_id], is_edit_notice_mode);
+      }
+    }
   })
   .catch(error => console.error(error));
 }
@@ -407,17 +438,17 @@ function joinAll(){
 function buKa(){ // 给未打卡的账号打卡
   buttons = document.querySelectorAll('.daka')
   buttons_to_click = []
-  buttons.forEach(function(button){
-    status_str = button.parentNode.parentNode.innerHtml;
+  buttons.forEach((button) => {
+    status_str = button.parentNode.parentNode.innerHTML;
     if (status_str.indexOf('0未打卡') != -1){
       buttons_to_click.push(button);
     }
   });
   if (!confirm(`在${buttons_to_click.length*5}s内开始 未打卡 账号`)) return;
-  buttons_to_click.forEach(function(button){
+  buttons_to_click.forEach((button) => {
     // 随机延时0-180s
     random_secs = Math.floor(Math.random() * buttons_to_click.length * 5);
-    setTimeout(function(){
+    setTimeout(() => {
       button.click();
     }, random_secs * 1000);
     // 将按钮的文字从50倒数到0

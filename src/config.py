@@ -23,7 +23,7 @@ class Config:
             'sync_command': [], # 每天早上执行一次，可以手动添加备份命令，或启动如订阅公告start subscribe.py等方便管理的小工具
             'prevent_sleep_command': 'timeout', # 每天傍晚执行一次，防止在晚上爬取数据时本地设备休眠而无法正常运行，功能：设置笔记本合盖操作无，睡眠永不，休眠永不
             'allow_sleep_command': 'timeout reverse', # 每天半夜数据爬取结束后执行一次，功能：睡眠3分钟，休眠3分钟
-            'shutdown_command': 'shutdown -s -t 900', # 每天半夜数据爬取结束后执行一次，建议：定时900s以上关机
+            'shutdown_command': 'shutdown -s -t 90', # 每天半夜数据爬取结束后执行一次，180s以内
             'log_dir': './logs/', # 日志目录，包括daka、pk、subscribe、stargazer、cheat_tracker
             'check_notice_pace': 3, # 涉嫌违禁公告自动后往前查违禁步长。在公告前面加上#可以取消自动，加>改方向为前往后
             'pk_blacklist': [], # pk黑名单，遇到后改为强反挂模式。但属于被动反挂，对于极端挂无法获胜。反极端挂请使用stargazer
@@ -47,7 +47,7 @@ class Config:
         self.sync_command = self.raw.get('sync_command', [])
         self.prevent_sleep_command = self.raw.get('prevent_sleep_command', 'timeout')
         self.allow_sleep_command = self.raw.get('allow_sleep_command', 'timeout reverse')
-        self.shutdown_command = self.raw.get('shutdown_command','shutdown -s -t 900')
+        self.shutdown_command = self.raw.get('shutdown_command','shutdown -s -t 90')
         self.log_dir = self.raw.get('log_dir', './logs/')
         self.check_notice_pace = self.raw.get('check_notice_pace', 3)
         self.puzzle_path = self.raw.get('puzzle_path', 'puzzle.db')
@@ -60,8 +60,8 @@ class Config:
         self.stargazer_db = self.raw.get('stargazer_db','stargazer.db')
         self.anticheat_power = self.raw.get('anticheat_power', 10)
         self.do_not_charge_pk_energy = self.raw.get('do_not_charge_pk_energy', True)
-        self.arbiter_interval = self.raw.get('arbiter_interval', 1)
-        self.arbiter_offset_win = self.raw.get('arbiter_offset_win', 2)
+        self.arbiter_interval = self.raw.get('arbiter_interval', 4.5)
+        self.arbiter_offset_win = self.raw.get('arbiter_offset_win', 3)
         self.arbiter_offset_lose = self.raw.get('arbiter_offset_lose', 2)
         self.arbiter_size = self.raw.get('arbiter_size', 8)
         self.verify()

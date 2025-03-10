@@ -52,7 +52,7 @@ def team_up_recite(publish_team=False):
         content = {
             'activityId': activity_id
         }
-        response = requests.post(url, headers=headers, data=json.dumps(content))
+        response = requests.post(url, headers=headers, json=content)
         time.sleep(1)
         data = response.json()['data']
         count = data['count']
@@ -76,7 +76,7 @@ def team_up_recite(publish_team=False):
                 time_long = int(time.time() * 1000)
                 headers = getHeaders('$activity', user_cookie, time_long, index = 1)
                 headers['Content-Type'] = 'application/json; charset=UTF-8'
-                response = requests.post(url, headers=headers, data=json.dumps(content))
+                response = requests.post(url, headers=headers, json=content)
                 print(response.json()['data']['type']) #  0成功 1过期 2无效 3已在队伍中  5已满
                 if code not in valid_current_code:
                     valid_current_code.append(code)
@@ -107,7 +107,7 @@ def team_up_recite(publish_team=False):
                 time_long = int(time.time() * 1000)
                 headers = getHeaders('$activity', user_cookie, time_long, index = 1)
                 headers['Content-Type'] = 'application/json; charset=UTF-8'
-                response = requests.post(url, headers=headers, data=json.dumps(content))
+                response = requests.post(url, headers=headers, json=content)
                 random_name = response.json()['data'][0]
                 print(random_name)
                 time.sleep(1)
@@ -123,9 +123,8 @@ def team_up_recite(publish_team=False):
                 time_long = int(time.time() * 1000)
                 headers = getHeaders('$activity', user_cookie, time_long, index = 1)
                 headers['Content-Type'] = 'application/json; charset=UTF-8'
-                content_str = json.dumps(content, ensure_ascii=False)
-                print(content_str)
-                response = http2_client_obj.send_http2_request('POST', url, headers, content_str)
+                print(content)
+                response = http2_client_obj.send_http2_request('POST', url, headers, content=content)
                 print(response.json()['data']['type']) # 0成功 1失败 2失败 3已在队伍中 4队名非法
                 if response.json()['data']['type'] == 0:
                     new_code = response.json()['data']['code']
@@ -144,7 +143,7 @@ def team_up_recite(publish_team=False):
             content = {
                 'activityId': activity_id
             }
-            response = requests.post(url, headers=headers, data=json.dumps(content))
+            response = requests.post(url, headers=headers, json=content)
             data = response.json()['data']
             my_tag = data['me']['tag']
             print(f'我的tag：{my_tag}(3靠谱，0不靠谱，1萌新)')
@@ -163,7 +162,14 @@ def publish_team():
     user_cookie_template = cookie[0]['cookie'].copy()
     global current_code
     global current_token
-    activity_id = str(input('请输入活动ID：(team-up-recite/home的请求JSON里面有，一般是1xx)'))
+    # activity_id = str(input('请输入活动ID：(team-up-recite/home的请求JSON里面有，一般是1xx)'))
+    # https://activity.baicizhan.com/api/activity/team-up-recite/together_home
+    time_long = int(time.time() * 1000)
+    headers = getHeaders('$activity', cookie[0]['cookie'], time_long, index = 1)
+    response = http2_client_obj.send_http2_request('GET', 'https://activity.baicizhan.com/api/activity/team-up-recite/together_home', headers, None)
+    data = response.json()['data']
+    activity_id = data['actId']
+    input(f"请确认活动ID：{activity_id}")
     for code in current_code:
         token = current_token[code]
         user_cookie_template['access_token'] = token
@@ -178,7 +184,7 @@ def publish_team():
         time_long = int(time.time() * 1000)
         headers = getHeaders('$activity', user_cookie_template, time_long, index = 1)
         headers['Content-Type'] = 'application/json; charset=UTF-8'
-        response = requests.post(url, headers=headers, data=json.dumps(content))
+        response = requests.post(url, headers=headers, json=content)
         print(f'公开{response.json()["message"]}')
         time.sleep(1)
         
@@ -237,12 +243,13 @@ def flag_bet():
 
 
 if __name__ == '__main__':
-    if input("组队 or 立flag？(1/2)") == '1':
+    # if input("组队 or 立flag？(1/2)") == '1':
         team_up_recite()
         if input(f'剩余{len(current_code)}个队伍可能未满，是否要公开剩余有效队伍？(y/n)') == 'y':
             publish_team()
-    else:
-        flag_bet()
+        input('完成，按任意键退出')
+    # else:
+        # flag_bet()
     
 
         

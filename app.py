@@ -839,20 +839,19 @@ def allow_sleep():
     '''允许系统进入休眠'''
     os.system(config.allow_sleep_command)
 
-def shutdown_sallow_unotice_getuv(): # 在每天的59 23 * * 运行，根据星期执行不同的功能
-    '''关闭系统/允许休眠/升级通知/获取总uv'''
-    weekday = datetime.datetime.now().weekday()
-    user_dict = daka_list_obj.get_user_dict(0) # 获取一个默认用户令牌
-    # 星期一：parse_notice_offline()
+def shutdown_sallow_unotice_getuv(): # 在每天的58-59 23 * * 运行，根据星期执行不同的功能
+    '''关闭系统/允许休眠/升级通知'''
+    weekday = datetime.datetime.now().weekday() # 要立即获取，也就是前一天的星期
+    # 等待直到主线程运行完毕
+    while not daka_list_obj.is_empty() or daka_list_obj.is_closing():
+        time.sleep(10)
+    daka_list_obj.export_2048_group_info() # 在主线程保存完毕后才导出
+
     if weekday == 6: # 星期日晚上
         ...
-        # parse_notice_offline()
-    # 星期二-星期日：allow_sleep()、shutdown()、parse_notice_online()
     elif weekday >= 0 and weekday <= 5: # 星期一到星期六晚上
-        # parse_notice_online(only_raw_notice=True)
-        shutdown()
-        time.sleep(800)
-        allow_sleep()
+        shutdown() # 180s内关机（否则会被休眠）
+        allow_sleep() # 设置180s休眠
 
 def buka():
     not_daka_users = daka_list_obj.check_not_daka_users(include_not_daka=True)
@@ -877,13 +876,13 @@ def schedule_task():
 
         Schedule("* 5-10 * * 0 daka_schedule", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj,http2_client_obj,-1, random_delay=3000))
         Schedule("* 5-10 * * 1-6 daka_schedule", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj,http2_client_obj,-1, random_delay=2000))
-        Schedule("* 6-8 * * 0-6 sync_and_subscribe", lambda: sync_and_subscribe())
+        Schedule("* 6-7 * * 0-6 sync_and_subscribe", lambda: sync_and_subscribe())
         Schedule("* 4-8,21-23 * * 0-6 prevent_sleep", lambda: prevent_sleep())
 
         if '--test' in sys.argv:
             Schedule("* * * * * tester", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=2048, random_delay=21))
         if config.archiever_enable: # 收集打卡数据、公告数据
-            Schedule("30-59 23 * * * rank_and_notice_bronzccce", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=1, random_delay=168))
+            Schedule("30-59 23 * * * rank_and_notice_bronze", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=1, random_delay=168))
             Schedule("33-59 23 * * * rank_and_notice_silver", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=2, random_delay=168))
             Schedule("36-59 23 * * * rank_and_notice_gold", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=3, random_delay=168))
             Schedule("39-59 23 * * * rank_and_notice_platinum", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=4, random_delay=168))
@@ -896,8 +895,11 @@ def schedule_task():
             Schedule("51-59 23 * * * rank_and_notice_official", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=0, random_delay=168))
             Schedule("54-59 23 * * * rank_and_notice_2048", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=2048, random_delay=168))
         Schedule("30-59 23 * * * buka", lambda: buka()) # 补卡
-    
-    daka_list_obj.init_notice_storage(logger)
+    try:
+        daka_list_obj.init_notice_storage(logger)
+    except Exception as e:
+        logger.error(f"初始化公告存储失败：{e}")
+        http2_client_obj.set_closing_state(True)
 
 if __name__ == '__main__':
     for name in logging.Logger.manager.loggerDict.keys():

@@ -17,7 +17,11 @@ import queue
 user_messages = queue.Queue()
 star_gazer = stargazer_class(logger, http2_client_obj, config, daka_list_obj, user_messages)
 star_gazer.start()
-daka_list_obj.init_notice_storage(logger)
+try:
+    daka_list_obj.init_notice_storage(logger)
+except:
+    http2_client_obj.set_closing_state(True)
+    raise
 os.system('title stargazer - Press Enter to exit...')
 try:
     input("Press Enter to exit...")

@@ -2,6 +2,24 @@
 <!-- 多账号管理系统 -->
 <head>
     <style>
+        .squares {
+            display: grid;
+            grid-template-columns: repeat(7, 20px);
+            grid-gap: 3px;
+        }
+        .square {
+            width: 18px;
+            height: 18px;
+        }
+        .green {
+            background-color: green;
+        }
+        .gray {
+            background-color: gray;
+        }
+        .transparent {
+            background-color: transparent;
+        }
         td {
             padding: 10px;
             border: 1px solid #000;
@@ -32,7 +50,7 @@
 <body>
     <div class="dropzone" id="dropzone" style="display:none;" onclick="this.style.display='none';"></div>
     <div>
-        <div>账号列表</div>
+        <div>账号列表</div><li>小技巧：在昵称或公告中加入"下次互动字母A"可以将A开头昵称用户前置显示</li>
         <button onclick="refresh(this)">查看打卡情况</button>
         <button onclick="buKa(this)">未打卡的打卡</button>
         <button onclick="connect_ws(this)">重新连接服务器</button>
