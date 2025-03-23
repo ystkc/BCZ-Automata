@@ -6,15 +6,17 @@ import traceback
 logger = logging.getLogger(__name__)
 
 class Schedule:
-    def __init__(self, crontab: str, func: callable, *args, **kwargs) -> None:
+    def __init__(self, crontab: str, func: callable, *args, **kwargs):
         '''计划调用类'''
         self.status = 0 # 0:准备中，1:等待，2:运行中，3:同一时段已运行，4:错误
         self.crontab_expr = crontab
         self.exec = func
-        if len(self.crontab_expr.split()) < 5: # 允许加无效字段，方便打个小班名
-            logger.warning('未正确设置schedule，故未启动计划')
+        try:
+            self.cron = self.parse_crontab(self.crontab_expr)
+        except Exception as e:
+            logger.warning(f'未正确设置schedule，故未启动计划{crontab}: {e}')
+            self.valid = False
             return
-        self.cron = self.parse_crontab(self.crontab_expr)
         self.thread = threading.Thread(
             target=self.run,
             args=args,
@@ -24,6 +26,7 @@ class Schedule:
         logger.info(f'等待启动计划 [{self.crontab_expr}]')
         self.thread.setName(f'Schedule: {crontab}')
         self.thread.start()
+        self.valid = True
 
     def run(self, *args, **kwargs) -> None:
         '''执行函数'''
@@ -67,7 +70,7 @@ class Schedule:
         day_of_month = self.parse_field(fields[2], 1, 31)
         month = self.parse_field(fields[3], 1, 12)
         day_of_week = self.parse_field(fields[4], 0, 6)
-        if len(fields) > 5:
+        if len(fields) > 5:# 允许加无效字段，方便打个小班名
             self.name = fields[5]
         return (minute, hour, day_of_month, month, day_of_week)
 
@@ -79,7 +82,12 @@ class Schedule:
         for part in field.split(','):
             if '-' in part:
                 start, end = map(int, part.split('-'))
+                if start < min_value or end > max_value:
+                    raise ValueError(f'Invalid crontab field: {field}')
                 values.update(range(start, end + 1))
             else:
-                values.add(int(part))
+                value = int(part)
+                if value < min_value or value > max_value:
+                    raise ValueError(f'Invalid crontab field: {field}')
+                values.add(value)
         return values

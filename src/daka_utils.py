@@ -998,6 +998,8 @@ class daka_list_class:
         with self.lock:
             if group_id not in self.notice_list:
                 self.notice_list[group_id] = {}
+            if week_daka_days is None: # 防止二次获取时错误数据覆盖有效数据
+                week_daka_days = self.rank_and_daka_count_temp.get(group_id, (None, None))[1]
             self.rank_and_daka_count_temp[group_id] = (rank_type_rank, week_daka_days)
             
             if content == '(空)': # 只有第一次看到空公告才需要加入notice_cleared_buffer
@@ -3273,6 +3275,7 @@ def notice_and_rank(user_cookie, user_config, http2_client_obj: http2_client, to
             response_json = response.json()
 
             group_info = response_json['data']['groupInfo']
+            group_info['weekDakaDays'] = target_class_list[i - 1].get('weekDakaDays')
             group_info['members'] = response_json['data']['members']
 
             if not DEBUG and check_study_cheat(date_str, group_info['members'], user_cookie, http2_client_obj, daka_list):
@@ -3305,7 +3308,7 @@ def notice_and_rank(user_cookie, user_config, http2_client_obj: http2_client, to
             response = http2_client_obj.send_http2_request('GET', f'https://{headers["Host"]}/group/information?shareKey={share_key}', headers, None)
             response_json = response.json()
             group_info = response_json['data']['groupInfo']
-            group_info['weekDakaDays'] = target_class_list[i - 1]['weekDakaDays']
+            group_info['weekDakaDays'] = target_class_list[i - 1].get('weekDakaDays')
             group_info['members'] = response_json['data']['members']
             if not DEBUG and check_study_cheat(date_str, group_info['members'], user_cookie, http2_client_obj, daka_list):
                 # （调试模式不检查，防止重复举报）如果有新的刷词记录，则需要一段时间后重新检查

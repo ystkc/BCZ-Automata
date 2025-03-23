@@ -36,6 +36,13 @@ class Config:
             'arbiter_offset_win': 3, # arbiter对方胜利（或发现对方+2）后，开始下一轮的延迟，单位秒
             'arbiter_offset_lose': 2, # arbiter对方失败（或平局）后，开始下一轮的延迟，单位秒
             'arbiter_size': 8, # 建议最大值：总账号数 / (60秒每体力 * 10体力每次) * 30s每局 * 2，理论最大值18，还要测试确保带宽足够
+            'bot_enabled_time': [['-1 * * * *','* * * * *']], # 启动和关闭机器人，每个元素为一个时间段，任一个-1则不启动，格式：min hour day month week，支持*,-语法
+            'bot_uin': 123456789, # 机器人QQ号，用于自动回复
+            'ws_uri': "ws://localhost:6100", # NapCat websocket服务器 地址
+            'napcat_token': '', # NapCat登录令牌
+            'whitelist_groups': [], 
+            'whitelist_users': [],
+            'base_group': 0
         }
         self.initConfig()
         self.raw = self.read()
@@ -64,6 +71,13 @@ class Config:
         self.arbiter_offset_win = self.raw.get('arbiter_offset_win', 3)
         self.arbiter_offset_lose = self.raw.get('arbiter_offset_lose', 2)
         self.arbiter_size = self.raw.get('arbiter_size', 8)
+        self.bot_enabled_time = self.raw.get('bot_enabled_time', [['-1 * * * *','* * * * *']])
+        self.bot_uin = self.raw.get('bot_uin', 123456789)
+        self.ws_uri = self.raw.get('ws_uri', "ws://localhost:6100")
+        self.napcat_token = self.raw.get('napcat_token', '')
+        self.whitelist_groups = self.raw.get('whitelist_groups', [])
+        self.whitelist_users = self.raw.get('whitelist_users', [])
+        self.base_group = self.raw.get('base_group', 0)
         self.verify()
 
     def initConfig(self):

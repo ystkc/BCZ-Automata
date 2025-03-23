@@ -70,6 +70,19 @@ function reloadAll(){
     console.error(error);
   });
 }
+function exportBlacklist(){
+  return fetch('/blacklist', {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json'
+    }
+    }).then(function(response) {
+      return response.json();
+    })
+   .then(function(data) {
+      alert(data.msg);
+   });
+}
 function updateNotice(){
   return fetch('/update_notice', {
     method: 'GET',
@@ -82,6 +95,9 @@ function updateNotice(){
  .then(function(data) {
     alert(data.msg);
   })
+  .catch(function(error) {
+    console.error(error);
+  });
 }
 
 function loadAccountList() {

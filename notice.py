@@ -7,7 +7,7 @@ while True:
     result = text
     while text != "#":
         text = input("请输入要检查的通知（#结束）：")
-        result += text
-    print(notice_parser.check_notice(result))
+        result += text + '\n'
+    print(notice_parser.check_notice_auto(result))
     print("模糊词检查：")
-    print(notice_parser.check_notice(result, include_compulsory=True))
+    print(notice_parser.check_notice_auto(result, include_compulsory=True))

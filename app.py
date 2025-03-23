@@ -38,7 +38,7 @@ from src.http2_client import http2_client
 from append import append_user_data
 
 
-from src.notice_parser import member_storage_class
+from src.notice_parser import static_export_class
 
 from src.schedule import Schedule
 
@@ -181,17 +181,6 @@ def parse_notice_online(only_raw_notice=True):
     conn = sqlite3.connect(config.database_path)
     daka_list_obj.notice_parser.update_notice(conn, only_raw_notice=only_raw_notice) # 根据现有公告数据库自动更新
     conn.close()
-
-def parse_notice_offline():
-    try:
-        logger.info('开始更新成员库...')
-        member_storage = member_storage_class(logger)
-        return
-        member_storage.update_member_infos(logger, NO_EXCEL=False)
-
-        parse_notice_online(only_raw_notice=False)
-    except Exception as e:
-        traceback.print_exc()
 
 status = 0
 @app.get('/update_notice')
@@ -748,6 +737,16 @@ async def more_groups(request: Request, item):
         raise e
         return restful(400, f'{e}')
 
+@app.get('/blacklist')
+async def blacklist(request: Request):
+    '''导出黑名单'''
+    try:
+        exporter = static_export_class()
+        exporter.export_black_list()
+        return restful(200, '导出黑名单成功')
+    except Exception as e:
+        return restful(400, f'{e}')
+
 @app.get('/login')
 async def login(request: Request):
     return templates.TemplateResponse('login.html', {'request': request})
@@ -868,6 +867,36 @@ def sync_and_subscribe():
     except Exception as e:
         logger.error(f"执行同步命令失败：{e}")
         
+def notice_collector():
+    '''按照schedule_task的配置，收集公告'''
+    daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=1, random_delay=168)
+    time.sleep(200)
+    daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=2, random_delay=168)
+    time.sleep(200)
+    daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=3, random_delay=168)
+    time.sleep(200)
+    daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=4, random_delay=168)
+    time.sleep(200)
+    daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=5, random_delay=168)
+    time.sleep(200)
+    daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=6, random_delay=168)
+    time.sleep(200)
+    daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=7, random_delay=168)
+    time.sleep(200)
+    daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=0, random_delay=168)
+    time.sleep(200)
+    daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=2048, random_delay=168)
+    logger.info("公告收集完成!")
+
+@app.get('/collect_notice')
+async def collect_notice(request: Request):
+    '''收集公告'''
+    try:
+        threading.Thread(target=notice_collector).start()
+        return restful(200, '收集公告任务已启动')
+    except Exception as e:
+        return restful(400, f'{e}')
+    
 def schedule_task():
     if config.stargazer_enable:
         star_gazer.start()

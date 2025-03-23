@@ -15,3 +15,9 @@
 /BCZ-Notice-Examiner-
 *.xlsx
 *.csv
+/ncatbot/build
+/ncatbot/ncatbot.egg-info
+*.log
+*.yaml
+napcat.quick.bat.lnk
+/ncatbot

@@ -8,7 +8,15 @@ thrift = "*"
 requests = "*"
 flask = "*"
 waitress = "*"
-mitmproxy = {version = "*", index = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"}
+mitmproxy = "==11.0.2"
+openpyxl = "*"
+fastapi = "*"
+uvicorn = "*"
+fuzzywuzzy = "*"
+httpx = "*"
+numpy = "*"
+websocket = "*"
+python-multipart = "*"
 
 [dev-packages]
 
