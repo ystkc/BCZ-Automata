@@ -116,6 +116,7 @@ async def message_dispatcher():
                 await client.send_text(data=f'{unique_id}#{msg_type}#{msg}')
         except:
             logger.error(f'websocket 发送失败{traceback.format_exc()}')
+            await asyncio.sleep(5)
 
 def daka(unique_id: str):
     '''打卡'''
@@ -150,6 +151,13 @@ async def index(request: Request):
     '''跳转到/accounts'''
     return templates.TemplateResponse('index.html', {'request': request})
 
+@app.get('/groups')
+async def groups(request: Request):
+    try:
+        infos = daka_list_obj.class_list_2048_sharekey
+        return templates.TemplateResponse('groups.html', {'request': request, 'groups': infos})
+    except:
+        return templates.TemplateResponse('groups.html', {'request': request, 'groups': []})
 
 # 以下是调试接口
 @app.get('/buka')
@@ -442,7 +450,7 @@ def change_notice_sse_func_(unique_id, group_share_key, content, mentioned_ids, 
 
 
 @app.get('/api/change_notice_sse')
-async def change_notice_sse(request: Request, unique_id: int=0, group_share_key: str='', group_id: str=''):
+async def change_notice_sse(request: Request, unique_id: int=0, group_share_key: str='', group_id: int=''):
     '''获取通知'''
     try:
         unique_id = int(unique_id)
@@ -489,7 +497,7 @@ async def subscribe_data(request: Request):
     return restful(200, '获取公告成功', top_notice)
 
 @app.post('/subscribe/reply')
-async def subscribe_reply(request: Request, item: dict, unique_id: str='', group_share_key: str='', group_id: str='', notice_hash: str=''):
+async def subscribe_reply(request: Request, item: dict, unique_id: str='', group_share_key: str='', group_id: int='', notice_hash: str=''):
     # 从content中获取reply_content
     reply_content = item.get('reply_content', '')
     correspond = item.get('correspond', True)
@@ -747,6 +755,78 @@ async def blacklist(request: Request):
     except Exception as e:
         return restful(400, f'{e}')
 
+
+@app.get('/group_avatar')
+async def group_avatar(request: Request, group_id: int):
+    '''重定向到群头像url'''
+    return RedirectResponse(f'https://vol-v6.bczcdn.com{daka_list_obj.get_group_avatar(group_id)}')
+
+@app.get('/group_info')
+async def group_info(request: Request, group_id: int):
+    '''获取群名称、介绍'''
+    try:
+        group_info = daka_list_obj.get_group_info(group_id)
+        return restful(200, '获取群名称、介绍成功', group_info)
+    except Exception as e:
+        return restful(400, f'{e}')
+
+@app.get('/group_rank')
+async def group_rank(request: Request, group_id: int):
+    '''获取群排名'''
+    try:
+        conn = sqlite3.connect(config.database_path)
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT MIN(DATE) FROM group_rank WHERE GROUP_ID={group_id}")
+        start_date = curr_date_int = cursor.fetchone()[0]
+        curr_date = datetime.datetime.now().strftime('%Y%m%d')
+        if start_date:
+            curr_date = datetime.datetime.strptime(str(curr_date_int), '%Y%m%d')
+        cursor.execute(f"SELECT DATE, DAKA_COUNT, TOTAL_DAKA_COUNT, RANK_TYPE_RANK, FINISHING_RATE FROM group_rank WHERE GROUP_ID={group_id} ORDER BY DATE")
+        rank_list = cursor.fetchall()
+        data1 = []
+        data2 = []
+        data3 = []
+        data4 = []
+        # 对于缺省数据的日期，补全0
+        for rank in rank_list:
+            while rank[0] != curr_date_int:
+                data1.append(0)
+                data2.append(0)
+                data3.append(999)
+                data4.append(0)
+                curr_date += datetime.timedelta(days=1)
+                curr_date_int = int(curr_date.strftime('%Y%m%d'))
+            data1.append(rank[1])
+            data2.append(rank[2])
+            data3.append(rank[3])
+            data4.append(rank[4])
+            curr_date += datetime.timedelta(days=1)
+            curr_date_int = int(curr_date.strftime('%Y%m%d'))
+        return restful(200, '获取群排名成功', {'start_date': start_date, 'daka_count': data1, 'total_daka_count': data2, 'rank_type_rank': data3, 'finishing_rate': data4})
+    except Exception as e:
+        return restful(400, f'{e}')
+
+@app.get('/members_groups')
+async def members_groups(request: Request, group_id: int):
+    '''获取群的成员历史信息'''
+    try:
+        conn = sqlite3.connect(config.database_path)
+        cursor = conn.cursor()
+        cursor.execute('''SELECT STREAK_TIMES, DURATION_DAYS, USER_ID, START_DATE, ACHIEVED_DATE FROM MEMBERS_GROUPS WHERE GROUP_ID=?''', (group_id,))
+        members_groups = cursor.fetchall()
+        data = {}
+        for member_group in members_groups:
+            # 为每个用户补全name和avatar
+            id = member_group[2]
+            user_infos = daka_list_obj.get_user_name_and_avatar(id)
+            if id not in data:
+                data[id] = {'pt': [], 'av': user_infos['avatar'], 'na': user_infos['nickname']}
+            data[id]['pt'].append([member_group[3], member_group[4]])
+        return restful(200, '获取群的成员历史信息成功', [{'id': k, 'dt': v} for k, v in data.items()])
+    except Exception as e:
+        return restful(400, f'{e}')
+
+
 @app.get('/login')
 async def login(request: Request):
     return templates.TemplateResponse('login.html', {'request': request})
@@ -911,19 +991,20 @@ def schedule_task():
         if '--test' in sys.argv:
             Schedule("* * * * * tester", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=2048, random_delay=21))
         if config.archiever_enable: # 收集打卡数据、公告数据
-            Schedule("30-59 23 * * * rank_and_notice_bronze", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=1, random_delay=168))
-            Schedule("33-59 23 * * * rank_and_notice_silver", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=2, random_delay=168))
-            Schedule("36-59 23 * * * rank_and_notice_gold", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=3, random_delay=168))
-            Schedule("39-59 23 * * * rank_and_notice_platinum", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=4, random_delay=168))
-            Schedule("42-59 23 * * * rank_and_notice_diamond", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=5, random_delay=168))
-            Schedule("45-59 23 * * * rank_and_notice_stellar", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=6, random_delay=168))
+            Schedule("20-59 23 * * * rank_and_notice_bronze", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=1, random_delay=168))
+            Schedule("24-59 23 * * * rank_and_notice_silver", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=2, random_delay=168))
+            Schedule("28-59 23 * * * rank_and_notice_gold", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=3, random_delay=168))
+            Schedule("32-59 23 * * * rank_and_notice_platinum", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=4, random_delay=168))
+            Schedule("36-59 23 * * * rank_and_notice_diamond", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=5, random_delay=168))
+            Schedule("40-59 23 * * * rank_and_notice_stellar", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=6, random_delay=168))
             Schedule("* 6-8 * * 6 champion_dawn", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=7, random_delay=168))
             Schedule("* 12-14 * * 6 champion_noon", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=7, random_delay=168))
-            Schedule("48-59 23 * * * rank_and_notice_champion", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=7, random_delay=168))
+            Schedule("38-59 23 * * * rank_and_notice_champion", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=7, random_delay=168))
             # 以后可能加一个legend(doge)
-            Schedule("51-59 23 * * * rank_and_notice_official", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=0, random_delay=168))
-            Schedule("54-59 23 * * * rank_and_notice_2048", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=2048, random_delay=168))
+            Schedule("44-59 23 * * * rank_and_notice_official", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=0, random_delay=168))
+            Schedule("48-59 23 * * * rank_and_notice_2048", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=2048, random_delay=168))
         Schedule("30-59 23 * * * buka", lambda: buka()) # 补卡
+        daka_list_obj.get_uv() # 测试网络连接，同时标明不是static模式
     try:
         daka_list_obj.init_notice_storage(logger)
     except Exception as e:

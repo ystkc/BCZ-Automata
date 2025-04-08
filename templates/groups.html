@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <!-- 保持原有样式不变 -->
+    <style>
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+      .nav {
+        display: flex;
+        gap: 10px;
+        padding: 10px;
+      }
+      .group-header {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+      }
+      .chart-container {
+        height: 300px;
+        margin: 20px 0;
+      }
+      .timeline-container {
+        position: relative;
+        padding: 10px;
+        border: 1px solid #ccc;
+      }
+      .user-box {
+        height: 40px;
+        position: relative;
+        margin: 5px 0;
+      }
+      .data-point {
+        height: 16px;
+        text-align: center;
+        overflow: hidden;
+        position: absolute;
+        cursor: pointer;
+      }
+      .avatar {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+      }
+      .hide {
+        display: none;
+      }
+      .axis {
+        position: sticky;
+        top: 0;
+        background: white;
+        z-index: 2;
+      }
+    </style>
+  </head>
+  <body>
+    <button id="hide-avatar" onclick="toggleAvatar()">显示/隐藏头像</button>
+    <button id="copy" onclick="copyAt()">复制at名单</button>
+    <button id="other" onclick="dataService.selectGroup(prompt('请输入要查看的小组ID'))">查看其他小组</button>
+    <div id="app" class="container">
+      <nav class="nav" id="nav">
+        {% for group in groups %}
+        <button
+          class="group-btn"
+          id="group-{{ group.groupId }}"
+          data-id="{{ group.groupId }}"
+          data-name="{{ group.name }}"
+          data-share-key="{{ group.shareKey }}"
+          data-introduction="{{ group.introduction }}"
+          data-avatar="https://vol-v6.bczcdn.com{{ group.avatar }}"
+        >
+          {{ group.name }}
+        </button>
+        {% endfor %}
+      </nav>
+
+      <div id="group-header" class="group-header" style="display: none"></div>
+
+      <div class="chart-container">
+        <span id="chart-note"></span>
+        <canvas id="chartCanvas"></canvas>
+      </div>
+
+      <div class="timeline-container">
+        <div id="axis" class="axis"></div>
+        <div id="timeline-content"></div>
+      </div>
+    </div>
+
+    <script src="lib/chart.js"></script>
+    <script src="lib/chartjs-plugin-datalabels.min.js"></script>
+
+    <script>
+
+      toggleAvatar = () => {
+        const avatars = document.querySelectorAll(".avatar");
+        for (const avatar of avatars) {
+          if (avatar.classList.contains("hide")) {
+            avatar.classList.remove("hide");
+          } else {
+            avatar.classList.add("hide");
+          }
+        }
+      };
+      copy = (text) => {
+        navigator.clipboard.writeText(text).then(
+          () => {alert("复制成功awa");},
+          (err) => {
+            // 尝试使用 execCommand 进行复制
+            try {
+              // 选中元素
+              const element = document.createElement("textarea");
+              element.value = text;
+              var range = document.createRange();
+              range.selectNode();
+              var selection = window.getSelection();
+              selection.removeAllRanges();
+              selection.addRange(range);
+              // 执行复制
+              if (document.execCommand("copy")) alert("复制成功ω▼ω");
+              else alert("复制失败ωΔω请手动复制");
+              // 取消选中元素
+              selection.removeAllRanges();
+            } catch (e) {
+              alert("复制失败qwq请手动复制", e);
+            }
+          }
+        );
+      };
+      copyAt = () => {
+        const minPeriod = parseInt(prompt("请输入最小在班总天数"));
+        if (minPeriod === null) return;
+        let copyStr = document.getElementById("group-name").innerText + "\n";
+        // 复制当前班级的排名信息
+        const date = utils.parseDate(state.chartData.start_date);
+        for (let i = 0; i < state.chartData.week_rank_type_rank.length; i++) {
+          const rank = state.chartData.week_rank_type_rank[i];
+          if (rank === 999 || rank === null || rank === undefined) continue;
+          date.setDate(date.getDate() + 7);
+          // 格式：MM月DD日 ....卡 ....段....名
+          const dateStr = `${date.getMonth() + 1}月${date.getDate()}日`;
+          const dakaCount = state.chartData.total_daka_count[i];
+          const rankTypeRank = dom.getRankType(rank);
+          copyStr += `${dateStr} ${dakaCount}卡 ${rankTypeRank}名\n`;
+        }
+        copyStr += "\n🌠元老光荣榜🌠\n（计算总在班天数）\n";
+        // YYYYMMDD
+        const yesterdayDate = new Date();
+        yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+        yesterdayDate.setHours(0, 0, 0, 0);
+        const yesterdaytm = yesterdayDate.getTime();
+        console.log(yesterdaytm);
+        const atList = document.querySelectorAll(".user-info");
+        for (const at of atList) {
+          const period = at.dataset.period;
+          if (period >= minPeriod) {
+            const atName = at.dataset.name;
+            const id = at.dataset.id;
+            const latesttm = utils.parseDate(at.dataset.latestDate).getTime();
+            console.log(latesttm, yesterdaytm);
+            if (latesttm !== yesterdaytm) copyStr += `@${atName}(${id}) ${period}天(暂不在班)\n`;
+            else copyStr += `@${atName}\`${id} ${period}天\n`;
+          }
+        }
+        copy(copyStr);
+      };
+
+      // 状态管理
+      const state = {
+        currentGroups: null,
+        chartData: null,
+        members: [],
+        globalStart: null,
+        globalEnd: null,
+        chartInstance: null,
+        groupBtns: [],
+        hueDelta: Math.random() * 360,
+      };
+      // 工具方法
+      const utils = {
+        getColor(num, total) {
+          if (total <= 1) return `hsl(${Math.random() * 360}, 70%, 80%)`;
+          const hue = (state.hueDelta + (num / total) * 360) % 360;
+          return `hsl(${hue}, 70%, 80%)`;
+        },
+        getBorderColor(num, total) {// 比getColor稍微深一点
+          if (total <= 1) return `hsl(${Math.random() * 360}, 70%, 70%)`;
+          const hue = (state.hueDelta + (num / total) * 360) % 360;
+          return `hsl(${hue}, 70%, 70%)`;
+        },
+        parseDate(dateNum) {
+          const str = dateNum.toString();
+          return new Date(
+            str.substr(0, 4),
+            str.substr(4, 2) - 1,
+            str.substr(6, 2)
+          );
+        },
+
+        dateDiff(start, end) {
+          const startDate = this.parseDate(start);
+          const endDate = this.parseDate(end);
+          return Math.ceil((endDate - startDate) / 86400000) + 1;
+        },
+
+        generateDateLabels(startDate, count) {
+          const start = this.parseDate(startDate);
+          return Array.from({ length: count }, (_, i) => {
+            const date = new Date(start);
+            date.setDate(start.getDate() + i);
+            return `${date.getMonth() + 1}/${date.getDate()}`;
+          });
+        },
+      };
+
+      // DOM 操作
+      const dom = {
+        getRank(rank_type_rank) {
+          rank_type = rank_type_rank / 1000;
+          if (rank_type < 1) return ``;
+          else return `${rank_type_rank % 1000}`;
+        },
+        getRankType(rank_type_rank) {
+          rank_type = rank_type_rank / 1000;
+          if (rank_type < 1) return ``;
+          else if (rank_type < 2) return `青铜${rank_type_rank % 1000}`;
+          else if (rank_type < 3) return `白银${rank_type_rank % 1000}`;
+          else if (rank_type < 4) return `黄金${rank_type_rank % 1000}`;
+          else if (rank_type < 5) return `铂金${rank_type_rank % 1000}`;
+          else if (rank_type < 6) return `钻石${rank_type_rank % 1000}`;
+          else if (rank_type < 7) return `星耀${rank_type_rank % 1000}`;
+          else return `王者${rank_type_rank % 1000}`;
+        },
+        updateGroupHeader(groupIds) {
+          if (groupIds.length === 0) {
+            document.getElementById("group-header").style.display = "none";
+            return;
+          }
+          let html = "";
+          for (const groupId of groupIds) {
+            const currentBtn = document.getElementById(
+              `group-${groupId}`
+            );
+            if (!currentBtn) {
+              // 从/group_info接口获取
+              fetch(`/group_info?group_id=${groupId}`)
+               .then((response) => response.json())
+               .then((data) => {
+                  data = data.data;
+                  const groupBtn = document.createElement("button");
+                  groupBtn.classList.add("group-btn");
+                  groupBtn.innerText = groupBtn.dataset.name = data.name;
+                  groupBtn.id = `group-${groupId}`;
+                  groupBtn.dataset.id = groupId;
+                  groupBtn.dataset.avatar = 'https://vol-v6.bczcdn.com' + data.avatar;
+                  groupBtn.dataset.introduction = data.introduction;
+                  groupBtn.addEventListener("click", () => {
+                    for (const b of state.groupBtns) b.classList.remove("active");
+                    groupBtn.classList.add("active");
+                    dataService.selectGroup(groupBtn.dataset.id);
+                  });
+                  document.getElementById(`nav`).appendChild(groupBtn);
+                  dom.updateGroupHeader([groupId]);
+                })
+               .catch((error) => {
+                  console.error(error);
+                });
+              return;
+            }
+            const currentDataset = currentBtn.dataset;
+            html += `<div>
+              <img id="group-avatar" class="avatar hide" src="${currentDataset.avatar}" />
+              <h2 id="group-name">${currentDataset.name}</h2>
+              <p id="group-introduction">${currentDataset.introduction}</p></div>
+            `;
+          }
+          const header = document.getElementById("group-header");
+          header.style.display = "flex";
+          header.innerHTML = html;
+        },
+
+        updateChart() {
+          const ctx = document.getElementById("chartCanvas").getContext("2d");
+          if (state.chartInstance) state.chartInstance.destroy();
+
+          const labels = utils.generateDateLabels(
+            state.chartData.start_date,
+            state.chartData.daka_count.length
+          );
+          const total_dataset = 3;
+          state.chartInstance = new Chart(ctx, {
+            type: "bar",
+            plugins: [ChartDataLabels],
+            data: {
+              labels: labels,
+              datasets: [
+                {
+                  label: "当天卡数",
+                  data: state.chartData.daka_count,
+                  backgroundColor: utils.getColor(1, total_dataset),
+                  borderColor: utils.getBorderColor(1, total_dataset),
+                  datalabels: {
+                    align: "end",
+                    anchor: "end",
+                    color: utils.getBorderColor(1, total_dataset),
+                    formatter: (v) => v || "",
+                  },
+                },
+                {
+                  spanGaps: true,
+                  label: "日排名",
+                  data: state.chartData.rank_type_rank.map((v) => v===999?null:(1000 - v % 1000) / 5),
+                  backgroundColor: utils.getColor(2, total_dataset),
+                  borderColor: utils.getBorderColor(2, total_dataset),
+                  datalabels: {
+                    align: "end",
+                    anchor: "end",
+                    color: utils.getBorderColor(2, total_dataset),
+                    formatter: (_, ctx) =>
+                      dom.getRank(state.chartData.rank_type_rank[ctx.dataIndex]),
+                  },
+                },
+                {
+                  spanGaps: true,
+                  label: "结算排名",
+                  data: state.chartData.week_rank_type_rank.map((v) => v===999?null:(1000 - v % 1000) / 5),
+                  backgroundColor: utils.getColor(3, total_dataset),
+                  borderColor: utils.getBorderColor(3, total_dataset),
+                  type: "line",
+                  datalabels: {
+                    align: "end",
+                    anchor: "end",
+                    offset: -10,
+                    color: utils.getBorderColor(3, total_dataset),
+                    formatter: (_, ctx) =>
+                      dom.getRankType(state.chartData.week_rank_type_rank[ctx.dataIndex]),
+                  }
+                }
+              ],
+            },
+            options: {
+              responsive: true,
+              plugins: {
+                datalabels: {
+                  color: "#333",
+                  font: {
+                    weight: "bold",
+                    size: 10,
+                  },
+                },
+                legend: {
+                  display: true,
+                },
+                title: {
+                  display: false,
+                },
+              },
+              scales: {
+                x: {
+                  grid: {
+                    display: false,
+                  },
+                  ticks: {
+                    display: false,
+                  },
+                },
+                y: {
+                  beginAtZero: true,
+                  grid: {
+                    display: false,
+                  },
+                  ticks: {
+                    display: false,
+                  },
+                },
+              },
+            },
+          });
+        },
+
+        figureUserPoint(user) {
+          let html = "",
+            total_period = 0;
+          // 清洗数据，对于point[0]-point[1]重叠的，只保留一个
+          const points = user.dt.pt.filter((point, i) => {
+            if (i === 0) return true;
+            const prevPoint = user.dt.pt[i - 1];
+            if (point[0] <= prevPoint[1]) return false;
+            return true;
+          });
+          for (const point of points) {
+            const color = utils.getColor(1, 1);
+            const period = utils.dateDiff(point[0], point[1]);
+            total_period += period;
+            html += `<div class="data-point" style="background-color: ${color}; width: ${
+              period << 1
+            }px; margin-left: ${
+              utils.dateDiff(state.globalStart, point[0]) * 2
+            }px">${period}天</div>`;
+          }
+          user.total_period = total_period;
+          user.html = html;
+        },
+
+        updateTimeline() {
+          const content = document.getElementById("timeline-content");
+          content.innerHTML = "";
+
+          state.members.forEach((member) => {
+            const userBox = document.createElement("div");
+            userBox.innerHTML = `
+              <div class="user-box">
+                <img class="avatar hide" title="${member.dt.av}" />
+                <span class="user-info" data-id="${member.id}" data-name="${member.dt.na}" data-period="${member.total_period}" data-latest-date="${member.dateend}">${member.dt.na}[${member.id}]总在班${member.total_period}天</span>${member.html}</div>`;
+            content.appendChild(userBox);
+          });
+        },
+      };
+
+      // 数据操作
+      const dataService = {
+        async selectGroup(groupId) {
+          state.currentGroups = groupId;
+          dom.updateGroupHeader([groupId]);
+
+          state.chartData = await this.fetchData(
+            `/group_rank?group_id=${groupId}`
+          ).then((data) => data.data);
+          // 提取所有周日的排名为week_rank_type_rank
+          // 先获取start_date的星期数
+          if (state.chartData.start_date === null) {
+            document.getElementById("chart-note").textContent = "该小组没有排名数据";
+            if (state.chartInstance) state.chartInstance.destroy();
+          } else {
+            document.getElementById("chart-note").textContent = "";
+            // 计算周排名
+            let start_date_week = 7 - utils.parseDate(state.chartData.start_date).getDay();
+            if (start_date_week === 7) start_date_week = 0;
+            state.chartData.week_rank_type_rank = state.chartData.rank_type_rank.map(
+              (v, i) => i % 7 === start_date_week ? v : undefined
+            );
+            // 画
+            dom.updateChart();
+          }
+          state.members = await this.fetchData(
+            `/members_groups?group_id=${groupId}`
+          ).then((data) => data.data);
+          // 格式：[{id:..., pt:[[[startdate, enddate]]...], av: avatar, na: username}]
+          // 计算每个member的最早开始日期和最晚结束日期
+          let minDate = Infinity;
+          let maxDate = 0;
+          for (const member of state.members) {
+            let min = Infinity;
+            let max = 0;
+            for (const point of member.dt.pt) {
+              if (point[0] < min) min = point[0];
+              if (point[1] > max) max = point[1];
+            }
+            member.datestart = min;
+            member.dateend = max;
+            if (min < minDate) minDate = min;
+            if (max > maxDate) maxDate = max;
+          }
+          state.globalEnd = maxDate;
+          state.globalStart = minDate;
+          for (const member of state.members) {
+            dom.figureUserPoint(member);
+          }
+          state.members = state.members.sort((a, b) => {
+            if (b.total_period !== a.total_period)
+              return b.total_period - a.total_period;
+            else if (b.dateend !== a.dateend) return b.dateend - a.dateend;
+            return b.dateend - a.dateend;
+          });
+
+          this.calculateDateRange();
+          dom.updateTimeline();
+        },
+
+        async fetchData(url) {
+          const response = await fetch(url);
+          return response.json();
+        },
+
+        calculateDateRange() {
+          const axis = document.getElementById("axis");
+          const days = utils.dateDiff(state.globalStart, state.globalEnd);
+          Object.assign(axis.style, {
+            width: `${days * 2}px`,
+            height: "20px",
+          });
+        },
+      };
+
+      // 初始化
+      document.addEventListener("DOMContentLoaded", () => {
+        state.groupBtns = document.querySelectorAll(".group-btn");
+
+        // 绑定按钮点击事件
+        for (const btn of state.groupBtns) {
+          btn.addEventListener("click", () => {
+            // 更新按钮激活状态
+            for (const b of state.groupBtns) b.classList.remove("active");
+            btn.classList.add("active");
+            dataService.selectGroup(btn.dataset.id);
+          });
+        }
+        if (state.groupBtns.length > 0) {
+          // 初始化第一个分组
+          state.groupBtns[0].click();
+        } else {
+          alert("没有可用的分组，请确认初始化完毕且有添加特别关注名单");
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -115,7 +115,6 @@ class http2_client:
                 return response
             except Exception as e:
                 print(f'http2 post error: {e}')
-                print(url, headers, json, timeout)
                 if client.is_closed:
                     client = self.get_http2_client()
                     continue

@@ -66,7 +66,7 @@ class NoticeParser:
         '柒': '7',
         '捌': '8',
         '玖': '9',
-        '〇': '0',
+        '〇': '0'
     }
     replace_keys = set(replace_dict.keys())
     # Chinese Characters: 4E00–9FA5
@@ -132,6 +132,10 @@ class NoticeParser:
                 new_text += self.replace_dict[char]
             elif re.match(self.pattern, char) is not None or char in invalid_chars:
                 self.set_invalid_storage(position, char)
+            elif char >= 'A' and char <= 'Z':
+                self.set_invalid_storage(position, char)
+                position += 1
+                new_text += char.lower()
             else:
                 position += 1
                 new_text += char
@@ -146,6 +150,7 @@ class NoticeParser:
         new_text = ""
         for position in range(len(text)):
             original_content_replaced = False
+            auto_replaced = True if text[position] == '■' else False
             if position in self.invalid_storage:
                 min_char = "9"
                 min_char_cnt = 0
@@ -157,9 +162,12 @@ class NoticeParser:
                         elif char == min_char:
                             min_char_cnt += 1
                     else:
+                        if char in self.replace_keys or char >= 'A' and char <= 'Z':
+                            if auto_replaced:
+                                continue
+                            else:
+                                original_content_replaced = True
                         new_text += char
-                        if char in self.replace_keys:
-                            original_content_replaced = True
                 if min_char == "1":
                     # continue
                     new_text += '\033[31m'
@@ -263,8 +271,9 @@ class NoticeParser:
             except:
                 return -1, -1, "Invalid regular expression"
             if s_result:
-                result = s_result.start()
-                return s_result.start(), s_result.start() + len(check_word), accept_notice[result:result+len(check_word)+20]
+                s = s_result.start()
+                e = s_result.end()
+                return s, e, accept_notice[s:e+20]
         elif '|' in check_word:
             sub_words = check_word.split('|')
             temp_accept_notice = accept_notice
@@ -491,7 +500,8 @@ class static_export_class:
         cursor = conn.cursor()
         cursor.execute("SELECT string FROM string_hash")
         hash_list = cursor.fetchall()
-        self.hash_dict = {}
+        self.hash_dict = {datetime.datetime.now().strftime('更新于%Y-%m-%d,%H:%M:%S'): 0}
+        self.hash_index = 1
         for hash_id, string in hash_list:
             self.hash_dict[string] = hash_id
         cursor.execute("SELECT * FROM blacklist")
@@ -614,8 +624,6 @@ class static_export_class:
     
     def export_black_list(self):
         '''导出黑名单到静态json和bin文件'''
-        # 添加日期戳
-        self.hash_string(datetime.datetime.now().strftime('更新于%Y-%m-%d,%H:%M:%S'))
         # 读取黑名单
         self.logger.info("正在读取 黑名单")
         self.read_blacklist()
@@ -626,7 +634,7 @@ class static_export_class:
         with zipfile.ZipFile(f"{static_export_class.black_list_assets}.zip", 'w', zipfile.ZIP_DEFLATED) as f:
             f.write(static_export_class.black_list_assets, arcname=static_export_class.black_list_assets)
         # 写入bin文件
-        self.logger.info("正在写入 黑名单 bin 文件")
+        self.logger.info("正在写入 黑名单 bin 文件，共" + str(len(self.hash_dict)) + "条数据")
         with open(static_export_class.black_list_string_assets, 'wb') as f:
             f.write(encoder(static_export_class.flatten(static_export_class.unfold(self.hash_dict.keys()))))
         with zipfile.ZipFile(f"{static_export_class.black_list_string_assets}.zip", 'w', zipfile.ZIP_DEFLATED) as f:

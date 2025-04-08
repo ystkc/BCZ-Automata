@@ -101,8 +101,8 @@ class daka_list_class:
         self.logs = []
         self.warnings = []
         self.class_list_2048 = []
-        for share_key in config.class_list_2048:
-            self.class_list_2048.append({'shareKey': share_key, 'score': None})
+        for group_id in config.class_list_2048:
+            self.class_list_2048.append({'groupId': group_id, 'score': None})
         self.anticheat_power = config.anticheat_power
         self.do_not_charge_pk_energy = config.do_not_charge_pk_energy
         self.lock = threading.Lock()
@@ -297,12 +297,15 @@ class daka_list_class:
         '''删除账号'''
         self.user_dict_obj.delete_user(unique_id)
 
-    def delete_old_logs(self):
-        '''删除35天前的日志文件'''
+    def delete_old_logs(self) -> str:
+        '''删除35天前的日志文件，并返回最新的日志文件名'''
         today = datetime.date.today()
+        max_logname = ""
         for file_name in os.listdir(self.log_dir):
             try:
                 file_date_str = file_name.split('_')[1].split(' ')[0]
+                if file_name.startswith('log') and file_name > max_logname:
+                    max_logname = file_name
                 file_date = datetime.datetime.strptime(file_date_str, '%Y-%m-%d').date()
                 if (today - file_date).days > 35:
                     os.remove(os.path.join(self.log_dir, file_name))
@@ -310,6 +313,8 @@ class daka_list_class:
             except:
                 print(f'文件名{file_name}格式错误')
                 pass
+        print(f'最近日志文件名{max_logname}')
+        return max_logname
     
     def init_notice_storage(self, logger):
         '''加载用户信息、小班信息、作弊信息、公告信息、坏词信息、词库信息'''
@@ -358,6 +363,15 @@ class daka_list_class:
         cursor.execute('''SELECT GROUP_ID, SHARE_KEY, MONITOR_ID, GROUP_NAME, GROUP_INTRODUCTION, GROUP_AVATAR FROM GROUP_NAME''')
         for row in cursor.fetchall():
             self.group_infos[row[0]] = (row[0], row[1], row[2], row[3], row[4], row[5])
+        # 将2048列表中的班级ID转换为shareKey
+        valid_class_list_2048 = []
+        for group in self.class_list_2048:
+            group_id = group['groupId']
+            if group_id not in self.group_infos:
+                self.add_warning(f'2048列表中班级{group_id}不存在')
+            group = self.group_infos[group_id]
+            valid_class_list_2048.append({'groupId': group[0],'shareKey': group[1], 'name': group[3], 'introduction': group[4].replace('\n','\\n'), 'avatar': group[5], 'score': None})
+        self.class_list_2048_sharekey = valid_class_list_2048
         logger.info(f'group_infos共加载{len(self.group_infos)}班')
         # 加载用户信息
         self.user_infos = {} # USER_ID:(USER_ID, NICKNAME, USER_AVATAR)
@@ -406,14 +420,18 @@ class daka_list_class:
         conn.close()
         # 读取log
         max_timestamp = int(today_date.timestamp()) - 86400
+        print(today_date.timestamp(), max_timestamp)
         t = 0
         today_date_str = datetime.datetime.now().strftime('%Y-%m-%d')
+        max_filename = ""
         for file_name in os.listdir(self.log_dir):
             if file_name.startswith(f'log_{today_date_str}') and file_name.endswith('.txt'):
                 t = int(file_name.split('.')[1])
+                print(t, max_timestamp)
                 if t > max_timestamp:
                     max_timestamp = t
-        self.logger.info(f'上次更新用户和通知状态于{int(today_date.timestamp()) - max_timestamp}秒前')
+                    max_filename = file_name
+        self.logger.info(f'上次更新用户和通知状态于{int(today_date.timestamp()) - max_timestamp}秒前({max_filename})')
         self.latest_check_notice_timestamp = self.latest_check_user_timestamp = max_timestamp
         # 初始化数据库内存缓冲区
         self.notice_buffer = [] # 每天最多7000条，暂无需设置大小
@@ -492,7 +510,7 @@ class daka_list_class:
     def optimize_db(self, conn: sqlite3.Connection):
         '''优化数据库'''
         conn.execute("PRAGMA synchronous = OFF")  # 减少磁盘同步
-        conn.execute("PRAGMA journal_mode = WAL")  # 使用WAL日志模式
+        # conn.execute("PRAGMA journal_mode = WAL")  # 事务一般比较大，不用WAL
 
 
     def close(self, no_check_daka=False):
@@ -502,7 +520,7 @@ class daka_list_class:
         now = datetime.datetime.now()
         # 写入缓冲区到数据库
         # 写入puzzle_buffer
-        self.logs.append(f'[{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}] 开始关闭')
+        self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', '开始关闭', True)
         if BCZ_NCSVC and len(self.puzzle_buffer) > 0:
             puzzle_conn = sqlite3.connect(self.puzzle_path)
             self.optimize_db(puzzle_conn)
@@ -510,9 +528,10 @@ class daka_list_class:
             cursor.executemany('''INSERT OR REPLACE INTO BCZ_NCSVC (ID, QUESTION, CHN_MEAN, ANSWER, OPTIONS1, OPTIONS2, OPTIONS3, TOPIC_ID) VALUES (?, ?, ?, ?, ?, ?, ?, ?)''', self.puzzle_buffer)
             puzzle_conn.commit()
             puzzle_conn.close()
-            self.logger.info(f'写入{len(self.puzzle_buffer)}条puzzle')
+            self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'写入{len(self.puzzle_buffer)}条puzzle', True)
             self.puzzle_buffer = []
-            self.logs.append(f'[{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}] puzzle写入完毕')
+        else: # 2
+            self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', '没有puzzle', True)
         
         if len(self.patch_buffer) > 0:
             patch_conn = sqlite3.connect(self.dict_patch_db_path)
@@ -521,37 +540,41 @@ class daka_list_class:
             cursor.executemany('''INSERT OR REPLACE INTO dict_bcz (ANSWER, WORD, TOPIC_ID, RANK) VALUES (?, ?, ?, ?)''', self.patch_buffer)
             patch_conn.commit()
             patch_conn.close()
-            self.logger.info(f'写入{len(self.patch_buffer)}条patch')
+            self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'写入{len(self.patch_buffer)}条patch', True)
             self.patch_buffer = []
-            self.logs.append(f'[{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}] patch写入完毕')
+        else: # 3
+            self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', '没有patch', True)
         
         conn = sqlite3.connect(self.notice_and_rank_path)
         self.optimize_db(conn)
         cursor = conn.cursor()
         self.save_other_info(cursor)
         # 删除35天前的日志
-        self.delete_old_logs() # 这家伙也是log很多（故意的）
-        self.logger.info(f'35天前的日志删除完毕')
+        latest_log = self.delete_old_logs() # 这家伙也是log很多（故意的）
+        with open(os.path.join(self.log_dir, latest_log), 'r', encoding='utf-8') as f:
+            try:
+                buka_users = f.read().split('_*')[1]
+            except:
+                buka_users = ''
+        self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'35天前的日志删除完毕，上一个补卡用户：\033[1;36m{buka_users}\033[0m', True)
         # 写入king状态
         with open('king_status.json', 'w', encoding='utf-8') as f:
             json.dump(self.is_king, f, ensure_ascii=False)
-        self.logger.info(f'king_status.json保存完毕')
-        self.logs.append(f'[{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}] 账号状态保存A')
+        self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', 'king_status.json保存完毕', True)
         # 检查未打卡用户
         if close_start_time - self.latest_check_user_timestamp > 3600 and not no_check_daka:
             not_daka_users = self.check_not_daka_users(include_not_daka=False) # 有网络请求，要放在close前面，防止log太多
             self.latest_check_user_timestamp = close_start_time
-            self.logger.info(f'本轮{self.get_user_cnt()}个账号，有{len(not_daka_users)}人未打卡，共耗时{close_start_time - self.time_start}秒')
+            self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'打卡检测完毕，本轮{self.get_user_cnt()}个账号，有{len(not_daka_users)}人未打卡_*{[user["config"].get("name", user["config"]) for user in not_daka_users]}_*，共耗时{close_start_time - self.time_start}秒', True)
             for user in not_daka_users:
-                self.logger.warning(f'未打卡用户：{user["config"].get("name")}({user["config"].get("unique_id")})')
-            self.logs.append(f'[{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}] 打卡检测完毕 {not_daka_users}')
-        else:
-            self.logger.info(f'最近{close_start_time - self.latest_check_user_timestamp}秒前检测过 未打卡用户，不重复检查')
+                self.add_warning(f'未打卡用户：{user["config"].get("name")}({user["config"].get("unique_id")})')
+        else:# 5
+            self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'最近{close_start_time - self.latest_check_user_timestamp}秒前检测过 未打卡用户，不重复检查', True)
 
         
         # 保存用户配置
         self.user_dict_obj.save()
-        self.logger.info(f'用户配置保存完毕')
+        self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', '用户配置保存完毕', True)
         # 保存pk结果
         self.save_pk_result()
         # 写入作弊检测self.cheat_tracker结果到csv
@@ -561,7 +584,6 @@ class daka_list_class:
                 writer.writerow(['bcz_id', 'word_cnt', 'time','study_cheat'])
                 for user_id, (word_count, time_, status) in self.cheat_tracker.items():
                     writer.writerow([user_id, word_count, time_, status])
-        self.logs.append(f'[{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}] 账号状态保存B')
         # 将公告检测结果存入notice_and_rank_path
         cnt = 0
         rest = 0
@@ -577,7 +599,8 @@ class daka_list_class:
                 cnt += 1
             if check_item['checked'] < 2:
                 rest += 1
-        self.logger.info(f'本轮检查{cnt}条notice，剩余{rest}条')
+        self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'notice保存完毕，本轮{cnt}条，剩余{rest}条', True)
+        bad_words_display = "新增坏词：\n"
         if cnt > 0:
             bad_words = self.get_bad_words(has_mid=False)
             # 获取一下今天有没有新的坏词
@@ -585,13 +608,13 @@ class daka_list_class:
             has_new_bad_word = False
             for bad_word in bad_words:
                 if bad_word.startswith(date_str):
-                    self.logger.info(f'新增坏词：{bad_word}')
+                    bad_words_display += f'{bad_word}\n'
                     has_new_bad_word = True
             # 将坏词存入json
             if has_new_bad_word:
                 with open('tmp_bad_words.json', 'w', encoding='utf-8') as f:
                     json.dump(bad_words, f, ensure_ascii=False, indent=4)
-        self.logs.append(f'[{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}] 公告检测结果保存完毕')
+        self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', bad_words_display, True)
         # 写入notice_buffer
         # 删除35天前的MEMBERS和notice数据
         date_int = int(now.strftime('%m%d'))
@@ -600,41 +623,37 @@ class daka_list_class:
         thresh_date_int_timestamp = int(thresh_date.timestamp())
         if date_int < thresh_date_int: # 跨年
             cursor.execute('''SELECT COUNT(*) FROM MEMBERS WHERE TODAY_DATE < ? AND TODAY_DATE > ? ''', (thresh_date_int, date_int))
-            print(f'删除去年{thresh_date_int}前的MEMBERS数据{cursor.fetchone()[0]}条')
+            self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'开始删除去年{thresh_date_int}前的MEMBERS数据{cursor.fetchone()[0]}条', True)
             cursor.execute('''DELETE FROM MEMBERS WHERE TODAY_DATE < ? AND TODAY_DATE > ? ''', (thresh_date_int, date_int))
         else:
             cursor.execute('''SELECT COUNT(*) FROM MEMBERS WHERE TODAY_DATE < ?''', (thresh_date_int,))
-            print(f'删除{thresh_date_int}前的MEMBERS数据{cursor.fetchone()[0]}条')
+            self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'开始删除{thresh_date_int}前的MEMBERS数据{cursor.fetchone()[0]}条', True)
             cursor.execute('''DELETE FROM MEMBERS WHERE TODAY_DATE < ?''', (thresh_date_int,))
-        self.logs.append(f'[{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}] MEMBERS数据删除完毕')
         # 删除notice中DATE<thresh_date_int且(LATEST_DATE 是None或<thresh_date_int)的记录
-        # cursor.execute('''SELECT COUNT(*) FROM notice WHERE DATE < ? AND (LATEST_DATE IS NULL OR LATEST_DATE < ?)''', (thresh_date_int_timestamp, thresh_date_int_timestamp))
-        # print(f'删除{thresh_date.strftime("%Y-%m-%d")}前的notice数据{cursor.fetchone()[0]}条')
-        # cursor.execute('''DELETE FROM notice WHERE DATE < ? AND (LATEST_DATE IS NULL OR LATEST_DATE < ?)''', (thresh_date_int_timestamp, thresh_date_int_timestamp))
+        cursor.execute('''SELECT COUNT(*) FROM notice WHERE DATE < ? AND (LATEST_DATE IS NULL OR LATEST_DATE < ?)''', (thresh_date_int_timestamp, thresh_date_int_timestamp))
+        self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'开始删除{thresh_date.strftime("%Y-%m-%d")}前的notice数据{cursor.fetchone()[0]}条', True)
+        cursor.execute('''DELETE FROM notice WHERE DATE < ? AND (LATEST_DATE IS NULL OR LATEST_DATE < ?)''', (thresh_date_int_timestamp, thresh_date_int_timestamp))
         # 删除MEMBERS_GROUPS中ACHIEVED_DATE在7天前且STREAK_TIMES<7的记录
         thresh_date_int = int((now - datetime.timedelta(days=7)).strftime('%Y%m%d'))
         cursor.execute('''SELECT COUNT(*) FROM MEMBERS_GROUPS WHERE ACHIEVED_DATE < ? AND STREAK_TIMES < ?''', (thresh_date_int, 7))
-        print(f'删除{thresh_date_int}前且STREAK_TIMES<7的MEMBERS_GROUPS数据{cursor.fetchone()[0]}条')
+        self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'开始删除{thresh_date_int}前且STREAK_TIMES<7的MEMBERS_GROUPS数据{cursor.fetchone()[0]}条', True)
         cursor.execute('''DELETE FROM MEMBERS_GROUPS WHERE ACHIEVED_DATE < ? AND STREAK_TIMES < ?''', (thresh_date_int, 7))
-        self.logs.append(f'[{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}] notice数据删除完毕')
         # 写入notice
-        self.logger.info(f'写入notice缓冲区{len(self.notice_buffer)}条')
+        self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'开始写入notice缓冲区{len(self.notice_buffer)}条', True)
         cursor.executemany('''INSERT OR REPLACE INTO notice (GROUP_ID, RANK_TYPE_RANK, CONTENT, DATE, LATEST_DATE, SCORE) VALUES (?, ?, ?, ?, ?, ?)''', self.notice_buffer)
         self.notice_buffer = []
-        self.logs.append(f'[{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}] notice写入完毕')
 
         # 仅更新时间的公告
-        self.logger.info(f'更新notice时间缓冲区{len(self.notice_time_buffer)}条')
+        self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'开始更新notice时间缓冲区{len(self.notice_time_buffer)}条', True)
         # cursor.executemany('''UPDATE notice SET LATEST_DATE = ?, RANK_TYPE_RANK = ? WHERE GROUP_ID = ? AND DATE = ?''', self.notice_time_buffer)
         cursor.executemany('''DELETE FROM notice WHERE GROUP_ID = ? AND DATE = ?''', self.notice_time_delete_buffer)
         self.logger.info('...')
         cursor.executemany('''INSERT OR REPLACE INTO notice (GROUP_ID, RANK_TYPE_RANK, CONTENT, DATE, LATEST_DATE, SCORE) VALUES (?, ?, ?, ?, ?, ?)''', self.notice_time_buffer)
         self.notice_time_buffer = []
         self.notice_time_delete_buffer = []
-        self.logs.append(f'[{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}] notice时间更新完毕')
 
         # 被清空的公告
-        self.logger.info(f'写入notice被清空缓冲区{len(self.notice_cleared_buffer)}条')
+        self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'开始写入notice被清空缓冲区{len(self.notice_cleared_buffer)}条', True)
         # cursor.executemany('''UPDATE notice SET CHECKED=? WHERE GROUP_ID = ? AND DATE = ?''', self.notice_cleared_buffer)
         # cursor.executemany('''UPDATE notice SET CHECKED=? WHERE GROUP_ID = ? AND LATEST_DATE = ?''', self.notice_cleared_buffer)
         cursor.executemany('''DELETE FROM notice WHERE GROUP_ID = ? AND DATE = ?''', self.notice_cleared_delete_buffer)
@@ -642,19 +661,16 @@ class daka_list_class:
         cursor.executemany('''INSERT OR REPLACE INTO notice (GROUP_ID, RANK_TYPE_RANK, CONTENT, DATE, LATEST_DATE, SCORE, CHECKED) VALUES (?, ?, ?, ?, ?, ?, ?)''', self.notice_cleared_buffer)
         self.notice_cleared_buffer = [] # 已经在store_notice中处理
         self.notice_cleared_delete_buffer = []
-        self.logs.append(f'[{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}] notice被清空写入完毕')
 
         # 写入group_name
-        self.logger.info(f'写入group_name缓冲区{len(self.group_info_buffer)}条')
+        self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'开始写入group_name缓冲区{len(self.group_info_buffer)}条', True)
         cursor.executemany('''INSERT OR REPLACE INTO GROUP_NAME (GROUP_ID, SHARE_KEY, MONITOR_ID, GROUP_NAME, GROUP_INTRODUCTION, GROUP_AVATAR) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(GROUP_ID) DO UPDATE SET SHARE_KEY = excluded.SHARE_KEY, MONITOR_ID = excluded.MONITOR_ID, GROUP_NAME = excluded.GROUP_NAME, GROUP_INTRODUCTION = excluded.GROUP_INTRODUCTION, GROUP_AVATAR = excluded.GROUP_AVATAR''', self.group_info_buffer)
         self.group_info_buffer = []
-        self.logs.append(f'[{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}] group_name写入完毕')
 
         # 写入user_name
-        self.logger.info(f'写入user_name缓冲区{len(self.user_info_buffer)}条')
+        self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'开始写入user_name缓冲区{len(self.user_info_buffer)}条', True)
         cursor.executemany('''INSERT OR REPLACE INTO USER_NAME (USER_ID, NICKNAME, USER_AVATAR) VALUES (?, ?, ?) ON CONFLICT(USER_ID) DO UPDATE SET NICKNAME = excluded.NICKNAME, USER_AVATAR = excluded.USER_AVATAR''', self.user_info_buffer)
         self.user_info_buffer = [] # 每天最多700000条，暂无需设置大小
-        self.logs.append(f'[{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}] user_name写入完毕')
 
         # 写入member
         # 如果是星期日，则全部写入；否则只保留已打卡的成员
@@ -663,53 +679,48 @@ class daka_list_class:
             for value in self.member_buffer:
                 if value[1] != 0:
                     copied_buffer.append(value)
-            self.logger.info(f'写入member缓冲区，原有{len(self.member_buffer)}条，保留已打卡的成员{len(copied_buffer)}条')
+            self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'开始写入member缓冲区，原有{len(self.member_buffer)}条，保留已打卡的成员{len(copied_buffer)}条', True)
             cursor.executemany('''INSERT OR REPLACE INTO MEMBERS (USER_ID, COMPLETED_TIME, TODAY_DATE, WORD_COUNT, STUDY_CHEAT, BOOK_NAME) VALUES (?, ?, ?, ?, ?, ?)''', copied_buffer)
         else:
-            self.logger.info(f'写入member缓冲区{len(self.member_buffer)}条')
+            self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'开始写入member缓冲区，原有{len(self.member_buffer)}条，周末全部写入', True)
             cursor.executemany('''INSERT OR REPLACE INTO MEMBERS (USER_ID, COMPLETED_TIME, TODAY_DATE, WORD_COUNT, STUDY_CHEAT, BOOK_NAME) VALUES (?, ?, ?, ?, ?, ?)''', self.member_buffer)
         self.member_buffer = []
-        self.logs.append(f'[{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}] member写入完毕')
 
         # 写入book_name
-        self.logger.info(f'写入book_name缓冲区{len(self.book_name_buffer)}条')
+        self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'开始写入book_name缓冲区{len(self.book_name_buffer)}条', True)
         cursor.executemany('''INSERT OR REPLACE INTO BOOK_NAME (HASH_ID, BOOK_NAME, BOOK_ID, BOOK_URL) VALUES (?, ?, ?, ?)''', self.book_name_buffer)
         self.book_name_buffer = []
-        self.logs.append(f'[{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}] book_name写入完毕')
         # 写入MEMBERS_GROUPS
-        self.logger.info(f'写入MEMBERS_GROUPS缓冲区{len(self.member_groups_buffer)}条')
+        self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'开始写入MEMBERS_GROUPS缓冲区{len(self.member_groups_buffer)}条', True)
         cursor.executemany('''INSERT OR REPLACE INTO MEMBERS_GROUPS (USER_ID, GROUP_ID, STREAK_TIMES, COMPLETED_TIMES_START, START_DATE, ACHIEVED_DATE, DURATION_DAYS) VALUES (?, ?, ?, ?, ?, ?, ?)''', self.member_groups_buffer)
         self.member_groups_buffer = []
-        self.logs.append(f'[{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}] MEMBERS_GROUPS写入完毕')
         # 写入MEMBERS_GROUPS合并后需要被删除的部分
-        self.logger.info(f'写入MEMBERS_GROUPS合并后需要被删除的部分{len(self.member_groups_delete_buffer)}条')
+        self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'开始写入MEMBERS_GROUPS合并后需要被删除的部分{len(self.member_groups_delete_buffer)}条', True)
         cursor.executemany('''DELETE FROM MEMBERS_GROUPS WHERE USER_ID = ? AND GROUP_ID = ? AND START_DATE = ?''', self.member_groups_delete_buffer)
         self.member_groups_delete_buffer = []
-        self.logs.append(f'[{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}] MEMBERS_GROUPS合并后需要被删除的部分写入完毕')
-        self.logger.info(f"写入GROUP_RANK缓冲区{len(self.group_rank_buffer)}")
+        # 写入GROUP_RANK
+        self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'开始写入GROUP_RANK缓冲区{len(self.group_rank_buffer)}条', True)
         cursor.executemany('''INSERT OR REPLACE INTO GROUP_RANK (DATE, GROUP_ID, RANK_TYPE_RANK, DAKA_COUNT, TOTAL_DAKA_COUNT, FINISHING_RATE) VALUES (?, ?, ?, ?, ?, ?)''', self.group_rank_buffer)
         self.group_rank_buffer = []
-        self.logs.append(f'[{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}] GROUP_RANK写入完毕')
         self.rank_and_daka_count_temp = {}# 用于储存排行榜上的班级的卡数和排名
         conn.commit()
-        self.logger.info(f'缓冲区写入完毕')
         if close_start_time - self.latest_check_notice_timestamp > 3600:
             self.notice_parser.update_notice(conn, only_raw_notice=False)
             self.latest_check_notice_timestamp = close_start_time
-            self.logger.info(f'notice_parser检查库已更新')
-            self.logs.append(f'[{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}] notice_parser检查库已更新')
-        else:
-            self.logger.info(f'notice_parser 时间过短，不更新')
+            self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'notice_parser已更新', True)
+        else: # 19
+            self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'notice_parser 时间过短，不更新', True)
         conn.close()
-        self.logger.info("数据库已保存")
+        self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'数据库已保存', True)
+
         # 写入日志
-        if len(self.logs) > 0 or len(self.warnings) > 0:
+        self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'共有{len(self.logs)}(-25)条日志，{len(self.warnings)}条警告如下：', False)
+        if len(self.logs) > 25 or len(self.warnings) > 0:
             with open(f'{self.log_dir}log_{now.strftime("%Y-%m-%d %H-%M-%S")}.{self.latest_check_user_timestamp}.{len(self.logs)}.txt', 'w', encoding='utf-8') as f:
                 for msg in self.logs:
                     f.write(msg)
                 for msg in self.warnings:
                     f.write(msg)
-            self.logger.info(f'写入了{len(self.logs)}条日志，{len(self.warnings)}条警告如下：')
             self.logs = []
             for warning in self.warnings:
                 self.logger.warning(warning)
@@ -948,6 +959,7 @@ class daka_list_class:
         response = self.http2_client_obj.send_http2_request('GET', f'https://{headers["Host"]}/group/study_words_together_home_page', headers, None)
         data = response.json()['data']
         self.uv_index = data['uv']
+        self.logger.info(f'\033[36;1m获取uv成功，当前uv={self.uv_index}\033[0m')
         
     def save_other_info(self, cursor: sqlite3.Cursor):
         '''保存其他信息，包括uv_index，小班数量比例和最大group_id'''
@@ -1173,8 +1185,11 @@ class daka_list_class:
         self.warnings.append(f'[Warning][{time_str}] {content}\n')
         self.logger.warn(content)
 
-    def add_log(self, date_str, name, unique_id, msg):
-        self.logs.append(f'[{date_str}] {name}({unique_id})日志：\n{msg}\n')
+    def add_log(self, date_str, name, unique_id, msg, display=False):
+        result = f'[{date_str}] {name}({unique_id}) {msg}'
+        if display:
+            self.logger.info(result)
+        self.logs.append(result+'\n')
 
     def track_cheat_user(self, date_str, user_id, user_word_cnt, time, status): # 0未刷词，1刷词
         if date_str != self.cheat_tracker_date_str:
@@ -1218,9 +1233,34 @@ class daka_list_class:
         del self.user_dict_obj
         self.user_dict_obj = user_dict()
 
+    def get_user_name_and_avatar(self, unique_id):
+        try:
+            self.wait()
+            user = self.user_infos.get(int(unique_id))
+            return {"nickname": user[1], "avatar": user[2]}
+        except:
+            return {"nickname": "未收录", "avatar": ""}
+        
+    def get_group_avatar(self, group_id):
+        try:
+            self.wait()
+            return self.group_infos.get(group_id)[5]
+        except:
+            return None
+    
+    def get_group_info(self, group_id):
+        '''返回(名称，介绍)'''
+        try:
+            self.wait()
+            group = self.group_infos.get(group_id)
+            return {"name": group[3], "introduction": group[4], "avatar": group[5]}
+        except:
+            return {"name": "", "introduction": "未收录", "avatar": None}
+        
     def get_class_list(self, rank, user_cookie): # 此函数无需等待初始化完成
         if rank == 2048:
-            return self.class_list_2048
+            self.wait()
+            return self.class_list_2048_sharekey
         class_list = []
         current_data_time = datetime.datetime.now().strftime('%Y-%m-%d')
         if rank not in self.class_list or current_data_time != self.class_list[rank]['data_time']:
@@ -1830,6 +1870,7 @@ def heartbeat_demon( daka_list: daka_list_class, user_cookie, user_config, http2
     while not daka_list.query(unique_id):
         time.sleep(1)
     demon_daka_type = daka_list.query(unique_id)
+    report_cnt = 0
     time.sleep(random.randint(10, 100) / 10) # 随机延时，防止同时启动多个心跳线程
     try:
         while daka_list.query(unique_id) is not None and daka_list.query(unique_id) == demon_daka_type:
@@ -1837,6 +1878,10 @@ def heartbeat_demon( daka_list: daka_list_class, user_cookie, user_config, http2
                 {"index":0}
             ]
             report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=0)
+            report_cnt += 1
+            if report_cnt > 7200: # 60分钟
+                daka_list.add_warning(unique_id, '心跳超时: 60分钟')
+                break
             for i in range(10):
                 time.sleep(3)
                 http2_client_obj.check_closing_state()
@@ -2622,7 +2667,8 @@ def deskmate_pk(cookie, config, http2_client_obj: http2_client):
                 break
             elif not finish_all and cnt >= 50:
                 break
-            topic_list = data['needCompletedTopicList']
+            topic_list = data['needCompletedTopicList'] # 后面50个是自己的词书
+            topic_list.reverse()
             deskmate_completed_list = data['deskmate']['completedTopicList']
             my_completed_list = data['mine']['completedTopicList']
             finished_topic_ids = [t['topicId'] for t in deskmate_completed_list]
@@ -2668,6 +2714,7 @@ def deskmate_pk(cookie, config, http2_client_obj: http2_client):
                 time.sleep(0.5)
         except Exception as e:
             yield (f'{name} {e}')
+            time.sleep(1)
     yield (f'{name} 每周双人战结束 <br>')
 
     if data['status'] == 3:# 结束
@@ -3499,7 +3546,7 @@ def notice_checker(daka_list: daka_list_class, user_cookie, user_config, http2_c
             check_result = daka_list.check_notice(item['content']) # (posA, posB, result_str)
             if check_result[0] > -1:
                 message_str += f'[已知][{item["group_id"]}][{item["date"]}] {check_result}<br>'
-                item['content'] = check_result[2]
+                item['content'] = f'[已知][{item["group_id"]}][{item["date"]}] {check_result[2]}'
                 item['cursorA'] = check_result[0]
                 item['cursorB'] = check_result[1]
                 item['checked'] = 2

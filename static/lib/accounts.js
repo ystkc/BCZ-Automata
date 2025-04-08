@@ -222,7 +222,7 @@ function showOwnGroups(data, unique_id) {
         background = '';
         
         if (group.leader == true){
-          quit_button = `<td><button id='op1${unique_id}${group.share_key}' onclick="changeNotice('${group.share_key}', ${unique_id}, '${group.group_id}')">改公告</button></td>`
+          quit_button = `<td><button id='op1${unique_id}${group.share_key}' onclick="changeNotice('${group.share_key}', ${unique_id}, '${group.group_id}')">改公告</button><button id='op2${unique_id}${group.share_key}' onclick="quitGroup('${group.name}', '${group.share_key}', ${unique_id})">退出</button></td>`;
           background = 'background-color: #00ffff88;';
         }
         else{
@@ -629,6 +629,10 @@ function changeToken(unique_id){
   .catch(error => console.error(error));
 }
 
+function redirectToGroups() {
+  // 在新标签页打开/groups
+  window.open('/groups');
+}
 function addAccount() {
   // 重定向到/append
   window.location.href = '/append';

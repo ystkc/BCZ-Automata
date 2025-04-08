@@ -16,7 +16,7 @@ class Config:
             'main_token': '', # 试用账号令牌
             'database_path': '../BCZ-Notice-Examiner/bcz_notice.db', # archiever储存库，含公告、用户、班级、连胜信息
             'archiever_enable': False, # archiever开关，开启时每天固定时间爬取信息并储存
-            'class_list_2048': [], # 如果要archiever额外爬取不在榜上的小班，可以加入此处。不受archiever开关控制。
+            'class_list_2048': [], # 如果要archiever额外爬取不在榜上的小班id，可以加入此处。不受archiever开关控制。
             'dict_patch_db_path': 'lookup_patch.db', # pk补丁包，记录做过的题，减少查询和错误
             'puzzle_path': 'puzzle.db', # YZDD记录表
             'local': False, # 本地模式。开启时会每天固定时间执行同步、阻止休眠、允许休眠和关机命令
