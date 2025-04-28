@@ -218,11 +218,13 @@
       // DOM 操作
       const dom = {
         getRank(rank_type_rank) {
+          if (rank_type_rank === null) return "未上榜";
           rank_type = rank_type_rank / 1000;
           if (rank_type < 1) return ``;
           else return `${rank_type_rank % 1000}`;
         },
         getRankType(rank_type_rank) {
+          if (rank_type_rank === null) return "未上榜";
           rank_type = rank_type_rank / 1000;
           if (rank_type < 1) return ``;
           else if (rank_type < 2) return `青铜${rank_type_rank % 1000}`;
@@ -311,7 +313,8 @@
                 {
                   spanGaps: true,
                   label: "日排名",
-                  data: state.chartData.rank_type_rank.map((v) => v===999?null:(1000 - v % 1000) / 5),
+                  data: state.chartData.rank_type_rank.map((v) => v===999||v===null?null:(1000 - v % 1000) / 5),
+                  // 999:未记录，null:未上榜
                   backgroundColor: utils.getColor(2, total_dataset),
                   borderColor: utils.getBorderColor(2, total_dataset),
                   datalabels: {
@@ -325,7 +328,7 @@
                 {
                   spanGaps: true,
                   label: "结算排名",
-                  data: state.chartData.week_rank_type_rank.map((v) => v===999?null:(1000 - v % 1000) / 5),
+                  data: state.chartData.week_rank_type_rank.map((v) => v===999||v===null?null:(1000 - v % 1000) / 5),
                   backgroundColor: utils.getColor(3, total_dataset),
                   borderColor: utils.getBorderColor(3, total_dataset),
                   type: "line",

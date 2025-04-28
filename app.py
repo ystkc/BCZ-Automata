@@ -127,6 +127,7 @@ def daka(unique_id: str):
         except AssertionError:
             return restful(400, '调用方法异常Σ(っ °Д °;)っ')
         user_dict = daka_list_obj.get_user_dict(unique_id)
+        user_dict['config']['can_daka'] = 1
         daka_all_headless(user_messages, daka_list_obj, http2_client_obj, -1, [user_dict], 0)
         return restful(200, f'已将{unique_id}加入打卡队列')
     except Exception as e:

@@ -2936,15 +2936,14 @@ def learn_words(user_cookie, user_config, http2_client_obj: http2_client, daka_l
             learn_list = getRandomWordIDInBook('lookup.db', book_id, word_count, [])
             word_count = len(learn_list)
         else:
-            yield '<p style="color:red;background-color:yellow">新词不足 重新学习本书或更换书本</p>'
-            clear_learnt_list(unique_id)
-            yield '已完成并清空本账号学习记录<br>'
             book_finished = True
+            yield '<p style="color:red;background-color:yellow">新词不足 重新学习本书或更换书本</p>切换到#410'
+            book_id = 410
             learn_list = getRandomWordIDInBook('lookup.db', book_id, word_count, [])
             word_count = len(learn_list)
+    else:
+        add_learnt_list(unique_id, learn_list)
     yield f'本次{word_count}个词<br>'
-
-    add_learnt_list(unique_id, learn_list)
     
     learnt_count = 0
     yield f'完成新学轮数：'
