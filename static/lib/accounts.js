@@ -295,7 +295,9 @@ function changeNotice(group_share_key, unique_id, group_id=''){
     //换回td
     let notice_span = document.querySelector(`#notice${unique_id}${group_share_key}`);
     
-    // 查找content中所有`到空格之间的字符串，提取成列表
+    // 查找content中所有\x00之间的字符串并删掉
+    
+    content = content.replaceAll(/\\x00(.*?)\\x00/g, '');
     let nickname_list = []
     let nickname_regex = /`(\d+)/g; // 匹配`到空格之间的字符串
     let numbers = content.match(nickname_regex);
@@ -396,7 +398,7 @@ function showNickNameList(group_share_key, unique_id){
       var tmp_str = '';
       // 第一行显示昵称+(uniqueId)，第二行显示组内昵称，第三行显示两周打卡天数的前7位，第四行显示两周打卡天数的后7位
       if (is_edit_notice_mode) // 编辑公告时，点击昵称插入到公告中at
-        tmp_str = `<span onclick="insertNickname('${unique_id}', '${user_unique_id}', '${group_share_key}', '${user_data.group_nickname}')">`;
+        tmp_str = `<span onclick="insertNickname('${user_data.nickname}', '${unique_id}', '${user_unique_id}', '${group_share_key}', '${user_data.group_nickname}')">`;
       else
         tmp_str = `<span>`;
       tmp_str += `${user_data.nickname}(${user_unique_id})[${user_data.completed_times}/${user_data.duration_days}]:<br>`;
@@ -418,9 +420,9 @@ function showNickNameList(group_share_key, unique_id){
   })
   .catch(error => console.error(error));
 }
-function insertNickname(unique_id, user_unique_id, group_share_key, nickname){
-  let editor = document.querySelector(`#editor${unique_id}${group_share_key}`);
-  editor.value += `@${nickname}\`${user_unique_id} `;
+function insertNickname(user_nickname, monitor_unique_id, user_unique_id, group_share_key, group_nickname){
+  let editor = document.querySelector(`#editor${monitor_unique_id}${group_share_key}`);
+  editor.value += `@${group_nickname}\\x00${user_nickname}\\x00\`${user_unique_id} `;
 }
 function joinAll(){
   let share_key = prompt("请输入shareKey(16位)或inviteCode(5-8位):");

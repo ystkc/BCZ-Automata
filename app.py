@@ -84,7 +84,7 @@ notice_subscriber_obj = notice_subscriber(logger, http2_client_obj, config)
 connected_clients = []
 # 抽象行为：=[WebSocket] (相当于在里面插入一个抽象基类！笨蛋)
 user_messages = queue.Queue()
-star_gazer = stargazer_class(logger, http2_client_obj, config, daka_list_obj, user_messages)
+star_gazer = stargazer_class(logger, http2_client_obj, config, daka_list_obj, user_messages, False)
 
 
 @app.websocket('/ws')
@@ -966,7 +966,7 @@ def notice_collector():
     time.sleep(200)
     daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=0, random_delay=168)
     time.sleep(200)
-    daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=2048, random_delay=168)
+    daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=2048, random_delay=42)
     logger.info("公告收集完成!")
 
 @app.get('/collect_notice')
@@ -1000,10 +1000,10 @@ def schedule_task():
             Schedule("40-59 23 * * * rank_and_notice_stellar", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=6, random_delay=168))
             Schedule("* 6-8 * * 6 champion_dawn", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=7, random_delay=168))
             Schedule("* 12-14 * * 6 champion_noon", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=7, random_delay=168))
-            Schedule("38-59 23 * * * rank_and_notice_champion", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=7, random_delay=168))
+            Schedule("44-59 23 * * * rank_and_notice_champion", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=7, random_delay=168))
             # 以后可能加一个legend(doge)
-            Schedule("44-59 23 * * * rank_and_notice_official", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=0, random_delay=168))
-            Schedule("48-59 23 * * * rank_and_notice_2048", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=2048, random_delay=168))
+            Schedule("48-59 23 * * * rank_and_notice_official", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=0, random_delay=168))
+            Schedule("54-59 23 * * * rank_and_notice_2048", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=2048, random_delay=42))
         Schedule("30-59 23 * * * buka", lambda: buka()) # 补卡
         daka_list_obj.get_uv() # 测试网络连接，同时标明不是static模式
     try:

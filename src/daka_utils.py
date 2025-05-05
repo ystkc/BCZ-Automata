@@ -240,11 +240,11 @@ class daka_list_class:
         # 创建线程来执行耗时的初始化任务
         self.__not_prepared = True
     
-    def set_is_king(self, unique_id, is_king):
-        self.is_king[unique_id] = is_king
+    def set_is_king(self, unique_id, rank, star, energy):
+        self.is_king[unique_id] = [rank, star, energy]
 
     def query_is_king(self, unique_id):
-        return self.is_king.get(unique_id, False)
+        return self.is_king.get(unique_id, [''])[0] == 'king'
     
     def set_pk_status(self, unique_id, status, expire_time=-1):
         self.daka_pk_status[unique_id] = status
@@ -716,7 +716,7 @@ class daka_list_class:
         # 写入日志
         self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'共有{len(self.logs)}(-25)条日志，{len(self.warnings)}条警告如下：', False)
         if len(self.logs) > 25 or len(self.warnings) > 0:
-            with open(f'{self.log_dir}log_{now.strftime("%Y-%m-%d %H-%M-%S")}.{self.latest_check_user_timestamp}.{len(self.logs)}.txt', 'w', encoding='utf-8') as f:
+            with open(f'{self.log_dir}log_{now.strftime("%Y-%m-%d %H-%M-%S")}.{max(self.latest_check_user_timestamp, self.latest_check_notice_timestamp)}.{len(self.logs)}.txt', 'w', encoding='utf-8') as f:
                 for msg in self.logs:
                     f.write(msg)
                 for msg in self.warnings:
@@ -1331,9 +1331,9 @@ class daka_list_class:
     def query(self, unique_id):
         return self.daka_list.get(unique_id)
     
-    def get_not_running_arbiter(self, cnt, except_ids: set):
+    def get_not_running_arbiter(self, cnt, except_ids: set, include_subscriber=False):
         '''返回cnt个未在运行的arbiter，如果不足，则返回剩余的'''
-        return self.user_dict_obj.get_except_from_arbiter(set(self.daka_list.keys()), cnt, except_ids, self.daka_pk_status)
+        return self.user_dict_obj.get_except_from_arbiter(set(self.daka_list.keys()), cnt, except_ids, self.daka_pk_status, include_subscriber=include_subscriber)
     
     def get_bad_words(self, has_mid=True): # 获取检查结果
         # 拼接状态为1的notice
@@ -1379,11 +1379,13 @@ class daka_list_class:
         return self.last_remove_timestamp != 0
 
 class stargazer_class:
-    def __init__(self, logger, http2_client_obj: http2_client, config: Config, daka_list_obj: daka_list_class, messages: queue.Queue):
+    def __init__(self, logger, http2_client_obj: http2_client, config: Config, daka_list_obj: daka_list_class, messages: queue.Queue, king: bool):
+        # king参数：仅将arbiter和subscribed users上段，然后退出
+        self.king = king
         self.http2_client_obj = http2_client_obj
         self.messages = messages
         self.logger = logger
-        self.stargazer_list = config.pk_blacklist
+        self.stargazer_list = [] if self.king else config.pk_blacklist
         self.stargazer_set = set(self.stargazer_list)
         self.stargazer_cnt = len(self.stargazer_list)
         self.stargazer_db = config.stargazer_db
@@ -1455,12 +1457,14 @@ class stargazer_class:
                 pass
         if len(new_token_user_dict_list) < self.arbiter_size:
             demand = self.arbiter_size - len(new_token_user_dict_list)
-            new_arbiters = self.daka_list_obj.get_not_running_arbiter(demand, new_ids)
+            new_arbiters = self.daka_list_obj.get_not_running_arbiter(demand, new_ids, include_subscriber = self.king)
             if new_arbiters == []:
                 if new_token_user_dict_list != []:
                     self.token_user_dict_list = new_token_user_dict_list
                     return # 有但是不足ARBITER_SIZE个，照样发射
                 while new_arbiters == []: # 真的一个都没有，至少要一个
+                    if self.king:
+                        return []
                     self.logger.info(f'没有可用的arbiter，等待1.5秒后重试')
                     time.sleep(1.5)
                     new_arbiters = self.daka_list_obj.get_not_running_arbiter(demand, new_ids)
@@ -1587,19 +1591,26 @@ class stargazer_class:
     def prepare_arbiter_wrapper(self, token_user_dict):
         '''PK赛事反挂上段的包装器'''
         result_str = ''
+        old_result_str = ''
         unique_id = token_user_dict['config']['unique_id']
         user_cookie = token_user_dict['cookie']
         user_config = token_user_dict['config']
+        name = user_config['name']
+        acc_len = 0
         try:
             if not self.daka_list_obj.add(unique_id, -50):
                 return
             time.sleep(random.randint(0, 500) / 10) # 随机延时
             for msg in pkonline2(user_cookie, user_config, self.http2_client_obj, self.daka_list_obj, max_round=9999, max_win_round=9999):
                 result_str += msg
-                if len(result_str) > 2048:
-                    # 只保留最后2048个字符
-                    result_str = result_str[-2048:]
-                self.messages.put(('msg', unique_id, result_str))
+                acc_len += len(msg)
+                if acc_len > 4096:
+                    old_result_str = result_str
+                    result_str = ''
+                    acc_len = 0
+                    self.daka_list_obj.add_log(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), name, unique_id, old_result_str.replace('<br>', '\n'))
+                    # 只保留最后8192个字符
+                self.messages.put(('msg', unique_id, old_result_str + result_str))
         except AssertionError: # 快速关闭
             pass
         except Exception as e:
@@ -1661,6 +1672,8 @@ class stargazer_class:
 
             tracking_cnt = len(self.stargazer_set.difference(self.daka_list_obj.current_rivals))
             while (tracking_cnt == 0):
+                if self.king:
+                    return
                 self.logger.info('所有人都已经被匹配，等待...')
                 time.sleep(1.5) # 所有人都已经被匹配，等待
                 try:
@@ -1696,8 +1709,11 @@ class stargazer_class:
             self.logger.info(f'初始化stargazer成功')
             time.sleep(1)
         if len(self.stargazer_list) == 0:
-            self.logger.info('没有stargazer，退出')
-            return
+            if self.king:
+                self.logger.info(f'自动上段模式，共{len(self.daka_list_obj.user_dict_obj.subscriber_unique_ids)}个订阅，{len(self.daka_list_obj.user_dict_obj.arbiter_unique_ids)}个裁判token')
+            else:
+                self.logger.info('没有stargazer，退出')
+                return
         threading.Thread(target=self.run).start()
 
     
@@ -1766,6 +1782,20 @@ class notice_subscriber:
                                                   'unique_id': unique_id,
                                                    'group_share_key': group_share_key,
                                                     'notice_hash': notice_hash})
+            if False:
+                self.logger.info("开始检测未读消息")
+                # https://notify.baicizhan.com/rest/notify/v2/home
+                headers = getHeaders("$notify", user_cookie, int(time.time()), index=1)
+                response = self.http2_client_obj.send_http2_request('GET', 'https://notify.baicizhan.com/rest/notify/v2/home', headers=headers, content=None)
+                messages = response.json()['data']
+                for msg_class in messages:
+                    if msg_class["messageType"] != 4: # 1:不断电 2:精选 3:同桌 4:小班 6:调查 7:点赞 9:组队
+                        continue
+                    if msg_class["unread"] == 0:
+                        break
+                # https://notify.baicizhan.com/rest/notify/v2/notify_list
+                
+
             time.sleep(0.5)
 
     def get_top_notice(self, daka_list_obj: daka_list_class):
@@ -2147,6 +2177,7 @@ def check_and_charge_pk_energy(user_cookie, user_config, http2_client_obj: http2
 
 pkonline2_king_lock = threading.Lock() # 防止多账号同时开始匹配
 pkonline2_lock = threading.Lock()
+pooling_cnt = 0
 def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_list:daka_list_class, max_round=3, max_win_round=3, allow_self=False):
     '''单词对战''' # max_round无论输赢，但是体力值不足时，会自动退出
     if user_config.get('can_pk', 1) == 0:
@@ -2165,6 +2196,7 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
     total_round = 0
     total_win_round = 0
     rival_id = 0
+    global pooling_cnt
     while True:
         total_round += 1
         if total_round > max_round or total_win_round >= max_win_round:
@@ -2219,7 +2251,7 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
             continue
         rank_name_en = current_level_dict['name_en']
         is_king = rank_name_en == 'king'
-        daka_list.set_is_king(unique_id, is_king)
+        daka_list.set_is_king(unique_id, rank_name_en, current_star, current_energy)
         if not is_king and max_win_round == 6666:
             max_win_round = 9999
         if max_win_round == 9999 and is_king: # 为arbiter上段
@@ -2261,12 +2293,15 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
         # if total_round == 1 and daka_list.query_pk_status(unique_id) != 0:
         #     raise Exception('pk_status_not_0')
 
-        daka_list.set_pk_status(unique_id, -1)
         if rank_name_en == 'king':
             if not allow_self:
                 pkonline2_king_lock.acquire()
         elif not allow_self:
             pkonline2_lock.acquire()
+        daka_list.set_pk_status(unique_id, -1)
+        while pooling_cnt > 31:
+            time.sleep(10)
+        pooling_cnt += 1 # 同时pk的账号数限制为32
         while True:
             # https://pk.baicizhan.com/api/rankpk/challenge/match?challenge_type=word&challenge_level=wood&time=1728962245954&activity_id=0&session_id=40
             url = f'https://{pk_get_headers["Host"]}/api/rankpk/challenge/match?challenge_type=word&challenge_level={rank_name_en}&time={time_long}&activity_id=0&session_id={session_id}'
@@ -2389,7 +2424,7 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
                     lb = 6666
                     ub = lb + 500
                 else:
-                    lb = 7500 + 50 * min(max(rival_score - my_score, -25), 25) # 6250-8750
+                    lb = 6500 + 50 * min(max(rival_score - my_score, -15), 25) # 5750-8250
                     ub = lb + 500
                 
                 target_time = random.randint(lb, ub) # 分数=答对100+剩余时间/100，每题满分200
@@ -2444,7 +2479,7 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
                         yield f'<font  color="red">掉线</font><br>'
                         daka_list.record_pk_result(name, rival_id, rival_name, my_score, rival_score)
                         daka_list.remove_rival(rival_id)
-                        return
+                        raise Exception(f'{name} 掉线')
                 score_delta = data['me']['score'] - my_score
                 my_score = data['me']['score']
                 right_answer = data['puzzle']['right_answer']
@@ -2498,6 +2533,7 @@ def pkonline2(user_cookie, user_config, http2_client_obj: http2_client, daka_lis
             except:
                 yield traceback.format_exc()
                 break # 有可能是睡眠导致比赛异常，退出即可
+        pooling_cnt -= 1
         # 最后一题作答完毕
         score_str = f'{my_score}' if order > 1 else ''
         payload = [

@@ -135,15 +135,17 @@
         let copyStr = document.getElementById("group-name").innerText + "\n";
         // 复制当前班级的排名信息
         const date = utils.parseDate(state.chartData.start_date);
+        date.setDate(date.getDate() - 1);
         for (let i = 0; i < state.chartData.week_rank_type_rank.length; i++) {
           const rank = state.chartData.week_rank_type_rank[i];
-          if (rank === 999 || rank === null || rank === undefined) continue;
+          if (rank === 999 || rank === undefined) continue;
           date.setDate(date.getDate() + 7);
           // 格式：MM月DD日 ....卡 ....段....名
           const dateStr = `${date.getMonth() + 1}月${date.getDate()}日`;
           const dakaCount = state.chartData.total_daka_count[i];
           const rankTypeRank = dom.getRankType(rank);
-          copyStr += `${dateStr} ${dakaCount}卡 ${rankTypeRank}名\n`;
+          const dakaStr = dakaCount === null ? '未上榜' : `${dakaCount}卡 ${rankTypeRank}名`;
+          copyStr += `${dateStr} ${dakaStr}\n`; 
         }
         copyStr += "\n🌠元老光荣榜🌠\n（计算总在班天数）\n";
         // YYYYMMDD

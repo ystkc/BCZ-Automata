@@ -43,6 +43,7 @@ class user_dict:
 
         self.modified = False
         self.arbiter_unique_ids = set()
+        self.subscriber_unique_ids = set()
         self.unique_id_index = {}
         # 给用户分配索引（从0开始）
         for i in range(len(self.__user_dict_list)):
@@ -50,6 +51,8 @@ class user_dict:
             unique_id = self.__user_dict_list[i]['config']['unique_id']
             if self.__user_dict_list[i]['config']['arbiter']:
                 self.arbiter_unique_ids.add(unique_id)
+            if self.__user_dict_list[i]['config'].get('subscribe_notice', 0):
+                self.subscriber_unique_ids.add(unique_id)
             self.unique_id_index[unique_id] = i
 
     def get_index_by_unique_id(self, unique_id:int =0):
@@ -59,8 +62,11 @@ class user_dict:
         index = self.get_index_by_unique_id(unique_id)
         return self.__user_dict_list[index]['cookie']['access_token']
     
-    def get_except_from_arbiter(self, unique_ids: set, cnt, except_unique_id: set, daka_pk_status: dict): # return the dict
-        available = self.arbiter_unique_ids.difference(unique_ids).difference(except_unique_id)
+    def get_except_from_arbiter(self, dakaing_unique_ids: set, cnt, except_unique_id: set, daka_pk_status: dict, include_subscriber=False): # return the dict
+        available = self.arbiter_unique_ids.copy()
+        if include_subscriber:
+            available = available.union(self.subscriber_unique_ids)
+        available = available.difference(dakaing_unique_ids).difference(except_unique_id)
         results = []
         for id in available:
             index = self.unique_id_index[id]
