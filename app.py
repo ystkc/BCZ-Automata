@@ -162,9 +162,14 @@ async def groups(request: Request):
 
 # 以下是调试接口
 @app.get('/buka')
-async def buka(request: Request):
+async def buka_(request: Request):
     '''测试接口'''
     return restful(200, f'buka cnt:{buka()}')
+
+@app.get('/checkka')
+async def checkka_(request: Request):
+    '''测试接口'''
+    return restful(200, f'checkka cnt:{buka(True)}')
 
 @app.get('/reload')
 async def reload_http2(request: Request):
@@ -491,8 +496,8 @@ async def subscribe(request: Request):
     return templates.TemplateResponse('subscribe.html', {'request': request})
 
 @app.get('/subscribe/data')
-async def subscribe_data(request: Request):
-    top_notice = notice_subscriber_obj.get_top_notice(daka_list_obj)
+async def subscribe_data(request: Request, force_refresh: bool=False):
+    top_notice = notice_subscriber_obj.get_top_notice(daka_list_obj, force_refresh)
     top_notice['introduction'] = top_notice['introduction'].replace('\n', '<br>')
     top_notice['notice'] = top_notice['notice'].replace('\n', '<br>')
     return restful(200, '获取公告成功', top_notice)
@@ -933,12 +938,14 @@ def shutdown_sallow_unotice_getuv(): # 在每天的58-59 23 * * 运行，根据�
         shutdown() # 180s内关机（否则会被休眠）
         allow_sleep() # 设置180s休眠
 
-def buka():
+def buka(check_only=False):
     not_daka_users = daka_list_obj.check_not_daka_users(include_not_daka=True)
+    if check_only:
+        return not_daka_users
     print(f"正在为{len(not_daka_users)}人补卡")
     if len(not_daka_users) > 0: # -1 正常打卡，-2 补卡
         daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=-2, user_dict_list=not_daka_users, random_delay=180)
-    return len(not_daka_users)
+    return not_daka_users
 
 def sync_and_subscribe():
     '''同步和订阅服务'''
@@ -1003,7 +1010,7 @@ def schedule_task():
             Schedule("44-59 23 * * * rank_and_notice_champion", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=7, random_delay=168))
             # 以后可能加一个legend(doge)
             Schedule("48-59 23 * * * rank_and_notice_official", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=0, random_delay=168))
-            Schedule("54-59 23 * * * rank_and_notice_2048", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=2048, random_delay=42))
+            Schedule("52-59 23 * * * rank_and_notice_2048", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=2048, random_delay=42))
         Schedule("30-59 23 * * * buka", lambda: buka()) # 补卡
         daka_list_obj.get_uv() # 测试网络连接，同时标明不是static模式
     try:

@@ -368,8 +368,10 @@ class daka_list_class:
         for group in self.class_list_2048:
             group_id = group['groupId']
             if group_id not in self.group_infos:
-                self.add_warning(f'2048列表中班级{group_id}不存在')
-            group = self.group_infos[group_id]
+                self.add_warning(f'2048列表中班级{group_id}不存在(可能是没上榜)')
+                group = [group_id, '', '', '待获取', '待获取', '/group/avatar/default0.png']
+            else:
+                group = self.group_infos[group_id]
             valid_class_list_2048.append({'groupId': group[0],'shareKey': group[1], 'name': group[3], 'introduction': group[4].replace('\n','\\n'), 'avatar': group[5], 'score': None})
         self.class_list_2048_sharekey = valid_class_list_2048
         logger.info(f'group_infos共加载{len(self.group_infos)}班')
@@ -544,6 +546,13 @@ class daka_list_class:
             self.patch_buffer = []
         else: # 3
             self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', '没有patch', True)
+        # 检查未打卡用户
+        if close_start_time - self.latest_check_user_timestamp > 3600 and not no_check_daka:
+            not_daka_users = self.check_not_daka_users(include_not_daka=False) # 有网络请求，要放在close前面，防止log太多
+            self.latest_check_user_timestamp = close_start_time
+            self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'打卡检测完毕，本轮{self.get_user_cnt()}个账号，有{len(not_daka_users)}人未打卡，共耗时{close_start_time - self.time_start}秒', True)
+        else:# 5
+            self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'最近{close_start_time - self.latest_check_user_timestamp}秒前检测过 未打卡用户，不重复检查', True)
         
         conn = sqlite3.connect(self.notice_and_rank_path)
         self.optimize_db(conn)
@@ -561,15 +570,7 @@ class daka_list_class:
         with open('king_status.json', 'w', encoding='utf-8') as f:
             json.dump(self.is_king, f, ensure_ascii=False)
         self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', 'king_status.json保存完毕', True)
-        # 检查未打卡用户
-        if close_start_time - self.latest_check_user_timestamp > 3600 and not no_check_daka:
-            not_daka_users = self.check_not_daka_users(include_not_daka=False) # 有网络请求，要放在close前面，防止log太多
-            self.latest_check_user_timestamp = close_start_time
-            self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'打卡检测完毕，本轮{self.get_user_cnt()}个账号，有{len(not_daka_users)}人未打卡_*{[user["config"].get("name", user["config"]) for user in not_daka_users]}_*，共耗时{close_start_time - self.time_start}秒', True)
-            for user in not_daka_users:
-                self.add_warning(f'未打卡用户：{user["config"].get("name")}({user["config"].get("unique_id")})')
-        else:# 5
-            self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'最近{close_start_time - self.latest_check_user_timestamp}秒前检测过 未打卡用户，不重复检查', True)
+        
 
         
         # 保存用户配置
@@ -1176,6 +1177,8 @@ class daka_list_class:
             self.logger.info(f'不包括 仅托管用户')
         else:
             self.logger.info(f'包括 仅托管用户')
+            name_str = [user["config"].get("name", "未知") for user in not_daka_users]
+            self.add_log(datetime.datetime.now().strftime('%Y-%m-%d %H-%M-%S'), '打卡检查', '0', f'检测完毕，未打卡用户: _*{name_str}_*', display=True)
         for user in not_daka_users:
             self.logger.info(f'{user["config"]["name"]}({user["config"]["unique_id"]})未打卡')
         return not_daka_users
@@ -1748,10 +1751,27 @@ class notice_subscriber:
                 self.last_hash[(int(row[0]), int(row[1]))] = row[2] # (unique_id, group_id) = hash
         self.logger.info(f'加载了{len(self.last_hash)}条订阅记录')
 
+    def num_to_rank(self, num):
+        '''将数字转换为等级'''
+        if num == 0:
+            return '青铜'
+        elif num == 1:
+            return '白银'
+        elif num == 2:
+            return '黄金'
+        elif num == 3:
+            return '铂金'
+        elif num == 4:
+            return '钻石'
+        elif num == 5:
+            return '星耀'
+        return '王者'
+        
     def get_subscription(self, users):
         # 读取最新公告，检测哪些公告需要更新
         self.latest_timestamp = int(time.time())
         self.new_notice = []
+        apply_count = 0
         for user in users:
             if user['config'].get('subscribe_notice', 0) == 0:
                 continue
@@ -1782,24 +1802,75 @@ class notice_subscriber:
                                                   'unique_id': unique_id,
                                                    'group_share_key': group_share_key,
                                                     'notice_hash': notice_hash})
-            if False:
-                self.logger.info("开始检测未读消息")
-                # https://notify.baicizhan.com/rest/notify/v2/home
-                headers = getHeaders("$notify", user_cookie, int(time.time()), index=1)
-                response = self.http2_client_obj.send_http2_request('GET', 'https://notify.baicizhan.com/rest/notify/v2/home', headers=headers, content=None)
-                messages = response.json()['data']
-                for msg_class in messages:
-                    if msg_class["messageType"] != 4: # 1:不断电 2:精选 3:同桌 4:小班 6:调查 7:点赞 9:组队
-                        continue
-                    if msg_class["unread"] == 0:
-                        break
+            self.logger.info("开始检测未读消息")
+            # https://notify.baicizhan.com/rest/notify/v2/home
+            headers = getHeaders("$notify", user_cookie, int(time.time()), index=1)
+            response = self.http2_client_obj.send_http2_request('GET', 'https://notify.baicizhan.com/rest/notify/v2/home', headers=headers, content=None)
+            messages = response.json()['data']
+            unread_count = 0
+            min_msg_id = 0
+            for msg_class in messages:
+                if msg_class["messageType"] != 4: # 1:不断电 2:精选 3:同桌 4:小班 6:调查 7:点赞 9:组队
+                    continue
+                unread_count = msg_class["unread"]
+            while unread_count > 0:
                 # https://notify.baicizhan.com/rest/notify/v2/notify_list
-                
+                payload = {
+                    "lastMessageId": min_msg_id, 
+                    "messageType": 4
+                }
+                headers['Content-Type'] = 'application/json; charset=UTF-8'
+                response = self.http2_client_obj.send_http2_request('POST', 'https://notify.baicizhan.com/rest/notify/v2/notify_list', headers=headers, content = payload)
+                messages = response.json()['data']
+                print(f"正在检测{unread_count}条未读消息")
+                if messages == []:
+                    print(f"出现错误，剩余未读消息为{unread_count}")
+                    break
+                for msg in messages:
+                    if not unread_count:
+                        break
+                    unread_count -= 1
+                    if msg["messageId"] < min_msg_id or min_msg_id == 0:
+                        min_msg_id = msg["messageId"]
+                    if msg["title"] == "\u5206\u73ed\u6388\u6743\u7533\u8bf7": # 分班授权申请
+                        try:
+                            appliant_sharekey = msg['link'].split('id%3D')[1].split('%26')[0]
+                        except Exception as e:
+                            print(msg['link'])
+                            print(f"出现错误，无法获取申请者的sharekey，请更新解析器: {e}")
+                        print(f"发现申请:{appliant_sharekey}")
+                        # 获取申请者的相关信息
+                        # https://group.baicizhan.com/group/information?shareKey=
+                        headers = getHeaders("$group", user_cookie, int(time.time()), index=1)
+                        response = self.http2_client_obj.send_http2_request('GET', f'https://group.baicizhan.com/group/information?shareKey={appliant_sharekey}', headers=headers, content=None)
+                        data = response.json()['data']
+                        appliant_info = data['groupInfo']
+                        group_id = appliant_info['id']
+                        group_name = appliant_info['name']
+                        group_type = self.num_to_rank(appliant_info['type'])
+                        group_count = appliant_info['memberCount']
+                        group_limit = appliant_info['countLimit']
+                        group_introduction = appliant_info['introduction']
+                        group_notice = appliant_info['notice']
+                        group_finishing_rate = appliant_info['finishingRate']
+                        leader_name, leader_id = get_leader_info(data['members'])
+                        apply_count += 1
+                        self.new_notice.append({'user_name': user_name, 
+                                            'group_name': f'{leader_name}[{leader_id}]的小班授权申请({group_name})[{group_id}]\n{group_type} {group_count}/{group_limit} 完成率{group_finishing_rate*100:.2f}%\n', 
+                                            'notice': group_notice, 
+                                            'introduction': group_introduction, 
+                                                'group_id': group_id, 
+                                                'unique_id': unique_id,
+                                                'group_share_key': appliant_sharekey,
+                                                    'notice_hash': '#auth#'})
+                time.sleep(random.randint(12, 18) / 10)
+            time.sleep(random.randint(15, 18) / 10)
+        # 将所有授权申请放到最前面
+        self.new_notice.sort(key=lambda x: x.get('notice_hash', '') == '#auth#', reverse=True)
+        self.logger.info(f'发现{len(self.new_notice)}条新的订阅公告，{apply_count}条小班授权申请')
 
-            time.sleep(0.5)
-
-    def get_top_notice(self, daka_list_obj: daka_list_class):
-        if int(time.time()) - self.latest_timestamp > 3600: # 超过1h，重新获取公告哈希值
+    def get_top_notice(self, daka_list_obj: daka_list_class, force_refresh = False):
+        if force_refresh or int(time.time()) - self.latest_timestamp > 3600: # 超过1h，重新获取公告哈希值
             users = daka_list_obj.get_user_dict_list()
             random.shuffle(users)
             self.get_subscription(users)
@@ -1813,6 +1884,35 @@ class notice_subscriber:
         if unique_id == -1:
             return 400, "没有订阅，不需要回复"
         result_str = ''
+        if notice_hash == '#auth#':
+            # correspond True表示确认，False表示拒绝
+            self.new_notice.pop(0)
+            if correspond:
+                # https://group.baicizhan.com/group/authorization_handle
+                payload = {
+                    "shareKey": group_share_key,
+                    "type": 1
+                }
+                headers = getHeaders("$group", user_dict['cookie'], int(time.time()), index=1)
+                headers['Content-Type'] = 'application/json; charset=UTF-8'
+                response_json = self.http2_client_obj.send_http2_request('POST', f'https://group.baicizhan.com/group/authorization_handle', headers=headers, content = payload).json()
+                if response_json['code'] == 1:
+                    return 200, '确认成功<br>'
+                else:
+                    return 400, f'确认失败{response_json["message"]}<br>'
+            else:
+                # https://group.baicizhan.com/group/authorization_handle
+                payload = {
+                    "shareKey": group_share_key,
+                    "type": 2
+                }
+                headers = getHeaders("$group", user_dict['cookie'], int(time.time()), index=1)
+                headers['Content-Type'] = 'application/json; charset=UTF-8'
+                response_json = self.http2_client_obj.send_http2_request('POST', f'https://group.baicizhan.com/group/authorization_handle', headers=headers, content = payload).json()
+                if response_json['code'] == 1:
+                    return 200, '拒绝成功<br>'
+                else:
+                    return 400, f'拒绝失败{response_json["message"]}<br>'
         if correspond:
             # 回复公告并确认
             result_str, status = self.reply_and_ack(unique_id, user_dict, group_share_key, reply_content)

@@ -9,6 +9,8 @@ import random
 from src.http2_client import http2_client
 http2_client_obj = http2_client()
 from src.get_headers import getHeaders
+# 设置启动目录
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 storage_path = "./storage/"
 
@@ -33,7 +35,7 @@ ips_completed_times = {}
 # https://group.baicizhan.com/group/information?shareKey=
 url = f'https://group.baicizhan.com/group/information?shareKey={target_share_key}'
 headers = getHeaders("$group", cookies[0], int(time.time()), index=1)
-response_json = http2_client_obj.send_http2_request('GET', f'https://{headers["Host"]}/group/information?shareKey={target_share_key}', headers, None, True)
+response_json = http2_client_obj.send_http2_request('GET', f'https://{headers["Host"]}/group/information?shareKey={target_share_key}', headers, None).json()
 
 group_info = response_json['data']['groupInfo']
 members = response_json['data']['members']
@@ -79,7 +81,7 @@ else:
             # https://social.baicizhan.com/api/deskmate/personal_details?uniqueId=
             url = f'https://social.baicizhan.com/api/deskmate/personal_details?uniqueId={unique_id}'
             headers = getHeaders("$social", cookies[index%cookie_cnt], int(time.time()), index=1)
-            response = http2_client_obj.send_http2_request('GET', url, headers, None, True)
+            response = http2_client_obj.send_http2_request('GET', url, headers, None).json()
             if response['code'] == 1:
                 ip = response['data']['ip']
                 if ip not in ips:

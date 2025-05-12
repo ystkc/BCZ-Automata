@@ -1,6 +1,9 @@
 # cooper.py
 '''【独立工具】将现有账号（打过卡的）的铜板数绘图'''
 import json
+import os
+# 设置工作目录为当前目录
+os.chdir(os.path.dirname(__file__))
 
 json_path = "./user_cookie.json"
 with open(json_path, "r", encoding="utf-8") as f:
