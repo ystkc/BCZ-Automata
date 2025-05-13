@@ -17,6 +17,7 @@ class Config:
             'database_path': '../BCZ-Notice-Examiner/bcz_notice.db', # archiever储存库，含公告、用户、班级、连胜信息
             'archiever_enable': False, # archiever开关，开启时每天固定时间爬取信息并储存
             'class_list_2048': [], # 如果要archiever额外爬取不在榜上的小班id，可以加入此处。不受archiever开关控制。
+            "class_list_2048_sharekey_source": "http://127.0.0.1:8840", # 如果数据库内没有2048小班id对应的sharekey 则从此处获取（shadlc-BCZ-Group-Manager客户端地址）
             'dict_patch_db_path': 'lookup_patch.db', # pk补丁包，记录做过的题，减少查询和错误
             'puzzle_path': 'puzzle.db', # YZDD记录表
             'local': False, # 本地模式。开启时会每天固定时间执行同步、阻止休眠、允许休眠和关机命令
@@ -61,6 +62,7 @@ class Config:
         self.dict_patch_db_path = self.raw.get('dict_patch_db_path', 'lookup_patch.db')
         self.archiever_enable = self.raw.get('archiever_enable', False)
         self.class_list_2048 = self.raw.get('class_list_2048', [])
+        self.class_list_2048_sharekey_source = self.raw.get('class_list_2048_sharekey_source', 'http://127.0.0.1:8840')
         self.pk_blacklist = self.raw.get('pk_blacklist', [])
         self.pk_whitelist = self.raw.get('pk_whitelist', [])
         self.stargazer_enable = self.raw.get('stargazer_enable', True)

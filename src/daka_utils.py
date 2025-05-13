@@ -100,6 +100,7 @@ class daka_list_class:
         self.is_king = {}
         self.logs = []
         self.warnings = []
+        self.class_list_2048_sharekey_source = config.class_list_2048_sharekey_source
         self.class_list_2048 = []
         for group_id in config.class_list_2048:
             self.class_list_2048.append({'groupId': group_id, 'score': None})
@@ -316,6 +317,50 @@ class daka_list_class:
         print(f'最近日志文件名{max_logname}')
         return max_logname
     
+    def get_group_info_from_group_manager(self, group_id):
+        '''从小班管理器获取小班信息'''
+        # {config.class_list_2048_sharekey_source}/query_group_details
+        # POST {"group_id": 123456,"week": "2025-W19"}
+        payload = {
+            "id": group_id,
+            "week": datetime.datetime.now().strftime('%Y-W%W')
+        }
+        headers = {"Content-Type": "application/json"}
+        default_group_info = [group_id, '', '', '待获取', '待获取', '/group/avatar/default0.png']
+        try:
+            response = self.http2_client_obj.send_http2_request("POST", f"{self.class_list_2048_sharekey_source}/query_group_details", headers=headers, content=payload)
+            if response.status_code != 200:
+                raise Exception(f'请求失败，状态码{response.status_code}')
+            data = response.json()
+            if data['code'] != 200 or data['retcode'] != 0:
+                raise Exception(f'请求出错，返回值{data}')
+        except Exception as e:
+            self.add_warning(f'从Group-Manager获取小班{group_id}信息失败 {e}')
+            return default_group_info
+        try:
+            group = data['data'][0]
+            # 储存到数据库
+            share_key = group['share_key']
+            name = group['name']
+            introduction = group['introduction']
+            avatar = group['avatar']
+            monitor_id = group['leader_id']
+            self.store_group_info(group_id, share_key, monitor_id, name, introduction, avatar)
+            data_time = int(datetime.datetime.now().timestamp())
+            rank = group['rank']
+            notice = group['notice']
+            self.store_notice(group_id, rank*1000, notice, data_time, 0, 0)
+            today_date_datetime = datetime.datetime.now() # 不用%m%d是为了方便计算start_date，不用%m%d%Y是为了方便strptime
+            today_date = int(today_date_datetime.strftime('%Y%m%d')) # MEMBERS_GROUPS表的日期字段
+            today_date_mmdd = int(today_date_datetime.strftime('%m%d')) # MEMBERS表的日期字段
+            for member in group['members']:
+                self.store_member(member['id'], group_id, member['completed_time_stamp'], today_date, today_date_mmdd, today_date_datetime, member['today_word_count'], member['today_study_cheat'] == '是', member['completed_times'], member['duration_days'], member['book_name'], member['nickname'], member['avatar'])
+            return [group_id, share_key, monitor_id, name, introduction, avatar]
+        except Exception as e:
+            self.add_warning(f'解析Group-Manager返回数据失败 {e}\n数据如下\n{data}')
+        return default_group_info
+
+
     def init_notice_storage(self, logger):
         '''加载用户信息、小班信息、作弊信息、公告信息、坏词信息、词库信息'''
         if not self.__not_prepared: # 如果False，说明已经初始化过了。如果undefined，则抛出错误
@@ -363,17 +408,6 @@ class daka_list_class:
         cursor.execute('''SELECT GROUP_ID, SHARE_KEY, MONITOR_ID, GROUP_NAME, GROUP_INTRODUCTION, GROUP_AVATAR FROM GROUP_NAME''')
         for row in cursor.fetchall():
             self.group_infos[row[0]] = (row[0], row[1], row[2], row[3], row[4], row[5])
-        # 将2048列表中的班级ID转换为shareKey
-        valid_class_list_2048 = []
-        for group in self.class_list_2048:
-            group_id = group['groupId']
-            if group_id not in self.group_infos:
-                self.add_warning(f'2048列表中班级{group_id}不存在(可能是没上榜)')
-                group = [group_id, '', '', '待获取', '待获取', '/group/avatar/default0.png']
-            else:
-                group = self.group_infos[group_id]
-            valid_class_list_2048.append({'groupId': group[0],'shareKey': group[1], 'name': group[3], 'introduction': group[4].replace('\n','\\n'), 'avatar': group[5], 'score': None})
-        self.class_list_2048_sharekey = valid_class_list_2048
         logger.info(f'group_infos共加载{len(self.group_infos)}班')
         # 加载用户信息
         self.user_infos = {} # USER_ID:(USER_ID, NICKNAME, USER_AVATAR)
@@ -422,19 +456,17 @@ class daka_list_class:
         conn.close()
         # 读取log
         max_timestamp = int(today_date.timestamp()) - 86400
-        print(today_date.timestamp(), max_timestamp)
         t = 0
         today_date_str = datetime.datetime.now().strftime('%Y-%m-%d')
         max_filename = ""
         for file_name in os.listdir(self.log_dir):
             if file_name.startswith(f'log_{today_date_str}') and file_name.endswith('.txt'):
                 t = int(file_name.split('.')[1])
-                print(t, max_timestamp)
                 if t > max_timestamp:
                     max_timestamp = t
                     max_filename = file_name
-        self.logger.info(f'上次更新用户和通知状态于{int(today_date.timestamp()) - max_timestamp}秒前({max_filename})')
         self.latest_check_notice_timestamp = self.latest_check_user_timestamp = max_timestamp
+        self.logger.info(f'上次更新用户和通知状态于{int(today_date.timestamp()) - max_timestamp}秒前({max_filename})')
         # 初始化数据库内存缓冲区
         self.notice_buffer = [] # 每天最多7000条，暂无需设置大小
         self.notice_cleared_buffer = []
@@ -447,8 +479,22 @@ class daka_list_class:
         self.book_name_buffer = []
         self.group_rank_buffer = []
         self.rank_and_daka_count_temp = {}
-        
         logger.info('\033[32m数据库初始化完毕\033[0m')
+        
+        # 将2048列表中的班级ID转换为shareKey
+        valid_class_list_2048 = []
+        for group_ in self.class_list_2048:
+            group_id = group_['groupId']
+            group = []
+            if group_id not in self.group_infos:
+                self.add_warning(f'2048列表中班级{group_id}不存在(可能是没上榜)尝试从BCZ-Group-Manager获取中')
+                group = self.get_group_info_from_group_manager(group_id)
+            else:
+                group = self.group_infos[group_id]
+            valid_class_list_2048.append({'groupId': group[0],'shareKey': group[1], 'name': group[3], 'introduction': group[4].replace('\n','\\n'), 'avatar': group[5], 'score': None})
+        self.class_list_2048_sharekey = valid_class_list_2048
+        self.logger.info(f'2048列表共加载{len(self.class_list_2048_sharekey)}班')
+
         self.__not_prepared = False
 
     def export_2048_group_info(self):
