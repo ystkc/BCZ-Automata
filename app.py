@@ -160,6 +160,18 @@ async def groups(request: Request):
     except:
         return templates.TemplateResponse('groups.html', {'request': request, 'groups': []})
 
+@app.get('/notice')
+async def notice(request: Request):
+    return templates.TemplateResponse('notice.html', {'request': request})
+
+@app.get('/load_backup')
+async def load_backup(request: Request):
+    try:
+        if not daka_list_obj.load_backup_db():
+            return restful(400, '请等待当前数据库加载完成再发起请求')
+    except:
+        return restful(400, '加载备份数据库失败')
+
 # 以下是调试接口
 @app.get('/buka')
 async def buka_(request: Request):
@@ -214,6 +226,48 @@ async def parse_notice(request: Request):
 @app.get('/accounts')
 async def accounts(request: Request):
     return templates.TemplateResponse('accounts.html', {'request': request})
+
+@app.get('/get_monitor_classes')
+async def get_monitor_classes(request: Request, id: int):
+    '''获取该用户的监控班级'''
+    try:
+        # https://group.baicizhan.com/group/own_groups?uniqueId=
+        headers = getHeaders('$group', daka_list_obj.get_user_dict(0)['cookie'], int(time.time() * 1000), index = 1)
+        response_json = http2_client_obj.send_http2_request('GET', f'https://group.baicizhan.com/group/own_groups?uniqueId={id}', headers, None).json()
+        monitor_groups = []
+        recorded_ids = set()
+        if response_json['code'] == 1:
+            groups = response_json['data']['list']
+            for group in groups:
+                if group['leader']:
+                    monitor_groups.append(group)
+                    recorded_ids.add(group['id'])
+        storage_ids = daka_list_obj.monitor_id_dict.get(id, [])
+        for id in storage_ids:
+            if id in recorded_ids:
+                continue
+            group_info = daka_list_obj.get_group_info(id)
+            group_info['id'] = id
+            group_info['notice'] = '最新告示 暂未获取'
+            monitor_groups.append(group_info)
+        return restful(200, '获取班级成功', monitor_groups)
+    except Exception as e:
+        traceback.print_exc()
+        return restful(400, f'{e}')
+
+@app.get('/get_notice_list')
+async def get_notice_list(request: Request, group_id: int):
+    '''获取该班级的存储告示列表'''
+    try:
+        notices = daka_list_obj.notice_list.get(group_id, {}) # [content: (time, latest_time, rank_type_rank)]
+        notice_list = []
+        for content, infos in notices.items():
+            time, latest_time, rank_type_rank = infos
+            notice_list.append({'content': content, 'timestamp': time, 'latestTimestamp': latest_time, 'rankTypeRank': rank_type_rank})
+        return restful(200, '获取告示列表成功', notice_list)
+    except Exception as e:
+        return restful(400, f'{e}')
+        
 
 @app.post('/api/reply_and_ack')
 async def reply_and_ack(request: Request, item: dict):
@@ -498,8 +552,11 @@ async def subscribe(request: Request):
 @app.get('/subscribe/data')
 async def subscribe_data(request: Request, force_refresh: bool=False):
     top_notice = notice_subscriber_obj.get_top_notice(daka_list_obj, force_refresh)
-    top_notice['introduction'] = top_notice['introduction'].replace('\n', '<br>')
-    top_notice['notice'] = top_notice['notice'].replace('\n', '<br>')
+    try:
+        top_notice['introduction'] = top_notice['introduction'].replace('\n', '<br>')
+        top_notice['notice'] = top_notice['notice'].replace('\n', '<br>')
+    except:
+        pass
     return restful(200, '获取公告成功', top_notice)
 
 @app.post('/subscribe/reply')
@@ -1014,7 +1071,7 @@ def schedule_task():
         Schedule("30-59 23 * * * buka", lambda: buka()) # 补卡
         daka_list_obj.get_uv() # 测试网络连接，同时标明不是static模式
     try:
-        daka_list_obj.init_notice_storage(logger)
+        daka_list_obj.init_notice_storage()
     except Exception as e:
         logger.error(f"初始化公告存储失败：{e}")
         http2_client_obj.set_closing_state(True)

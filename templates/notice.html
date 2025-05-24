@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>班级告示查看器</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        img {
+            width: 100px;
+            height: 100px;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        #classList {
+            margin-bottom: 20px;
+        }
+        .class-item {
+            cursor: pointer;
+            padding: 10px;
+            border: 1px solid #ddd;
+            margin: 5px 0;
+            border-radius: 4px;
+        }
+        .class-item:hover {
+            background-color: #f0f0f0;
+        }
+        #noticeList {
+            width: 25%;
+            border-right: 1px solid #ccc;
+            padding-right: 20px;
+        }
+        .notice-item {
+            cursor: pointer;
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .selected {
+            background-color: #f8f8f8;
+        }
+        .notice-item:hover {
+            background-color: #f8f8f8;
+        }
+        #noticeDetail {
+            flex: 1;
+            padding-left: 20px;
+        }
+        #inputSection {
+            margin-bottom: 20px;
+        }
+        .time-text {
+            color: #666;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div id="inputSection">
+        <input type="text" id="userId" placeholder="请输入班长ID">
+        <button onclick="loadClasses()" id="get">获取班级列表</button>
+        <button onclick="loadBackupNotice()" id="backup">获取历史备份通知</button>
+    </div>
+
+    <div id="classList"></div>
+
+    <div class="container">
+        <div id="noticeList"></div>
+        <div id="noticeDetail">
+            <div id="detailContent"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentClassId = null;
+        let notices = [];
+        let currentNoticeIndex = -1;
+
+        async function loadBackupNotice() {
+            document.querySelector('#backup').textContent = '请稍候...（加载一个月备份大约2分钟）';
+            const response = await fetch('/load_backup');
+            const data = await response.json();
+            if (response.status === 400) {
+                document.querySelector('#backup').textContent = '正在初始化，请稍候再试';
+            } else {
+                document.querySelector('#backup').textContent = '获取完毕';
+            }
+        }
+        async function loadClasses() {
+            document.querySelector('#get').textContent = '请稍候...';
+            // 要求输入是数字
+            if (!/^\d+$/.test(document.getElementById('userId').value)) {
+                alert('请输入数字班长ID');
+                return;
+            }
+            const userId = document.getElementById('userId').value;
+            const response = await fetch(`/get_monitor_classes?id=${userId}`);
+            const data = await response.json();
+            
+            const classList = document.getElementById('classList');
+            classList.innerHTML = data.data.map(cls => `
+                <div class="class-item" id="class${cls.id}" data-notice="${cls.notice}" onclick="selectClass('${cls.id}')">
+                    <img src="https://vol-v6.bczcdn.com${cls.avatar}" alt="${cls.name}">
+                    <h3>${cls.name}</h3>
+                    <p>${cls.introduction}</p>
+                </div>
+            `).join('');
+            document.querySelector('#get').textContent = '获取班级列表';
+            if (data.data.length === 0) {
+                selectClass(0);
+            } else {
+                selectClass(data.data[0].id);
+            }
+            currentNoticeIndex = -1;
+        }
+
+        async function selectClass(classId) {
+            currentClassId = classId;
+            const response = await fetch(`/get_notice_list?group_id=${classId}`);
+            const data = await response.json();
+            
+            // 按时间戳排序（假设是升序）
+            const currentNotice = {
+                'rankTypeRank': null,
+                'content': document.querySelector(`#class${classId}`).dataset.notice,
+                'timestamp': Date.now() / 1000,
+                'latestTimestamp': Date.now() / 1000,
+            };
+            notices = [currentNotice]; // 要清空之前的列表
+            notices = data.data.sort((a, b) => b.timestamp - a.timestamp);
+            
+            const noticeList = document.getElementById('noticeList');
+            noticeList.innerHTML = `
+<div id="navigationButtons">
+    <button onclick="navigate(-1)">上一条</button>
+    <button onclick="navigate(1)">下一条</button>
+</div>` + notices.map((notice, index) => `
+                <div class="notice-item" onclick="showNoticeDetail(${index})" id="notice${index}">
+                    <div class="rank-type-rank">
+                        ${getRankType(notice.rankTypeRank)}
+                    </div>
+                    <div class="time-text">
+                        ${new Date(notice.timestamp * 1000).toLocaleDateString()} 
+                        ${new Date(notice.timestamp * 1000).toLocaleTimeString()}
+                    </div>
+                    <div>${notice.content.slice(0, 50)}...</div>
+                </div>
+            `).join('');
+            currentNoticeIndex = -1;
+            showNoticeDetail(0);
+        }
+        function getRank(rank_type_rank) {
+          if (rank_type_rank === null) return "未上榜";
+          rank_type = rank_type_rank / 1000;
+          if (rank_type < 1) return ``;
+          else return `${rank_type_rank % 1000}`;
+        }
+        function getRankType(rank_type_rank) {
+          if (rank_type_rank === null) return "未上榜";
+          rank_type = rank_type_rank / 1000;
+          console.log(rank_type_rank, rank_type);
+          if (rank_type < 1) return ``;
+          else if (rank_type < 2) return `青铜${rank_type_rank % 1000}`;
+          else if (rank_type < 3) return `白银${rank_type_rank % 1000}`;
+          else if (rank_type < 4) return `黄金${rank_type_rank % 1000}`;
+          else if (rank_type < 5) return `铂金${rank_type_rank % 1000}`;
+          else if (rank_type < 6) return `钻石${rank_type_rank % 1000}`;
+          else if (rank_type < 7) return `星耀${rank_type_rank % 1000}`;
+          else if (rank_type < 8) return `王者${rank_type_rank % 1000}`;
+          else return `自定义${rank_type_rank % 1000}`;
+          
+        }
+
+        function showNoticeDetail(index) {
+            if (currentNoticeIndex !== -1)
+                document.querySelector(`#notice${currentNoticeIndex}`).classList.remove('selected');
+            document.querySelector(`#notice${index}`).classList.add('selected');
+            currentNoticeIndex = index;
+            const notice = notices[index];
+            const detailContent = document.getElementById('detailContent');
+            detailContent.innerHTML = `
+                <h2>${new Date(notice.timestamp * 1000).toLocaleString()}</h2>
+                <p>${getRankType(notice.rankTypeRank)}</p>
+                <p>${notice.content.replace(/\n/g, '<br>')}</p>
+            `;
+        }
+
+        function navigate(step) {
+            const newIndex = currentNoticeIndex + step;
+            if (newIndex >= 0 && newIndex < notices.length) {
+                showNoticeDetail(newIndex);
+            }
+        }
+        // 绑定enter键触发获取班级列表
+        document.getElementById('userId').addEventListener('keyup', function(event) {
+            if (event.keyCode === 13) {
+                loadClasses();
+            }
+        });
+    </script>
+</body>
+</html>

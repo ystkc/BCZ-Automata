@@ -226,9 +226,9 @@ int main(int argc, char* argv[]) {
 #endif
         status_code = set_sleep_3min(GUID_POWER_SAVER);
         if (status_code != 0) return status_code;
-        status_code = set_screen_timeout_3min(GUID_POWER_SAVER);
-        if (status_code != 0) return status_code;
         status_code = set_sleep_3min(GUID_BALANCED);
+        if (status_code != 0) return status_code;
+        status_code = set_screen_timeout_3min(GUID_POWER_SAVER);
         if (status_code != 0) return status_code;
         status_code = set_screen_timeout_3min(GUID_BALANCED);
         if (status_code != 0) return status_code;
@@ -241,13 +241,13 @@ int main(int argc, char* argv[]) {
 #ifdef _LOG_
         puts("Preventing sleep... Add 'reverse' parameter to undo changes.");
 #endif
-        status_code = set_sleep_never(GUID_BALANCED);
-        if (status_code != 0) return status_code;
-        status_code = set_screen_timeout_never(GUID_BALANCED);
-        if (status_code != 0) return status_code;
         status_code = set_sleep_never(GUID_POWER_SAVER);
         if (status_code != 0) return status_code;
+        status_code = set_sleep_never(GUID_BALANCED);
+        if (status_code != 0) return status_code;
         status_code = set_screen_timeout_never(GUID_POWER_SAVER);
+        if (status_code != 0) return status_code;
+        status_code = set_screen_timeout_never(GUID_BALANCED);
         if (status_code != 0) return status_code;
 #ifdef _LOG_
         puts("Will change the registry to set lid close to no sleep.");

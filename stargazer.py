@@ -18,7 +18,7 @@ user_messages = queue.Queue()
 star_gazer = stargazer_class(logger, http2_client_obj, config, daka_list_obj, user_messages)
 star_gazer.start()
 try:
-    daka_list_obj.init_notice_storage(logger)
+    daka_list_obj.init_notice_storage()
 except:
     http2_client_obj.set_closing_state(True)
     raise

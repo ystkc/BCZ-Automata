@@ -635,6 +635,10 @@ function redirectToGroups() {
   // 在新标签页打开/groups
   window.open('/groups');
 }
+function redirectToGroups() {
+  // 在新标签页打开/notice
+  window.open('/notice');
+}
 function addAccount() {
   // 重定向到/append
   window.location.href = '/append';

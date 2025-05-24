@@ -56,7 +56,7 @@ class user_dict:
             self.unique_id_index[unique_id] = i
 
     def get_index_by_unique_id(self, unique_id:int =0):
-        return self.unique_id_index.get(int(unique_id), None)
+        return self.unique_id_index.get(int(unique_id), 0) # 找不到就返回第一个
     
     def get_access_token_by_unique_id(self, unique_id:int =0):
         index = self.get_index_by_unique_id(unique_id)

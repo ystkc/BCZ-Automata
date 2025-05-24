@@ -15,6 +15,7 @@ class Config:
             'port': 8850,
             'main_token': '', # 试用账号令牌
             'database_path': '../BCZ-Notice-Examiner/bcz_notice.db', # archiever储存库，含公告、用户、班级、连胜信息
+            'notice_backup_db_dir': '../BCZ-Notice-Examiner/notice_backup', # 备份数据库目录
             'archiever_enable': False, # archiever开关，开启时每天固定时间爬取信息并储存
             'class_list_2048': [], # 如果要archiever额外爬取不在榜上的小班id，可以加入此处。不受archiever开关控制。
             "class_list_2048_sharekey_source": "http://127.0.0.1:8840", # 如果数据库内没有2048小班id对应的sharekey 则从此处获取（shadlc-BCZ-Group-Manager客户端地址）
@@ -51,6 +52,7 @@ class Config:
         self.port = self.raw.get('port', 8850)
         self.main_token = self.raw.get('main_token', '')
         self.database_path = self.raw.get('database_path', '../BCZ-Notice-Examiner/bcz_notice.db')
+        self.notice_backup_db_dir = self.raw.get('notice_backup_db_dir', '../BCZ-Notice-Examiner/notice_backup')
         self.local = self.raw.get('local', False)
         self.sync_command = self.raw.get('sync_command', [])
         self.prevent_sleep_command = self.raw.get('prevent_sleep_command', 'timeout')

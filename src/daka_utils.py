@@ -117,6 +117,7 @@ class daka_list_class:
 
         # 初始化数据储存信息
         self.notice_and_rank_path = config.database_path
+        self.notice_backup_db_dir = config.notice_backup_db_dir
         self.puzzle_path = config.puzzle_path
         self.dict_patch_db_path = config.dict_patch_db_path
         self.log_dir = config.log_dir
@@ -359,19 +360,58 @@ class daka_list_class:
         except Exception as e:
             self.add_warning(f'解析Group-Manager返回数据失败 {e}\n数据如下\n{data}')
         return default_group_info
+    
+    def stopper_thread(self):
+        '''停止加载备份'''
+        s = ''
+        self.stop_loading_backup = False
+        try:
+            while s != 'q':
+                s = input("输入q回车退出...")
+        except KeyboardInterrupt:
+            pass
+        except EOFError:
+            return
+        self.stop_loading_backup = True
+        print('将在加载完当前备份数据库后停止...')
+        
+    def load_backup_db(self) -> bool:
+        '''扫描并加载所有备份数据库'''
+        if self.__not_prepared:
+            return False
+        self.stop_loading_backup = False
+        threading.Thread(target=self.stopper_thread, daemon=True).start()
+        self.logger.info('开始加载备份数据库')
+        db_paths = []
+        for file_name in os.listdir(self.notice_backup_db_dir):
+            if file_name.endswith('.db'):
+                db_paths.append(os.path.join(self.notice_backup_db_dir, file_name))
+        tot = len(db_paths)
+        for i, db_path in enumerate(db_paths):
+            if self.stop_loading_backup:
+                break
+            self.logger.info(f'加载备份数据库{i+1}/{tot}: {db_path}')
+            self.init_notice_storage(db_path)
+        self.logger.info(f'\033[32m全部备份数据库加载完成\033[0m')
+        return True
 
-
-    def init_notice_storage(self, logger):
-        '''加载用户信息、小班信息、作弊信息、公告信息、坏词信息、词库信息'''
-        if not self.__not_prepared: # 如果False，说明已经初始化过了。如果undefined，则抛出错误
+    def init_notice_storage(self, db_name=None):
+        '''加载用户信息、小班信息、作弊信息、公告信息、坏词信息、词库信息。传入db_name则从指定数据库加载信息。'''
+        if not self.__not_prepared and not db_name: # 如果False，说明已经初始化过了。如果undefined，则抛出错误
             return
 
         # 读取今天的cheat_tracker
-        self.load_cheat_tracker(datetime.datetime.now().strftime('%Y-%m-%d'))# 防止数据跨天
+        if not db_name:
+            self.load_cheat_tracker(datetime.datetime.now().strftime('%Y-%m-%d'))# 防止数据跨天
 
-        logger.info('开始读取数据库')
-        self.load_dict_db(logger)
-        conn = sqlite3.connect(self.notice_and_rank_path, uri=True)
+        self.logger.info('开始读取数据库')
+        if not db_name:
+            self.load_dict_db(self.logger)
+        conn = None
+        if not db_name:
+            conn = sqlite3.connect(self.notice_and_rank_path, uri=True)
+        else:
+            conn = sqlite3.connect(db_name, uri=True)
         cursor = conn.cursor()
         # 取消阻塞
         cursor.execute('''PRAGMA synchronous = OFF''')
@@ -380,50 +420,92 @@ class daka_list_class:
         cursor.execute('''PRAGMA temp_store = MEMORY''')
         cursor.execute('''PRAGMA cache_size = -100000''')
         # 读取需要检查的notice
-        self.check_list = []
+        if not db_name:
+            self.check_list = []
         # 加载坏词
         try:
-            with open('tmp_bad_words.json', 'r', encoding='utf-8') as f:
-                self.bad_words = json.load(f)
+            if not db_name:
+                with open('tmp_bad_words.json', 'r', encoding='utf-8') as f:
+                    self.bad_words = json.load(f)
         except:
             self.bad_words = []
         # 加载check_list
-        cursor.execute('''SELECT GROUP_ID, CHECKED, DATE, CONTENT FROM notice WHERE CHECKED IS NOT NULL AND CHECKED < 200000000''')
-        for row in cursor.fetchall():
-            self.check_list.append({'group_id': row[0], 'date': row[2], 'content': row[3], 'checked': row[1]//100000000, 'cursorA': row[1]%100000000//10000, 'cursorB': row[1]%10000, 'modified': False, 'valid': True})
-        logger.info(f'check_list剩余{len(self.check_list)}条')
+        try:
+            if not db_name:
+                cursor.execute('''SELECT GROUP_ID, CHECKED, DATE, CONTENT FROM notice WHERE CHECKED IS NOT NULL AND CHECKED < 200000000''')
+                for row in cursor.fetchall():
+                    self.check_list.append({'group_id': row[0], 'date': row[2], 'content': row[3], 'checked': row[1]//100000000, 'cursorA': row[1]%100000000//10000, 'cursorB': row[1]%10000, 'modified': False, 'valid': True})
+                self.logger.info(f'check_list剩余{len(self.check_list)}条')
+        except Exception as e:
+            self.logger.info(f'check_list读取出错 {e}')
         # 加载普通notice
-        self.notice_list = {}
-        cursor.execute('''SELECT GROUP_ID, CONTENT, DATE, LATEST_DATE FROM notice''')
-        cnt = 0
-        for row in cursor.fetchall(): # 按group_id分类
-            group_id = row[0]
-            if group_id not in self.notice_list:
-                self.notice_list[group_id] = {}
-            self.notice_list[group_id][row[1]] = (row[2], row[3])
-            cnt += 1
-        logger.info(f'notice_list共加载{cnt}条({len(self.notice_list)}班)')
+        if not db_name:
+            self.notice_list = {}
+        try:
+            cursor.execute('''SELECT GROUP_ID, CONTENT, DATE, LATEST_DATE, RANK_TYPE_RANK FROM notice''')
+            cnt = 0
+            for row in cursor.fetchall(): # 按group_id分类
+                group_id = row[0]
+                if group_id not in self.notice_list:
+                    self.notice_list[group_id] = {}
+                self.notice_list[group_id][row[1]] = (row[2], row[3], row[4])
+                cnt += 1
+            self.logger.info(f'notice_list共加载{cnt}条({len(self.notice_list)}班)')
+        except Exception as e:
+            # 尝试用旧版数据库结构读取
+            try:
+                cursor.execute('''SELECT SHARE_KEY, CONTENT, DATE, LATEST_DATE, RANK_TYPE, RANK FROM notice''')
+                cnt = 0
+                for row in cursor.fetchall(): # 根据sharekey查询group_id，再按group_id分类
+                    group_id = self.sharekey_to_id.get(row[0], -1)
+                    timestamp = datetime.datetime.strptime(row[2], '%Y-%m-%d %H:%M:%S').timestamp() if row[2] else 0
+                    latest_timestamp = datetime.datetime.strptime(row[3], '%Y-%m-%d %H:%M:%S').timestamp() if row[3] else 0
+                    rank = row[4] if row[4] else 0
+                    rank_type = 0 if row[5] else 0
+                    rank_type_rank = rank*1000 + rank_type
+                    if group_id not in self.notice_list:
+                        self.notice_list[group_id] = {}
+                    self.notice_list[group_id][row[1]] = (timestamp, latest_timestamp, rank_type_rank)
+                    cnt += 1
+                self.logger.info(f'notice_list共加载{cnt}条({len(self.notice_list)}班)')
+            except Exception as e:
+                self.logger.info(f'notice_list兼容结构仍然读取出错 {e}')
         # 加载小班信息
-        self.group_infos = {} # GROUP_ID:(GROUP_ID, GROUP_NAME, GROUP_INTRODUCTION)
-        cursor.execute('''SELECT GROUP_ID, SHARE_KEY, MONITOR_ID, GROUP_NAME, GROUP_INTRODUCTION, GROUP_AVATAR FROM GROUP_NAME''')
-        for row in cursor.fetchall():
-            self.group_infos[row[0]] = (row[0], row[1], row[2], row[3], row[4], row[5])
-        logger.info(f'group_infos共加载{len(self.group_infos)}班')
+        if not db_name:
+            self.group_infos = {} # GROUP_ID:(GROUP_ID, GROUP_NAME, GROUP_INTRODUCTION)
+            self.monitor_id_dict = {} # MONITOR_ID:[GROUP_ID1, GROUP_ID2,...]
+            self.sharekey_to_id = {} # SHARE_KEY:GROUP_ID
+        try:
+            cursor.execute('''SELECT GROUP_ID, SHARE_KEY, MONITOR_ID, GROUP_NAME, GROUP_INTRODUCTION, GROUP_AVATAR FROM GROUP_NAME''')
+            for row in cursor.fetchall():
+                self.group_infos[row[0]] = (row[0], row[1], row[2], row[3], row[4], row[5])
+                self.monitor_id_dict.setdefault(row[2], []).append(row[0])
+                self.sharekey_to_id[row[1]] = row[0]
+            self.logger.info(f'group_infos共加载{len(self.group_infos)}班')
+        except Exception as e:
+            self.logger.info(f'group_infos读取出错 {e}')
+        if db_name:
+            conn.close()
+            self.logger.info(f'数据库{db_name}初始化完毕')
+            return
         # 加载用户信息
-        self.user_infos = {} # USER_ID:(USER_ID, NICKNAME, USER_AVATAR)
-        self.user_infos_from_avatar = {} # USER_AVATAR:USER_ID
-        cursor.execute('''SELECT USER_ID, NICKNAME, USER_AVATAR FROM USER_NAME''')
-        for row in cursor.fetchall():
-            self.user_infos[row[0]] = (row[0], row[1], row[2])
-            avatar = row[2]
-            if not avatar:
-                continue
-            if daka_list_class.is_default_avatar(avatar):# 要同时用名字和头像判断用户
-                self.user_infos_from_avatar[(avatar, row[1])] = row[0]
-            else:
-                self.user_infos_from_avatar[avatar] = row[0]
-            
-        logger.info(f'user_infos共加载{len(self.user_infos)}个用户')
+        if not db_name:
+            self.user_infos = {} # USER_ID:(USER_ID, NICKNAME, USER_AVATAR)
+            self.user_infos_from_avatar = {} # USER_AVATAR:USER_ID
+        try:
+            cursor.execute('''SELECT USER_ID, NICKNAME, USER_AVATAR FROM USER_NAME''')
+            for row in cursor.fetchall():
+                self.user_infos[row[0]] = (row[0], row[1], row[2])
+                avatar = row[2]
+                if not avatar:
+                    continue
+                if daka_list_class.is_default_avatar(avatar):# 要同时用名字和头像判断用户
+                    self.user_infos_from_avatar[(avatar, row[1])] = row[0]
+                else:
+                    self.user_infos_from_avatar[avatar] = row[0]
+            self.logger.info(f'user_infos共加载{len(self.user_infos)}个用户')
+        except Exception as e:
+            self.logger.info(f'user_infos读取出错 {e}')
         # 加载成员信息
         if LOAD_MEMBER_TABLE:
             self.load_member_list(cursor, int(datetime.datetime.now().strftime('%m%d')))
@@ -432,27 +514,39 @@ class daka_list_class:
             self.member_groups = {}
             self.prev_user_streak_info = {}
         # 加载书本信息
-        self.book_name_dict = {} # BOOK_NAME:BOOK_ID
-        cursor.execute('''SELECT HASH_ID, BOOK_NAME, BOOK_ID, BOOK_URL FROM BOOK_NAME''')
-        for row in cursor.fetchall():
-            self.book_name_dict[row[1]] = row[0]
+        if not db_name:
+            self.book_name_dict = {} # BOOK_NAME:BOOK_ID
+        try:
+            cursor.execute('''SELECT HASH_ID, BOOK_NAME, BOOK_ID, BOOK_URL FROM BOOK_NAME''')
+            for row in cursor.fetchall():
+                self.book_name_dict[row[1]] = row[0]
+            self.logger.info(f'book_name_dict共加载{len(self.book_name_dict)}本书')
+        except Exception as e:
+            self.logger.info(f'book_name_dict读取出错 {e}')
         # 加载其他数据
         today_date = datetime.datetime.now()
         today_date_int = int(today_date.strftime('%Y%m%d'))
         self.group_counter_date = today_date_int
-        cursor.execute('''SELECT UV_INDEX, MAX_GROUP_ID, GROUP_COUNT_1, GROUP_COUNT_2, GROUP_COUNT_3, GROUP_COUNT_4, GROUP_COUNT_5, GROUP_COUNT_6 FROM OTHER_INFO WHERE TODAY_DATE == ?''', (today_date_int,))
-        row = cursor.fetchone()
-        if row is None:
-            self.uv_index = 0
-            self.max_group_id = 0
-            self.group_counter = [0, 0, 0, 0, 0, 0]
-            self.logger.info('没有找到其他数据')
-        else:
-            self.uv_index = row[0]
-            self.max_group_id = row[1]
-            self.group_counter = [row[2], row[3], row[4], row[5], row[6], row[7]]
-            self.logger.info(f'其他数据：uv_index={self.uv_index}, max_group_id={self.max_group_id}')
-            self.logger.info(f'组统计：{self.group_counter}')
+        self.uv_index = None
+        try:
+            cursor.execute('''SELECT UV_INDEX, MAX_GROUP_ID, GROUP_COUNT_1, GROUP_COUNT_2, GROUP_COUNT_3, GROUP_COUNT_4, GROUP_COUNT_5, GROUP_COUNT_6 FROM OTHER_INFO WHERE TODAY_DATE == ?''', (today_date_int,))
+            row = cursor.fetchone()
+            if row is None:
+                if not self.uv_index:
+                    self.uv_index = 0
+                    self.max_group_id = 0
+                    self.group_counter = [0, 0, 0, 0, 0, 0]
+                    self.logger.info('没有找到其他数据')
+                else:
+                    self.logger.info('其他数据表中没有找到今天的数据，跳过')
+            else:
+                self.uv_index = row[0]
+                self.max_group_id = row[1]
+                self.group_counter = [row[2], row[3], row[4], row[5], row[6], row[7]]
+                self.logger.info(f'其他数据：uv_index={self.uv_index}, max_group_id={self.max_group_id}')
+                self.logger.info(f'组统计：{self.group_counter}')
+        except Exception as e:
+            self.logger.info(f'其他数据读取出错 {e}')
         conn.close()
         # 读取log
         max_timestamp = int(today_date.timestamp()) - 86400
@@ -479,7 +573,7 @@ class daka_list_class:
         self.book_name_buffer = []
         self.group_rank_buffer = []
         self.rank_and_daka_count_temp = {}
-        logger.info('\033[32m数据库初始化完毕\033[0m')
+        self.logger.info('\033[32m数据库初始化完毕\033[0m')
         
         # 将2048列表中的班级ID转换为shareKey
         valid_class_list_2048 = []
@@ -504,30 +598,36 @@ class daka_list_class:
     def load_member_list(self, cursor: sqlite3.Cursor, date_int: int):
         self.member_groups_cnt = {} # user_id: group_id: cnt
         self.member_list = {}
-        cursor.execute('''SELECT USER_ID, COMPLETED_TIME, TODAY_DATE, WORD_COUNT, STUDY_CHEAT, BOOK_NAME FROM MEMBERS WHERE TODAY_DATE == ?''', (date_int, ))
-        for row in cursor.fetchall():
-            self.member_list[row[0]] = (row[0], row[1], row[2], row[3], row[4], row[5])
-        self.logger.info(f'member_list共加载{len(self.member_list)}条数据')
+        try:
+            cursor.execute('''SELECT USER_ID, COMPLETED_TIME, TODAY_DATE, WORD_COUNT, STUDY_CHEAT, BOOK_NAME FROM MEMBERS WHERE TODAY_DATE == ?''', (date_int, ))
+            for row in cursor.fetchall():
+                self.member_list[row[0]] = (row[0], row[1], row[2], row[3], row[4], row[5])
+            self.logger.info(f'member_list共加载{len(self.member_list)}条数据')
+        except Exception as e:
+            self.logger.info(f'member_list读取出错 {e}')
         self.member_buffer = [] # 每天最多700000条，暂无需设置大小
         # 加载MEMBERS_GROUPS表
         self.member_groups = {}
         self.prev_user_streak_info = {}
-        cursor.execute('''SELECT USER_ID, GROUP_ID, STREAK_TIMES, COMPLETED_TIMES_START, START_DATE, ACHIEVED_DATE, DURATION_DAYS FROM MEMBERS_GROUPS''')
-        for row in cursor.fetchall():
-            idx = (row[0], row[1])
-            tp = self.member_groups.get(idx)
-            if tp is None:
-                self.member_groups[idx] = (row[2], row[3], row[4], row[5], row[6])
-            elif row[4] > tp[4]: # 最新的连胜日期
-                self.prev_user_streak_info[idx] = tp # 由于有单词机，可能出现连胜中断后补上，这里储存上一次连胜以备连接
-                self.member_groups[idx] = (row[2], row[3], row[4], row[5], row[6])
-            else: # 不是最新的，如果比prev_user_streak_info新，则替换prev_user_streak_info
-                prev_tp = self.prev_user_streak_info.get(idx)
-                if prev_tp is not None and row[4] > prev_tp[4]:
-                    self.prev_user_streak_info[idx] = (row[2], row[3], row[4], row[5], row[6])
+        try:
+            cursor.execute('''SELECT USER_ID, GROUP_ID, STREAK_TIMES, COMPLETED_TIMES_START, START_DATE, ACHIEVED_DATE, DURATION_DAYS FROM MEMBERS_GROUPS''')
+            for row in cursor.fetchall():
+                idx = (row[0], row[1])
+                tp = self.member_groups.get(idx)
+                if tp is None:
+                    self.member_groups[idx] = (row[2], row[3], row[4], row[5], row[6])
+                elif row[4] > tp[4]: # 最新的连胜日期
+                    self.prev_user_streak_info[idx] = tp # 由于有单词机，可能出现连胜中断后补上，这里储存上一次连胜以备连接
+                    self.member_groups[idx] = (row[2], row[3], row[4], row[5], row[6])
+                else: # 不是最新的，如果比prev_user_streak_info新，则替换prev_user_streak_info
+                    prev_tp = self.prev_user_streak_info.get(idx)
+                    if prev_tp is not None and row[4] > prev_tp[4]:
+                        self.prev_user_streak_info[idx] = (row[2], row[3], row[4], row[5], row[6])
 
-        self.logger.info(f'成员的groups共加载{len(self.member_groups)}条数据')
-        self.logger.info(f'备用prev{len(self.prev_user_streak_info)}条数据')
+            self.logger.info(f'成员的groups共加载{len(self.member_groups)}条数据')
+            self.logger.info(f'备用prev{len(self.prev_user_streak_info)}条数据')
+        except Exception as e:
+            self.logger.info(f'member_groups读取出错 {e}')
         self.member_groups_buffer = []
         self.member_groups_delete_buffer = [] # 由于有单词机，可能出现连胜中断后补上，所以要合并后删掉之前的
 
@@ -1050,6 +1150,9 @@ class daka_list_class:
                 return
             new_tp = (group_id, share_key, monitor_id, class_name, introduction, group_avatar)
             self.group_infos[group_id] = new_tp
+            # if group_id not in self.monitor_id_dict[monitor_id] :
+            #     self.monitor_id_dict[monitor_id].append(group_id)
+            # self.sharekey_to_id[share_key] = group_id
             self.group_info_buffer.append(new_tp)
 
     def store_notice(self, group_id, rank_type_rank, content, data_time, score, week_daka_days) -> int: # 0被清空，1新增，2已存在
@@ -1059,6 +1162,8 @@ class daka_list_class:
                 self.notice_list[group_id] = {}
             if week_daka_days is None: # 防止二次获取时错误数据覆盖有效数据
                 week_daka_days = self.rank_and_daka_count_temp.get(group_id, (None, None))[1]
+            if rank_type_rank > 2048000: # 自定义段位，不记录
+                rank_type_rank = self.rank_and_daka_count_temp.get(group_id, (None, None))[0]
             self.rank_and_daka_count_temp[group_id] = (rank_type_rank, week_daka_days)
             
             if content == '(空)': # 只有第一次看到空公告才需要加入notice_cleared_buffer
@@ -1076,7 +1181,7 @@ class daka_list_class:
                     self.notice_time_buffer.append((group_id, rank_type_rank, content, max_date, data_time, score)) # 记录时间
                     self.notice_time_delete_buffer.append((group_id, max_date))
                     return -1 # 如果最近的就是空，则不加入
-                self.notice_list[group_id][content] = (data_time, None)
+                self.notice_list[group_id][content] = (data_time, None, rank_type_rank)
                 self.notice_buffer.append((group_id, rank_type_rank, content, data_time, None, score))
                 if max_date > 0: 
                     self.notice_cleared_buffer.append((group_id, rank_type_rank, max_key, max_date, max_date_latest, score, 0))
@@ -1085,14 +1190,14 @@ class daka_list_class:
                 return -2 # 没有最近的不为空的公告
                 
             if content not in self.notice_list[group_id]: # 新增公告
-                self.notice_list[group_id][content] = (data_time, None)
+                self.notice_list[group_id][content] = (data_time, None, rank_type_rank)
                 self.notice_buffer.append((group_id, rank_type_rank, content, data_time, None, score))
                 return 1
             else: # 已存在，更新时间
                 old_date = self.notice_list[group_id][content][0]
                 self.notice_time_buffer.append((group_id, rank_type_rank, content, old_date, data_time, score)) # 仅更新时间
                 self.notice_time_delete_buffer.append((group_id, old_date))
-                self.notice_list[group_id][content] = (old_date, data_time)
+                self.notice_list[group_id][content] = (old_date, data_time, rank_type_rank)
                 return 2
     
     
