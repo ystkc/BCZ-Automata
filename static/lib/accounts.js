@@ -635,7 +635,7 @@ function redirectToGroups() {
   // 在新标签页打开/groups
   window.open('/groups');
 }
-function redirectToGroups() {
+function redirectToNotices() {
   // 在新标签页打开/notice
   window.open('/notice');
 }

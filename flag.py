@@ -10,7 +10,7 @@ with open('user_cookie.json', 'r', encoding='utf-8') as f:
     cookie = json.load(f)
 
 
-id = input('请输入立flag活动编号（如20250217活动13）：')
+id = input('请输入立flag活动编号（如20250217活动13 20250527活动14）：')
 for user in cookie:
     config = user['config']
     cookie = user['cookie']
@@ -44,4 +44,4 @@ for user in cookie:
     else:
         print(f'{name}.{unique_id}立flag失败，原因：{response.json()["message"]}')
     time.sleep(1)
-    
+input('按任意键退出...')

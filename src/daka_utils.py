@@ -1751,6 +1751,7 @@ class stargazer_class:
         user_config = token_user_dict['config']
         name = user_config['name']
         acc_len = 0
+        print(f'准备arbiter {name} {unique_id}')
         try:
             if not self.daka_list_obj.add(unique_id, -50):
                 return
@@ -1864,7 +1865,10 @@ class stargazer_class:
             time.sleep(1)
         if len(self.stargazer_list) == 0:
             if self.king:
-                self.logger.info(f'自动上段模式，共{len(self.daka_list_obj.user_dict_obj.subscriber_unique_ids)}个订阅，{len(self.daka_list_obj.user_dict_obj.arbiter_unique_ids)}个裁判token')
+                subscribe_cnt = len(self.daka_list_obj.user_dict_obj.subscriber_unique_ids)
+                arbiter_cnt = len(self.daka_list_obj.user_dict_obj.arbiter_unique_ids)
+                self.logger.info(f'自动上段模式，共{subscribe_cnt}个订阅，{arbiter_cnt}个裁判token')
+                self.arbiter_size = arbiter_cnt + subscribe_cnt # 确保所有账号都是king
             else:
                 self.logger.info('没有stargazer，退出')
                 return
@@ -3067,15 +3071,17 @@ def task_center(user_cookie, user_config, http2_client_obj: http2_client, daka_l
         score = 0
     rank = data['rank']
     win_streak_days = data['winStreakDays']
+    level_in_rank = -1
     if rank is None:
-        raise Exception('学习记录异常')
-    rank = rank['level']
-    level_in_rank = 1
-    for person in data['rank']['rankList']:
-        if person.get('score', 0) > score:
-            level_in_rank += 1
-    if win_streak_days == 0:
-        daka_list_obj.add_warning(f"用户{user_config['name']}的不断电上传失败，请注意")
+        daka_list_obj.add_warning(f'用户{user_config["name"]}的学习记录异常: {data}')
+    else:
+        rank = rank['level']
+        level_in_rank = 1
+        for person in data['rank']['rankList']:
+            if person.get('score', 0) > score:
+                level_in_rank += 1
+    if not win_streak_days:  # 0或None
+        daka_list_obj.add_warning(f"用户{user_config['name']}的不断电上传失败，请注意{data}")
     yield f'{win_streak_days}天<br>学习分{score}排{rank}段第{level_in_rank}名'
     time.sleep(react_wait_seconds)
 

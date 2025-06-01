@@ -22,7 +22,7 @@ def search_pk_result(result, query_str):
     pattern = re.compile(query_str, re.IGNORECASE)
     matches = []
     for row in result:
-        if pattern.search(row[1]) or pattern.search(row[2]):
+        if pattern.search(row[0]) or pattern.search(row[1]) or pattern.search(row[2]):
             matches.append(row)
     return matches
 
@@ -52,4 +52,4 @@ if __name__ == '__main__':
         for result in results:
             matches = search_pk_result(result[1], query_str)
             print_pk_result(result[0], matches)
-        print('All results have been shown.')
+        print('\033[32mAll results have been shown.\033[0m')

@@ -46,8 +46,10 @@ def display_info(base_url, last_action: str) -> bool:
     auth = data['notice_hash'] == '#auth#'
     if auth:
         print("\033[1;31m发现了新的授权请求！ʕ⊙ᴥ⊙ʔ\033[0m")
-    data['notice'] = data['notice'].replace('<br>','\n')
-    data['introduction'] = data['introduction'].replace('<br>','\n')
+    if not data['notice']:
+        data['notice'] = '无通知'
+    data['notice'] = data.get('notice', '').replace('<br>','\n')
+    data['introduction'] = data.get('introduction', '').replace('<br>','\n')
     print(dedent(f"""
 用户\033[1;33m{data['user_name']}\033[0m({data['unique_id']})[{data['group_share_key']}]的组：
 \033[1;36m{data['group_name']}\033[0m({data['group_id']})
