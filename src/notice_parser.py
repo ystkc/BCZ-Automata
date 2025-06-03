@@ -475,12 +475,13 @@ class static_export_class:
         return str.replace(' ','').replace('[]','').replace('.0','')
     
     def hash_string(self, string) -> int:
-        '''将string用一个顺序id表示（返回），以将储存数据中的string和数字分离达到更好的压缩效果'''
+        '''将string用一个顺序id表示（返回），以将储存数据中的string和数字分离达到更好的压缩效果。可以hash嵌套的list。'''
         if isinstance(string, list):
             hash_list = []
-            for str in string:
-                hash_list.append(self.hash_string(str))
-            return hash_list
+            for str_ in string:
+                hash_list.append(self.hash_string(str_))
+            result_str = str(hash_list)
+            return -self.hash_string(result_str.replace(' ','')) # 用负数表示需要嵌套解压
         if string is None:
             string = '无'
         string = string.replace('\n', '<br>')
@@ -490,54 +491,80 @@ class static_export_class:
             return self.hash_index - 1
         else:
             return self.hash_dict[string]
+        
+    def recover_string(self, hash_id) -> str:
+        '''将hash_id恢复为原来的字符串。可以恢复嵌套的list。'''
+        if hash_id < 0:
+            hash_list = json.loads(self.hash_dict[-hash_id])
+            string_list = []
+            for hash_id_ in hash_list:
+                string_list.append(self.recover_string(hash_id_))
+            return string_list
+        else:
+            return self.hash_dict[hash_id]
 
-    def read_blacklist(self):
-        # 读取数据库
-        self.blacklist = {}
-        blacklist_date = {}
+    def read_user_info(self):
+        '''从数据库中读取用户信息'''
+        self.logger.info("正在读取 用户信息")
+        conn = sqlite3.connect(static_export_class.black_list_db_path, detect_types=0, uri=True)
+        cursor = conn.cursor()
+        cursor.execute("SELECT qq_id, unique_id, type, nickname, password FROM user_info")
+        user_list = cursor.fetchall()
+        self.user_dict = {}
+        self.user_name_to_id = {}
+        for row in user_list:
+            self.user_dict[row[0]] = row[1:]
+            self.user_name_to_id[row[3]] = row[0]
+        cursor.close()
+        conn.close()
+        self.logger.info("用户信息读取完成")
+
+    def check_exist(self, uid, create_time):
+        '''检查(uid, create_time)是否已经存在于黑名单，也就是唯一记录'''
+        id = (uid, create_time)
+        if uid not in self.blacklist_date:
+            self.blacklist_date[uid] = [id]
+            return False
+        if id in self.blacklist_date[uid]:
+            return True
+        self.blacklist_date[uid].append(id)
+        return False
+
+    def read_blacklist_db(self):
+        '''从数据库中读取黑名单（合并到内存）'''
         self.logger.info("正在读取 黑名单数据库")
         conn = sqlite3.connect(static_export_class.black_list_db_path, detect_types=0, uri=True)
         cursor = conn.cursor()
-        cursor.execute("SELECT string FROM string_hash")
+        cursor.execute("SELECT hash_id, string FROM string_hash")
         hash_list = cursor.fetchall()
         self.hash_dict = {datetime.datetime.now().strftime('更新于%Y-%m-%d,%H:%M:%S'): 0}
         self.hash_index = 1
         for hash_id, string in hash_list:
             self.hash_dict[string] = hash_id
-        cursor.execute("SELECT * FROM blacklist")
+        cursor.execute("SELECT uid, create_time, nickname, date, reason, recorder, recorder_qq_id, remark, last_edit_time FROM blacklist")
         blacklist_list = cursor.fetchall()
         for row in blacklist_list:
-            uid = row[1]
-            nickname = row[2]
-            date = row[3]
-            reason = row[4]
-            recorder = row[5]
-            id_str = f"{date}{recorder}"
-            if uid not in blacklist_date:
-                blacklist_date[uid] = []
-            if id_str in blacklist_date[uid]:
+            if self.check_exist(row[0], row[1]):
                 continue
-            blacklist_date[uid].append(id_str)
-            remark = row[6]
-            last_edit_time = row[7]
-            last_editor = row[8]
-            first_editor = row[9]
-            if uid not in self.blacklist:
-                self.blacklist[uid] = []
-            self.blacklist[uid].append([nickname, date, reason, recorder, remark, last_edit_time, last_editor, first_editor])
+            if row[6] is None:
+                row[6] = self.user_name_to_id.get(row[5], None)
+            if row[0] not in self.blacklist:
+                self.blacklist[row[0]] = []
+            self.blacklist[row[0]].append(row)
         cursor.close()
         conn.close()
-        # 读取excel，和数据库合并
+    
+    def read_blacklist_xlsx(self):
+        '''从xlsx文件中读取黑名单（合并到内存）'''
         self.logger.info("正在读取 黑名单 excel 文件")
         if not os.path.exists(static_export_class.black_list_path):
             return []
         wb = openpyxl.load_workbook(static_export_class.black_list_path)
         ws = wb.active
-        # 列名：百词斩昵称	百词斩ID	退班时间	拉黑原因	记录班长	备注	最后编辑时间(不要填)	最后编辑人（不要填）	原创建班长（不要填）
         for row in ws.iter_rows(min_row=2):
             uid = row[1].value
             if uid is None:
-                continue
+                continue # 跳过空行 
             try:
                 uid = int(uid)
             except:
@@ -547,21 +574,20 @@ class static_export_class:
                 print(f"{uid} 未填写退班时间，跳过")
                 continue
             nickname = self.hash_string(row[0].value)
-            date = int(row[2].value.timestamp())
+            create_time = date = int(row[2].value.timestamp())
             recorder = self.hash_string(row[4].value)
+            recorder_qq_id = self.user_name_to_id.get(row[4].value, None)
             
-            # 防止重复添加
-            id_str = f"{date}{recorder}"
-            if uid not in blacklist_date:
-                blacklist_date[uid] = []
-            if id_str in blacklist_date[uid]:
+            if self.check_exist(uid, date):
                 continue
-            blacklist_date[uid].append(id_str)
 
-            reason = []
+            reason = None
             if row[3].value is not None:
-                reason = row[3].value.split(',')
-                reason = self.hash_string(reason)
+                reason_list = row[3].value.split(',')
+                reason = self.hash_string(reason_list)
+            else:
+                reason = self.hash_string([])
+                
             
             remark = self.hash_string(row[5].value)
 
@@ -570,64 +596,90 @@ class static_export_class:
             last_edit_time = row[6].value.timestamp()
             try:
                 last_editor = self.hash_string(row[7].value)
+                # if not recorder_qq_id:
+                #     recorder_qq_id = self.user_name_to_id.get(row[7].value, None)
             except:
                 last_editor = self.hash_string('无')
             try:
                 first_editor = self.hash_string(row[8].value)
+                # if not recorder_qq_id:
+                #     recorder_qq_id = self.user_name_to_id.get(row[8].value, None)
             except:
                 first_editor = self.hash_string('无')
 
             
             if uid not in self.blacklist:
                 self.blacklist[uid] = []
-            self.blacklist[uid].append([nickname, date, reason, recorder, remark, last_edit_time, last_editor, first_editor])
-    
-    def write_blacklist(self, uid, nickname, date, reason, recorder, remark, last_edit_time, last_editor, first_editor):
-        # 写入数据库
-        conn = sqlite3.connect(static_export_class.black_list_db_path, detect_types=0, uri=True)
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO blacklist (uid, nickname, date, reason, recorder, remark, last_edit_time, last_editor, first_editor) VALUES (?,?)", (uid, nickname, date, reason, recorder, remark, last_edit_time, last_editor, first_editor))
-        conn.commit()
-        cursor.close()
-        conn.close()
+            self.blacklist[uid].append((uid, create_time, nickname, date, reason, recorder, recorder_qq_id, remark, last_edit_time))
 
     def __init__(self):
         self.logger = logging.getLogger(__name__)
         self.hash_index = 0
         self.hash_dict = {}
         self.blacklist = {}
+        self.blacklist_date = {}
         # 初始化数据库
         self.logger.info("正在初始化 黑名单数据库")
         conn = sqlite3.connect(static_export_class.black_list_db_path, detect_types=0, uri=True)
         self.configure_database(conn)
         cursor = conn.cursor()
         cursor.execute('''CREATE TABLE IF NOT EXISTS blacklist (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            uid INTEGER NOT NULL,
+            uid INTEGER NOT NULL, -- 被拉黑用户的unique_id(同一人被多次拉黑的情况较少，不hash)
+            create_time INTEGER NOT NULL, -- timestamp
             nickname INTEGER NOT NULL,
             date INTEGER NOT NULL,
             reason INTEGER NOT NULL,
             recorder INTEGER NOT NULL,
+            recorder_qq_id INTEGER, -- 也是hash值
             remark INTEGER NOT NULL,
             last_edit_time INTEGER NOT NULL,
-            last_editor INTEGER NOT NULL,
-            first_editor INTEGER NOT NULL
-        )''')
+         PRIMARY KEY (uid, create_time))''')
         cursor.execute('''CREATE TABLE IF NOT EXISTS string_hash (
-            hash_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            hash_id INTEGER PRIMARY KEY,
             string TEXT NOT NULL
+        )''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS user_info (
+            qq_id INTEGER PRIMARY KEY, -- 非hash，每个qq号只能对应一个账号，只填大号uid就好了
+            unique_id INTEGER, -- 非hash
+            type INTEGER, -- 0为管理员，1为普通用户，2为王者班长
+            nickname TEXT, -- 非hash
+            password TEXT -- 管理员可以添加password为空的用户以便后续注册后直接获得相应身份组
         )''')
         conn.commit()
         cursor.close()
         conn.close()
+        self.__ready = False
         self.logger.info("黑名单数据库初始化完成")
     
-    def export_black_list(self):
+    def prepare(self):
+        if not self.__ready:
+            self.logger.info("正在读取 黑名单数据")
+            self.read_user_info() # 先读取用户信息以便修复旧数据
+            self.read_blacklist_db()
+            self.read_blacklist_xlsx()
+            self.__ready = True
+            self.logger.info("黑名单数据读取完成")
+    
+    def export_black_list_to_db(self):
+        '''导出黑名单到数据库'''
+        self.prepare()
+        self.logger.info("正在保存黑名单到数据库")
+        conn = sqlite3.connect(static_export_class.black_list_db_path, detect_types=0, uri=True)
+        self.configure_database(conn)
+        cursor = conn.cursor()
+        for uid, blacklist_list in self.blacklist.items():
+            cursor.executemany("INSERT INTO blacklist (uid, create_time, nickname, date, reason, recorder, recorder_qq_id, remark, last_edit_time) VALUES (?,?,?,?,?,?,?,?,?)", blacklist_list)
+        for string, hash_id in self.hash_dict.items():
+            cursor.execute("INSERT INTO string_hash (hash_id, string) VALUES (?,?)", (hash_id, string))
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+        self.logger.info("黑名单已经保存到数据库")
+
+    def export_black_list_to_bin(self):
         '''导出黑名单到静态json和bin文件'''
-        # 读取黑名单
-        self.logger.info("正在读取 黑名单")
-        self.read_blacklist()
-        # 写入json文件
+        self.prepare()
         self.logger.info("正在写入 黑名单 json 文件")
         with open(static_export_class.black_list_assets, 'wb') as f:
             f.write(encoder(static_export_class.flatten(static_export_class.detach(self.blacklist))))
@@ -644,8 +696,10 @@ class static_export_class:
 
 
 if __name__ == '__main__':
+    '''运行本函数可以将xlsx迁移到空白的数据库'''
     obj = static_export_class()
-    obj.export_black_list()
+    obj.prepare()
+    obj.export_black_list_to_db()
     # notice_parser = NoticeParser()
     # while True:
     #     text = input("请输入要检查的通知：")
