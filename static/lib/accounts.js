@@ -314,7 +314,7 @@ function changeNotice(group_share_key, unique_id, group_id=''){
     }
     notice_span.innerHTML = content;
     original_html_content = content;
-    op1_button.textContent = "今日已改公告";
+    op1_button.textContent = "请稍候";
     // 发送请求
     return fetch('/api/change_notice', {
       method: 'POST',
@@ -332,15 +332,24 @@ function changeNotice(group_share_key, unique_id, group_id=''){
       return response.json();
     })
   .then(function(data) {
+      op1_button.textContent = "发送中...";
       // sse
       let sse = new EventSource(`/api/change_notice_sse?group_share_key=${group_share_key}&unique_id=${unique_id}&group_id=${group_id}`);
       sse.onmessage = function(event) {
-          notice_span.innerHTML = event.data;
-          // console.log(event.data);
+          if (event.data == "close") {
+            sse.close();
+            op1_button.textContent = "改公告";
+          } else {
+            notice_span.innerHTML = event.data;
+          }
       };
     })
   .catch(function(error) {
-      console.error(error);
+      op1_button.textContent = "改公告";
+      console.log(error);
+      
+      alert(error.msg);
+
       sse.close();
     });
   }

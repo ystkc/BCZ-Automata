@@ -37,9 +37,6 @@ from src.daka_utils import getHeaders, daka_all_headless, stargazer_class
 from src.http2_client import http2_client
 from append import append_user_data
 
-
-from src.notice_parser import static_export_class
-
 from src.schedule import Schedule
 
 logging.basicConfig(
@@ -403,11 +400,16 @@ async def accounts_list(request: Request):
 notice_list = []
 pace = config.check_notice_pace
 def change_notice_sse_func(unique_id, group_share_key, content, mentioned_ids, group_id):
-    for event in change_notice_sse_func_(unique_id, group_share_key, content, mentioned_ids, group_id):
-        target = event.replace('\n', '<br>')
-        target = target.replace('\r', '<br>')
-        target = target.replace('<br><br>', '<br>')
-        yield f"data: {target}\n\n"
+    try:
+        for event in change_notice_sse_func_(unique_id, group_share_key, content, mentioned_ids, group_id):
+            target = event.replace('\n', '<br>')
+            target = target.replace('\r', '<br>')
+            target = target.replace('<br><br>', '<br>')
+            yield f"data: {target}\n\n"
+        yield f"data: close\n\n"
+    except Exception as e:
+        traceback.print_exc()
+        yield f"data: {e}\n\n"
 
 def change_notice_sse_func_(unique_id, group_share_key, content, mentioned_ids, group_id):
     message_str = ""
@@ -490,6 +492,8 @@ def change_notice_sse_func_(unique_id, group_share_key, content, mentioned_ids, 
                 time.sleep(random.randint(750, 1500) / 1000)
     else:
         message_str = f'通知发送失败{response_json["message"]}<br><br>'
+        yield message_str
+        return
     # 发送mention
     if len(mentioned_ids) > 0:
         # https://group.baicizhan.com/group/batch_send_notice_to_mentioned_users
@@ -515,8 +519,10 @@ async def change_notice_sse(request: Request, unique_id: int=0, group_share_key:
     try:
         unique_id = int(unique_id)
         content = ''
+        print(unique_id, group_share_key, group_id)
         global notice_list
         for notice in notice_list:
+            print(notice)
             if notice['unique_id'] == unique_id and notice['group_share_key'] == group_share_key:
                 content = notice['content']
                 mentioned_ids = notice['mentioned_ids']
@@ -552,11 +558,8 @@ async def subscribe(request: Request):
 @app.get('/subscribe/data')
 async def subscribe_data(request: Request, force_refresh: bool=False):
     top_notice = notice_subscriber_obj.get_top_notice(daka_list_obj, force_refresh)
-    try:
-        top_notice['introduction'] = top_notice['introduction'].replace('\n', '<br>')
-        top_notice['notice'] = top_notice['notice'].replace('\n', '<br>')
-    except:
-        pass
+    top_notice['introduction'] = top_notice['introduction'].replace('\n', '<br>') if top_notice['introduction'] else ''
+    top_notice['notice'] = top_notice['notice'].replace('\n', '<br>') if top_notice['notice'] else ''
     return restful(200, '获取公告成功', top_notice)
 
 @app.post('/subscribe/reply')
@@ -808,16 +811,6 @@ async def more_groups(request: Request, item):
         raise e
         return restful(400, f'{e}')
 
-@app.get('/blacklist')
-async def blacklist(request: Request):
-    '''导出黑名单'''
-    try:
-        exporter = static_export_class()
-        exporter.export_black_list()
-        return restful(200, '导出黑名单成功')
-    except Exception as e:
-        return restful(400, f'{e}')
-
 
 @app.get('/group_avatar')
 async def group_avatar(request: Request, group_id: int):
@@ -947,6 +940,7 @@ async def user_login(request: Request, item: dict):
     except Exception as e:
         return restful(400, f'{e}')
     
+# 以下是定时任务部分
 def shutdown():
     if not config.local: # 仅本地模式（呃，懒？）
         return

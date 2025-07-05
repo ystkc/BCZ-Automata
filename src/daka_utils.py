@@ -851,12 +851,16 @@ class daka_list_class:
         self.group_rank_buffer = []
         self.rank_and_daka_count_temp = {}# 用于储存排行榜上的班级的卡数和排名
         conn.commit()
-        if close_start_time - self.latest_check_notice_timestamp > 3600:
-            self.notice_parser.update_notice(conn, only_raw_notice=False)
-            self.latest_check_notice_timestamp = close_start_time
-            self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'notice_parser已更新', True)
-        else: # 19
-            self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'notice_parser 时间过短，不更新', True)
+        # 仅星期一更新
+        if datetime.datetime.now().weekday() == 0:
+            if close_start_time - self.latest_check_notice_timestamp > 3600:
+                self.notice_parser.update_notice(conn, only_raw_notice=False)
+                self.latest_check_notice_timestamp = close_start_time
+                self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'notice_parser已更新', True)
+            else: # 19
+                self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'notice_parser 时间过短，不更新', True)
+        else:
+            self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'非星期一，不更新notice_parser', True)
         conn.close()
         self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', f'数据库已保存', True)
 
@@ -1099,6 +1103,8 @@ class daka_list_class:
 
     def get_uv(self):
         '''获取总用户uv，储存到self.uv_index'''
+        if not self.user_dict_obj.get_count():
+            return
         user_cookie = self.user_dict_obj.get_cookie()
         user_config = self.user_dict_obj.get_config()
         # https://group.baicizhan.com/group/study_words_together_home_page
