@@ -81,7 +81,7 @@ def append_user_data(text=None):
     cnt = 0
     unique_id = 0
     for i in data:
-        if len(i) < 6:
+        if len(i) < 7:
             continue
         try: # 这些是必填项
             assert int(i[0]) in [0, 1]
@@ -100,11 +100,13 @@ def append_user_data(text=None):
                 "name": i[2],
                 "word_count": int(i[3]) if i[3] != '' else 5,
                 # "cooper": int(i[4]), # read only
-                "can_pk": int(i[6]) if i[6] != '' else 0,
-                "arbiter": int(i[7]) if i[7] != '' else 0, # arbiter
-                "tidal_group_limit": int(i[8]) if i[8] != '' else 0,
-                "subscribe_notice": int(i[9]) if i[9] != '' else 0,
-                "check_notice": int(i[10]) if i[10] != '' else 0,
+                # "token": str(i[5]), # cookies only, not here
+                "can_team": int(i[6]) if i[6] != '' else 0,
+                "can_pk": int(i[7]) if i[7] != '' else 0,
+                "arbiter": int(i[8]) if i[8] != '' else 0, # arbiter
+                "tidal_group_limit": int(i[9]) if i[9] != '' else 0,
+                "subscribe_notice": int(i[10]) if i[10] != '' else 0,
+                "check_notice": int(i[11]) if i[11] != '' else 0,
             }
             if user_config['word_count'] < 5:
                 user_config['word_count'] = 5

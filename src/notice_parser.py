@@ -7,6 +7,7 @@ import re
 
 DEBUG = False
 NO_ENCODE = False
+ACCEPT_WORDS_LIMIT = 100000
 default_notice_db_path = f'../BCZ-Notice-Examiner/bcz_notice.db?mode=ro'
 
 
@@ -390,13 +391,15 @@ class NoticeParser:
                         warn_words.extend(self.parse_text(notice))
                         bad_notice_list.append(notice)
                     if date >= self.most_recent_clear_date: # 同一天晚些时候的公告
-                        accept_words.extend(self.parse_text(notice))
+                        if len(accept_words) < ACCEPT_WORDS_LIMIT:
+                            accept_words.extend(self.parse_text(notice))
                         accept_notice_list.append(notice)
             # else:
                 # 公告都没有被清空，且是当天的公告，全部加入到accept_words中
                 # for (notice, date, checked) in notice_list:
                 #     if date >= self.most_recent_clear_date:
-                #         accept_words.extend(self.parse_text(notice))
+                #         if len(accept_words) < ACCEPT_WORDS_LIMIT:
+                #             accept_words.extend(self.parse_text(notice))
                 #         accept_notice_list.append(notice)
         
         print(f"accept_notice_list: {len(accept_notice_list)}")

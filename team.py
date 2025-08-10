@@ -3,10 +3,16 @@
 import json
 import time
 import sys
+import os
 import requests
 import random
 from src.daka_utils import getHeaders, http2_client
 from src.thrift_utils import advertise, print_thrift_object
+
+ON_QUERY = False
+
+# 设置路径为当前文件路径
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 http2_client_obj = http2_client()
 cookie = []
@@ -40,9 +46,16 @@ def team_up_recite(publish_team=False):
         name = config['name']
         unique_id = config['unique_id']
         access_token = user_cookie['access_token']
-        if name == '奶芋' or user_cookie.get('no_team', False) or not config.get('can_daka', False):
+        if not config.get('can_team', False) or not config.get('can_daka', False):
+            print(f'{name}.{unique_id}未开启组队功能或未开启打卡功能，跳过')
             continue
-        print(f'正在为{name}.{unique_id}组队...')
+        if ON_QUERY:
+            inputStr = input(f'正在为{name}.{unique_id}组队...(n取消)')
+            if inputStr.lower() == 'n':
+                print("取消")
+                continue
+        else:
+            print(f"正在为{name}.{unique_id}组队...")
 
         # https://activity.baicizhan.com/api/activity/team-up-recite/home
         time_long = int(time.time() * 1000)
@@ -77,19 +90,23 @@ def team_up_recite(publish_team=False):
                 headers = getHeaders('$activity', user_cookie, time_long, index = 1)
                 headers['Content-Type'] = 'application/json; charset=UTF-8'
                 response = requests.post(url, headers=headers, json=content)
-                print(response.json()['data']['type']) #  0成功 1过期 2无效 3已在队伍中  5已满
+                print(response.json())
+                try:
+                    typecode = response.json()['data']['type']
+                except:
+                    continue # 可能是有别的活动阻碍了
                 if code not in valid_current_code:
                     valid_current_code.append(code)
                     valid_current_token[code] = access_token
-                if response.json()['data']['type'] == 0:
+                if typecode == 0:
                     print('邀请码加入成功')
                     create_new = False
                     break
-                if response.json()['data']['type'] == 3:
+                if typecode == 3:
                     print('已在队伍中')
                     create_new = False
                     break
-                if response.json()['data']['type'] == 5 or response.json()['data']['type'] == 2 or response.json()['data']['type'] == 1:
+                if typecode == 5 or typecode == 2 or typecode == 1:
                     print('队伍已满/无效/过期')
                     valid_current_code.remove(code)
                     del valid_current_token[code]
@@ -125,13 +142,17 @@ def team_up_recite(publish_team=False):
                 headers['Content-Type'] = 'application/json; charset=UTF-8'
                 print(content)
                 response = http2_client_obj.send_http2_request('POST', url, headers, content=content)
-                print(response.json()['data']['type']) # 0成功 1失败 2失败 3已在队伍中 4队名非法
-                if response.json()['data']['type'] == 0:
+                print(response.json()) # 0成功 1失败 2失败 3已在队伍中 4队名非法
+                try:
+                    typecode = response.json()['data']['type']
+                except:
+                    continue # 可能是有别的活动阻碍了
+                if typecode == 0:
                     new_code = response.json()['data']['code']
                     print(f'新队伍 邀请码：{new_code}')
                     current_code.append(new_code)
                     current_token[new_code] = access_token
-                elif response.json()['data']['type'] == 3:
+                elif typecode == 3:
                     print('已在队伍中')
                 else:
                     print('其他原因失败')
@@ -244,10 +265,14 @@ def flag_bet():
 
 if __name__ == '__main__':
     # if input("组队 or 立flag？(1/2)") == '1':
-        team_up_recite()
-        if input(f'剩余{len(current_code)}个队伍可能未满，是否要公开剩余有效队伍？(y/n)') == 'y':
-            publish_team()
-        input('完成，按任意键退出')
+        try:
+            team_up_recite()
+            if input(f'剩余{len(current_code)}个队伍可能未满，是否要公开剩余有效队伍？(y/n)') == 'y':
+                publish_team()
+            input('完成，按任意键退出')
+        except Exception as e:
+            print(e)
+            input('出错，按任意键退出')
     # else:
         # flag_bet()
     

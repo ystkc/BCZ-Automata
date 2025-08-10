@@ -2024,6 +2024,32 @@ class notice_subscriber:
                                                 'unique_id': unique_id,
                                                 'group_share_key': appliant_sharekey,
                                                     'notice_hash': '#auth#'})
+                    elif msg["title"] == "\u62db\u65b0\u6d77\u62a5\u5ba1\u6838\u901a\u8fc7": # 招新海报审核通过
+                        try:
+                            poster_id = msg['link'].split('id%3D')[1].split('%26')[0]
+                        except Exception as e:
+                            print(msg['link'])
+                            print(f"出现错误，无法获取海报的id，请更新解析器: {e}")
+                        content = msg['content']
+                        # https://group.baicizhan.com/group/get_recruitment_post?id=
+                        poster_data = self.http2_client_obj.send_http2_request('GET', f'https://group.baicizhan.com/group/get_recruitment_post?id={poster_id}', headers=headers, content=None).json()['data']
+                        poster_content = poster_data['content']
+                        group_id = poster_data['groupId']
+                        user_id = poster_data['uniqueId']
+                        # https://group.baicizhan.com/group/get_group_info?groupId=
+                        group_data = self.http2_client_obj.send_http2_request('GET', f'https://group.baicizhan.com/group/get_group_info?groupId={group_id}', headers=headers, content=None).json()['data']
+                        group_name = group_data['name']
+                        group_share_key = group_data['shareKey']
+
+                        print(f"发现海报:{poster_id} ({content})")
+                        self.new_notice.append({'user_name': "",
+                                                'group_name': group_name,
+                                                 'notice': poster_content, 
+                                                 'introduction': content,
+                                                 'group_id': group_id, 
+                                                 'unique_id': user_id,
+                                                 'group_share_key': group_share_key,
+                                                 'notice_hash': '#poster#'})
                 time.sleep(random.randint(12, 18) / 10)
             time.sleep(random.randint(15, 18) / 10)
         # 将所有授权申请放到最前面
@@ -2031,7 +2057,7 @@ class notice_subscriber:
         self.logger.info(f'发现{len(self.new_notice)}条新的订阅公告，{apply_count}条小班授权申请')
 
     def get_top_notice(self, daka_list_obj: daka_list_class, force_refresh = False):
-        if force_refresh or int(time.time()) - self.latest_timestamp > 3600: # 超过1h，重新获取公告哈希值
+        if force_refresh or int(time.time()) - self.latest_timestamp > 36000: # 超过10h，重新获取公告哈希值
             users = daka_list_obj.get_user_dict_list()
             random.shuffle(users)
             self.get_subscription(users)
@@ -2045,22 +2071,25 @@ class notice_subscriber:
         if unique_id == -1:
             return 400, "没有订阅，不需要回复"
         result_str = ''
-        if notice_hash == '#auth#':
+        if notice_hash[0] == '#':
             # correspond True表示确认，False表示拒绝
             self.new_notice.pop(0)
             if correspond:
-                # https://group.baicizhan.com/group/authorization_handle
-                payload = {
-                    "shareKey": group_share_key,
-                    "type": 1
-                }
-                headers = getHeaders("$group", user_dict['cookie'], int(time.time()), index=1)
-                headers['Content-Type'] = 'application/json; charset=UTF-8'
-                response_json = self.http2_client_obj.send_http2_request('POST', f'https://group.baicizhan.com/group/authorization_handle', headers=headers, content = payload).json()
-                if response_json['code'] == 1:
-                    return 200, '确认成功<br>'
-                else:
-                    return 400, f'确认失败{response_json["message"]}<br>'
+                if notice_hash == '#auth#':
+                    # https://group.baicizhan.com/group/authorization_handle
+                    payload = {
+                        "shareKey": group_share_key,
+                        "type": 1
+                    }
+                    headers = getHeaders("$group", user_dict['cookie'], int(time.time()), index=1)
+                    headers['Content-Type'] = 'application/json; charset=UTF-8'
+                    response_json = self.http2_client_obj.send_http2_request('POST', f'https://group.baicizhan.com/group/authorization_handle', headers=headers, content = payload).json()
+                    if response_json['code'] == 1:
+                        return 200, '确认成功<br>'
+                    else:
+                        return 400, f'确认失败{response_json["message"]}<br>'
+                elif notice_hash == '#poster#':
+                    return 200, '已阅<br>'
             else:
                 # https://group.baicizhan.com/group/authorization_handle
                 payload = {

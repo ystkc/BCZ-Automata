@@ -495,7 +495,11 @@ def change_notice_sse_func_(unique_id, group_share_key, content, mentioned_ids, 
         yield message_str
         return
     # 发送mention
-    if len(mentioned_ids) > 0:
+    if content[0] == '~': #忽略所有at
+        content = content[1:]
+        message_str += '已忽略所有at'
+        yield message_str
+    elif len(mentioned_ids) > 0:
         # https://group.baicizhan.com/group/batch_send_notice_to_mentioned_users
         # 先去重
         mentioned_ids = list(set(mentioned_ids))
