@@ -3,7 +3,10 @@
 import pyperclip
 import json
 
-def append_user_data(text=None):
+def delete_user_data(text=None):
+    return append_user_data(text, delete=True)
+
+def append_user_data(text=None, delete=False):
     '''用于导入以及更新user_cookie.json文件'''
     print("数据格式: can_daka(0/1)\tunique_id\tname\tword_count(新学词数)\tcooper(None)\tcan_pk(0/1)\tarbiter(0/1,是否允许PK反挂)\ttidal_group_limit(可用班位数)\t是否订阅该账户公告")
     
@@ -120,6 +123,12 @@ def append_user_data(text=None):
         
         if current_user_config.get(unique_id):
             cnt += 1
+            if delete:
+                print(f"\033[32mDeleting user {unique_id} from the database.\033[0m")
+                result_str += f"\033[32mDeleting user {unique_id} from the database.\033[0m\n"
+                del current_user_config[unique_id]
+                del current_user_cookie[unique_id]
+                continue
             print(f"User {unique_id} already exists in the database.")
             result_str += f"User {unique_id} already exists in the database.\n"
             for key, value in user_config.items():
@@ -133,6 +142,10 @@ def append_user_data(text=None):
                     result_str += f"Updating {key} from {current_user_cookie[unique_id].get(key)} to {value}.\n"
                     current_user_cookie[unique_id][key] = value
         else:
+            if delete:
+                print(f"\033[31mUser {unique_id} not found in the database.\033[0m")
+                result_str += f"\033[31mUser {unique_id} not found in the database.\033[0m\n"
+                continue
             cnt += 1
             print(f"\033[32mAdding user {user_config['name']} to the database.\033[0m can_daka: {user_config['can_daka']}")
             result_str += f"\033[32mAdding user {user_config['name']} to the database.\033[0m can_daka: {user_config['can_daka']}\n"
@@ -166,8 +179,12 @@ def append_user_data(text=None):
         json.dump(tidal_result_list, f, indent=4, ensure_ascii=False)
 
 
-    print(f"\033[32m{cnt} users added to the database.\033[0m")
-    result_str += f"\033[32m{cnt} users added to the database.\033[0m\n"
+    if delete:
+        print(f"\033[32m{cnt} users deleted from the database.\033[0m")
+        result_str += f"\033[32m{cnt} users deleted from the database.\033[0m\n"
+    else:
+        print(f"\033[32m{cnt} users added to the database.\033[0m")
+        result_str += f"\033[32m{cnt} users added to the database.\033[0m\n"
     if pause:
         input("Press any key to exit.")
     else:
@@ -177,6 +194,12 @@ if __name__ == '__main__':
         import os
         # 设置启动目录
         os.chdir(os.path.dirname(os.path.abspath(__file__)))
-        append_user_data()
+        i = input("Append or Delete? (A/D) ")
+        if i in ('D', 'd'):
+            delete_user_data()
+        elif i in ('A', 'a'):
+            append_user_data()
+        else:
+            print("Invalid input.")
     finally:
         input("Press any key to exit.")

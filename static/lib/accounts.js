@@ -64,7 +64,7 @@ function reloadAll(){
     return response.json();
   })
  .then(function(data) {
-    showAccountList(data, init=1);
+    showAccountList(data, init=1, list_only=true);
   })
  .catch(function(error) {
     console.error(error);
@@ -100,7 +100,11 @@ function updateNotice(){
   });
 }
 
-function loadAccountList() {
+function loadAccountListAndData() {
+  loadAccountList(false);
+}
+
+function loadAccountList(list_only=true) {
     return fetch('/accounts/list', {
       method: 'GET',
       headers: {
@@ -111,7 +115,7 @@ function loadAccountList() {
       return response.json();
     })
    .then(function(data) {
-      showAccountList(data, init=1);
+      showAccountList(data, init=1, list_only=list_only);
     })
    .catch(function(error) {
       console.error(error);
@@ -431,7 +435,7 @@ function showNickNameList(group_share_key, unique_id){
 }
 function insertNickname(user_nickname, monitor_unique_id, user_unique_id, group_share_key, group_nickname){
   let editor = document.querySelector(`#editor${monitor_unique_id}${group_share_key}`);
-  editor.value += `@${group_nickname}\\x00${user_nickname}\\x00\`${user_unique_id} `;
+  editor.value += `\n@${group_nickname}\\x00${user_nickname}\\x00\`${user_unique_id} `;
 }
 function joinAll(){
   let share_key = prompt("请输入shareKey(16位)或inviteCode(5-8位):");
@@ -585,7 +589,7 @@ function loadOwnGroups(unique_id) {
       console.error(error);
     });
 }
-function showAccountList(data, init=0) {
+function showAccountList(data, init=0, list_only=false) {
   var accountList = document.querySelector('.account-list');
   accountList.innerHTML = '';
   let str = '';
@@ -612,9 +616,11 @@ function showAccountList(data, init=0) {
     if(account.can_daka == 1){
       if(init == 1){
         // 给予0-6s的随机延时
-        setTimeout(function(){
-          loadOwnGroups(account.unique_id);
-        }, Math.floor(Math.random() * data_length * 100));
+        if (!list_only) {
+          setTimeout(function(){
+            loadOwnGroups(account.unique_id);
+          }, Math.floor(Math.random() * data_length * 100));
+        }
       }
       else{
         loadOwnGroups(account.unique_id);

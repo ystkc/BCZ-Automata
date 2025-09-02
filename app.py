@@ -33,9 +33,9 @@ from src import bcz
 from src.config import Config
 import src.daka_utils as daka_utils
 from src.daka_utils import daka_list_class, notice_subscriber
-from src.daka_utils import getHeaders, daka_all_headless, stargazer_class
+from src.daka_utils import getHeaders, daka_all_headless, stargazer_class, notice_checker_core, send_content
 from src.http2_client import http2_client
-from append import append_user_data
+from append import append_user_data, delete_user_data
 
 from src.schedule import Schedule
 
@@ -356,6 +356,22 @@ async def append_accounts_submit(request: Request, item: dict):
     except Exception as e:
         return restful(400, f'{e}{traceback.format_exc()}')
 
+
+@app.get('/delete')
+async def append_accounts(request: Request):
+    '''批量删除用户配置信息（用excel表格导入）'''
+    return templates.TemplateResponse('delete.html', {'request': request})
+
+@app.post('/delete/submit')
+async def append_accounts_submit(request: Request, item: dict):
+    try:
+        text = item.get('content', '')
+        if not text:
+            return restful(400, '调用方法异常Σ(っ °Д °;)っ')
+        return restful(200, delete_user_data(text))
+    except Exception as e:
+        return restful(400, f'{e}{traceback.format_exc()}')
+
 @app.post('/accounts/delete')
 async def accounts_delete(request: Request, item: dict):
     '''删除用户'''
@@ -414,30 +430,25 @@ def change_notice_sse_func(unique_id, group_share_key, content, mentioned_ids, g
 def change_notice_sse_func_(unique_id, group_share_key, content, mentioned_ids, group_id):
     message_str = ""
     user_dict = daka_list_obj.get_user_dict(unique_id)
-    time_long = int(time.time() * 1000)
-    headers = getHeaders('$group', user_dict['cookie'], time_long, index = 1)
-    headers['Content-Type'] = 'application/json; charset=UTF-8'
-    payload = {
-        "shareKey": group_share_key,
-        "notice": content
-    }
-    # https://group.baicizhan.com/group/set_notice
-    response_json = requests.post(f'https://group.baicizhan.com/group/set_notice', json=(payload), headers=headers).json()
-    if response_json['message'] == None:
+    user_cookie = user_dict['cookie']
+    msg = send_content(group_share_key, content, user_cookie, http2_client_obj)
+    if msg == None:
         message_str = f'通知发送成功<br><br>'
         yield message_str
-    elif response_json['message'] == '小班公告内容涉嫌违规，请修改':
+    elif msg == '小班公告内容涉嫌违规，请修改':
+        # posA, posB, result = daka_list_obj.check_notice(content, True)
+        # yield 
         reversed = False
         if content[0] == '#':
-            message_str = f'{response_json["message"]}<br>{content}'
+            message_str = f'{msg}<br>{content}'
             yield message_str
             return
         if content[0] == '<' or content[0] == '>':
             reversed = True
-            response_json['message'] += '_reversed'
+            msg += '_reversed'
             content = content[1:]
         acceptable = False
-        message_str = f'{response_json["message"]}<br>{content}'
+        message_str = f'{msg}<br>{content}'
         yield message_str
         content_accept_part = ''
         check_part = ''
@@ -447,18 +458,11 @@ def change_notice_sse_func_(unique_id, group_share_key, content, mentioned_ids, 
                 content_accept_part = check_part + content_accept_part
                 check_part = content[-pace:]
                 content = content[:-pace]
-                message_str = f'{response_json["message"]}<br>{content}<u>{check_part}</u><s>{content_accept_part}</s>'
+                message_str = f'{msg}<br>{content}<u>{check_part}</u><s>{content_accept_part}</s>'
                 yield message_str
-                # 发送content
-                payload = {
-                    "shareKey": group_share_key,
-                    "notice": content
-                }
-                headers = getHeaders('$group', user_dict['cookie'], time_long, index = 1)
-                headers['Content-Type'] = 'application/json; charset=UTF-8'
-                response_json = requests.post(f'https://group.baicizhan.com/group/set_notice', json=(payload), headers=headers).json()
-                if response_json['message'] == None:
-                    message_str = f'{response_json["message"]}<br>{content}<u>{check_part}</u><s>{content_accept_part}</s>'
+                msg = send_content(group_share_key, content, user_cookie, http2_client_obj)
+                if msg is None:
+                    message_str = f'{msg}<br>{content}<u>{check_part}</u><s>{content_accept_part}</s>'
                     yield message_str
                     acceptable = True
                     break
@@ -472,26 +476,19 @@ def change_notice_sse_func_(unique_id, group_share_key, content, mentioned_ids, 
                 content_accept_part += check_part
                 check_part = content[:pace]
                 content = content[pace:]
-                message_str = f'{response_json["message"]}_reversed<br><s>{content_accept_part}</s><u>{check_part}</u>{content}'
+                message_str = f'{msg}_reversed<br><s>{content_accept_part}</s><u>{check_part}</u>{content}'
                 
                 yield message_str
-                # 发送content
-                payload = {
-                    "shareKey": group_share_key,
-                    "notice": content
-                }
-                headers = getHeaders('$group', user_dict['cookie'], time_long, index = 1)
-                headers['Content-Type'] = 'application/json; charset=UTF-8'
-                response_json = requests.post(f'https://group.baicizhan.com/group/set_notice', json=(payload), headers=headers).json()
-                if response_json['message'] == None:
-                    message_str = f'{response_json["message"]}<br><s>{content_accept_part}</s><u>{check_part}</u>{content}'
+                msg = send_content(group_share_key, content, user_cookie, http2_client_obj)
+                if msg == None:
+                    message_str = f'{msg}<br><s>{content_accept_part}</s><u>{check_part}</u>{content}'
                     yield message_str
                     acceptable = True
                     break
                 # 随机延迟
                 time.sleep(random.randint(750, 1500) / 1000)
     else:
-        message_str = f'通知发送失败{response_json["message"]}<br><br>'
+        message_str = f'通知发送失败{msg}<br><br>'
         yield message_str
         return
     # 发送mention
@@ -507,6 +504,7 @@ def change_notice_sse_func_(unique_id, group_share_key, content, mentioned_ids, 
             "groupId": group_id,
             "uniqueIds": mentioned_ids,
         }
+        time_long = int(time.time() * 1000)
         headers = getHeaders('$group', user_dict['cookie'], time_long, index = 1)
         headers['Content-Type'] = 'application/json; charset=UTF-8'
         response_json = requests.post(f'https://group.baicizhan.com/group/batch_send_notice_to_mentioned_users', json=(payload), headers=headers).json()

@@ -1510,8 +1510,8 @@ class daka_list_class:
     def clear_bad_words(self): # 清除检查结果
         self.bad_words = []
 
-    def check_notice(self, content):
-        return self.notice_parser.check_notice(content)
+    def check_notice(self, content, include_compulsory=False):
+        return self.notice_parser.check_notice(content, include_compulsory=include_compulsory)
     
     def get_check_notice(self):
         self.wait()
@@ -3852,6 +3852,108 @@ def get_own_bronze_groups_share_key(user_cookie, http2_client_obj:http2_client) 
             result.append(group['shareKey'])
     return result
 
+def send_content(group_share_key, content, user_cookie, http2_client_obj:http2_client):
+    '''发送公告content -> msg, acceptable, halt'''
+    payload = {
+        "shareKey": group_share_key,
+        "notice": content
+    }
+    time_long = int(time.time() * 1000)
+    headers = getHeaders('$group', user_cookie, time_long, index = 1)
+    headers['Content-Type'] = 'application/json; charset=UTF-8'
+    # https://group.baicizhan.com/group/set_notice
+    response_json = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/group/set_notice', content=payload, headers=headers).json()
+    time.sleep(random.randint(500, 1000) / 1000)
+    if response_json['message'] is None:
+        return response_json["message"]
+    elif response_json['message'] != '小班公告内容涉嫌违规，请修改':
+        return response_json["message"]
+    else:
+        return response_json["message"]
+
+def notice_checker_core(group_share_key, user_cookie, item:dict, http2_client_obj:http2_client):
+    
+    ONE_BUFFER = 30 # 最多增加ONE_BUFFER个1在末尾
+    MAX_LEN = 1000 # 最多发送MAX_LEN个字符
+    PACE = 10 # 倒找的步长
+    PACE_REVERSED = 10 # 正找的步长
+    
+    
+    content = item['content']
+    if len(content) > MAX_LEN - ONE_BUFFER:
+        content = content[:MAX_LEN - ONE_BUFFER] # 方便后面加字符1
+    msg = send_content(group_share_key, content, user_cookie, http2_client_obj)
+
+    while msg == '公告不能超过1000个字': # 可能是某些偶然bug导致略微超出1000，缩一下就好
+        content = content[:-1]
+        msg = send_content(group_share_key, content, user_cookie, http2_client_obj)
+    if msg == None:
+        item['checked'] = 2
+        yield '通知发送成功<br>' + content + '<br>'
+        return
+    elif msg == '小班公告每天只能修改一次':
+        yield msg + '<br>'
+        return
+    elif '维护' in msg:
+        yield msg + '<br>'
+        return
+    elif msg == '小班公告内容涉嫌违规，请修改':
+        content_accept_part = ''
+        check_part = ''
+        if item['checked'] == 0: 
+            water_part = '\n'
+            for i in range(ONE_BUFFER):# 加一
+                # 不断的在结尾加上1
+                water_part += '1'
+
+                yield msg + f'<br>{content}<u>{water_part}</u>'
+                msg = send_content(group_share_key, content + water_part, user_cookie, http2_client_obj)
+
+                if msg is None:
+                    break
+            if msg is None:
+                yield f'通知发送成功(软违禁)<br>{content}{water_part}<br>'
+                item['checked'] = 2
+                return
+            while msg == '小班公告内容涉嫌违规，请修改': # 倒找
+                # 将content最后的pace个字符加入到check_part
+                # if check_part == content[-PACE:]: # 因为有可能重复字符是违规的，这样会概率跳过
+                #     content_accept_part = check_part + content_accept_part
+                #     content = content[:-PACE]
+                #     continue
+                content_accept_part = check_part + content_accept_part
+                check_part = content[-PACE:]
+                content = content[:-PACE]
+                if re.sub(NoticeParser.pattern, '', check_part) == '': # 全是无效字符
+                    continue
+                yield msg + f'<br>{content}<u>{check_part}</u><s>{content_accept_part}</s>'
+                msg = send_content(group_share_key, content, user_cookie, http2_client_obj)
+            if msg is None:
+                item['content'] = content + check_part # 可能还有问题的部分
+                item['cursorB'] = len(content) + PACE # 记录当前位置
+                item['checked'] = 1
+        else:
+            # 从前面往后找
+            while msg == '小班公告内容涉嫌违规，请修改': # 正找
+                # 将content最前的pace个字符加入到check_part
+                content_accept_part += check_part
+                p = PACE_REVERSED
+                if len(content) < p*2: # 即将结束，缩小步长
+                    p = 1
+                check_part = content[:p]
+                content = content[p:]
+                yield msg + f'_reversed<br><s>{content_accept_part}</s><u>{check_part}</u>{content}'
+                msg = send_content(group_share_key, content, user_cookie, http2_client_obj)
+                if msg is None:
+                    yield f'{msg}_reversed<br><s>{content_accept_part}</s><u>{check_part}</u>{content}<br>'
+                    break
+            if msg is None:
+                item['content'] = check_part + content # 可能还有问题的部分
+                item['checked'] = 2
+                item['cursorA'] = len(content_accept_part) # 记录当前位置
+    else:
+        yield f'通知发送失败{msg}<br><br>'
+
 def notice_checker(daka_list: daka_list_class, user_cookie, user_config, http2_client_obj:http2_client):
     '''检查通知'''
     message_str = ''
@@ -3864,141 +3966,43 @@ def notice_checker(daka_list: daka_list_class, user_cookie, user_config, http2_c
         tmp_str = setGroupOnlyInviteCodeJoin(group_share_key, user_cookie, http2_client_obj)
         if tmp_str == 'INVALID':
             daka_list.add_warning(f'{user_config["name"]}的小班{group_share_key}不存在，请检查配置')
+            continue
         # 获取一个待检测的通知
-        while True:
-            item = daka_list.get_check_notice()
-            if item == None:
-                yield message_str + '没有待检测的通知<br>'
-                return
-            check_result = daka_list.check_notice(item['content']) # (posA, posB, result_str)
-            if check_result[0] > -1:
-                message_str += f'[已知][{item["group_id"]}][{item["date"]}] {check_result}<br>'
-                item['content'] = f'[已知][{item["group_id"]}][{item["date"]}] {check_result[2]}'
-                item['cursorA'] = check_result[0]
-                item['cursorB'] = check_result[1]
-                item['checked'] = 2
-                daka_list.patch_check_notice(item)
-            else:
-                break
+        def get_next_check_notice():
+            tmp_message_str = ''
+            while True:
+                item = daka_list.get_check_notice()
+                if item == None:
+                    return None, tmp_message_str
+                check_result = daka_list.check_notice(item['content']) # (posA, posB, result_str)
+                if check_result[0] > -1:
+                    tmp_message_str += f'[已知][{item["group_id"]}][{item["date"]}] {check_result}<br>'
+                    item['content'] = f'[已知][{item["group_id"]}][{item["date"]}] {check_result[2]}'
+                    item['cursorA'] = check_result[0]
+                    item['cursorB'] = check_result[1]
+                    item['checked'] = 2
+                    daka_list.patch_check_notice(item)
+                else:
+                    return item, tmp_message_str # 遇到了未知的提示词，交给下一个环节
         
-
+        item, s = get_next_check_notice()
+        message_str += s
+        if not item:
+            message_str += '没有待检测的通知<br>'
+            yield message_str
+            return
+        
         content = item['content']
+        current_check_stage = item['checked']
         message_str += f'待检测的通知：{item["group_id"]}-{item["date"]}<br>{content[:16]}<br>'
         yield message_str
-        time_long = int(time.time() * 1000)
-        headers = getHeaders('$group', user_cookie, time_long, index = 1)
-        headers['Content-Type'] = 'application/json; charset=UTF-8'
-        payload = {
-            "shareKey": group_share_key,
-            "notice": content
-        }
-        # https://group.baicizhan.com/group/set_notice
-        response_json = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/group/set_notice', content=payload, headers=headers).json()
-        while response_json['message'] == '公告不能超过1000个字': # 可能是某些偶然bug导致略微超出1000，缩一下就好
-            time.sleep(0.8)
-            content = content[:-1]
-            payload = {
-                "shareKey": group_share_key,
-                "notice": content
-            }
-            response_json = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/group/set_notice', content=payload, headers=headers).json()
-        if response_json['message'] == None:
-            message_str += f'通知发送成功<br>'
-            yield message_str
-            item['checked'] = 2
-            daka_list.patch_check_notice(item)
-        elif response_json['message'] == '小班公告每天只能修改一次':
-            message_str += f'通知发送失败，{group_share_key}的公告每天只能修改一次<br>'
-            yield message_str
-            daka_list.patch_check_notice(item, modified=False)
-        elif response_json['message'] == '小班公告内容涉嫌违规，请修改':
-            acceptable = False
-            content_accept_part = ''
-            check_part = ''
-            if item['checked'] == 0: # 倒找
-                message_str += '小班公告内容涉嫌违规，请修改<br>'
-                pace = 10
-                while not acceptable:
-                    # 将content最后的pace个字符加入到check_part
-                    # if check_part == content[-pace:]: # 因为有可能重复字符是违规的，这样会概率跳过
-                    #     content_accept_part = check_part + content_accept_part
-                    #     content = content[:-pace]
-                    #     continue
-                    content_accept_part = check_part + content_accept_part
-                    check_part = content[-pace:]
-                    content = content[:-pace]
-                    if re.sub(NoticeParser.pattern, '', check_part) == '': # 全是无效字符
-                        continue
-                    yield message_str + f'{content}<u>{check_part}</u><s>{content_accept_part}</s>'
-                    # 发送content
-                    payload = {
-                        "shareKey": group_share_key,
-                        "notice": content
-                    }
-                    headers = getHeaders('$group', user_cookie, time_long, index = 1)
-                    headers['Content-Type'] = 'application/json; charset=UTF-8'
-                    response_json = http2_client_obj.send_http2_request('POST', f'https://group.baicizhan.com/group/set_notice', content=payload, headers=headers).json()
-                    if response_json['message'] == None:
-                        message_str += f'{response_json["message"]}<br>{content}<u>{check_part}</u><s>{content_accept_part}</s><br>'
-                        yield message_str
-                        acceptable = True
-                        break
-                    elif response_json['message'] != '小班公告内容涉嫌违规，请修改':
-                        message_str += f'通知发送失败{response_json["message"]}<br>{content}<u>{check_part}</u><s>{content_accept_part}</s><br>'
-                        yield message_str
-                        break
-                    # 随机延迟
-                    time.sleep(random.randint(700, 1200) / 1000)
-                if acceptable:
-                    item['content'] = content + check_part # 可能还有问题的部分
-                    item['cursorB'] = len(content) + pace # 记录当前位置
-                    item['checked'] = 1
-                    daka_list.patch_check_notice(item)
-                else:
-                    daka_list.patch_check_notice(item, modified=False)
-            else:
-                # 从前面往后找
-                message_str += '小班公告内容涉嫌违规，请修改_reversed<br>'
-                pace = 10
-                while not acceptable:
-                    # 将content最前的pace个字符加入到check_part
-                    content_accept_part += check_part
-                    if len(content) < pace*2: # 即将结束，缩小步长
-                        pace = 1
-                    check_part = content[:pace]
-                    content = content[pace:]
-                    yield message_str + f'<s>{content_accept_part}</s><u>{check_part}</u>{content}'
-                    # 发送content
-                    payload = {
-                        "shareKey": group_share_key,
-                        "notice": content
-                    }
-                    headers = getHeaders('$group', user_cookie, time_long, index = 1)
-                    headers['Content-Type'] = 'application/json; charset=UTF-8'
-                    response_json = http2_client_obj.send_http2_request('POST', f'https://group.baicizhan.com/group/set_notice', content=payload, headers=headers).json()
-                    if response_json['message'] == None:
-                        message_str += f'{response_json["message"]}<br><s>{content_accept_part}</s><u>{check_part}</u>{content}<br>'
-                        yield message_str
-                        acceptable = True
-                        break
-                    elif response_json['message'] != '小班公告内容涉嫌违规，请修改':
-                        message_str += f'通知发送失败{response_json["message"]}<br><s>{content_accept_part}</s><u>{check_part}</u>{content}<br>'
-                        yield message_str
-                        break
-                    # 随机延迟
-                    time.sleep(random.randint(700, 1200) / 1000)
-                if acceptable:
-                    item['content'] = check_part + content # 可能还有问题的部分
-                    item['checked'] = 2
-                    item['cursorA'] = len(content_accept_part) # 记录当前位置
-                    daka_list.patch_check_notice(item)
-                else:
-                    daka_list.patch_check_notice(item, modified=False)
-        else:
-            message_str += f'通知发送失败{response_json["message"]}<br><br>'
-            daka_list.patch_check_notice(item, modified=False)
-            yield message_str
-        time.sleep(1)
+
+        msg = ''
+        for msg in notice_checker_core(group_share_key, user_cookie, item, http2_client_obj):
+            yield message_str + msg
+        message_str += msg
+        
+        daka_list.patch_check_notice(item, modified=(item['checked'] != current_check_stage))
 
 
 lock = threading.Lock()

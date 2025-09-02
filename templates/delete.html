@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<html>
+<head><title>账号信息批量删除</title></head>
+<body>
+    <a id="download" href="#" download="账号信息配置模板.csv">下载模板</a>
+    <br>
+    <textarea name="content" rows="50" cols="100"></textarea>
+    <br>
+    <span style="color:red;">上述账号提交后将会被删除！若要添加请前往<a href="/append">添加账号</a>（不存在的会被忽略）</span>
+    <button onclick="submit()">提交</button>
+    <div id="result"></div>
+</body>
+<script>
+    // 下载模板
+    document.getElementById('download').onclick = function() {
+        const contentWithBOM = '\uFEFF' + "说明：请先在excel编辑好，一行一个账号，然后粘贴到/append/（添加)或/delete/（删除)的文本框中再点提交\n每行的格式如下（无需复制表头，带*为必填）\n请务必拷贝所有列，否则无法识别\n是否代卡*(0/1),百词斩id*(留空无效),百词斩昵称*(无需和bcz一致),每日新学词数,铜板(留空),令牌*,是否允许每日任务pk0/1(默认否),是否允许pk反挂0/1(默认否),最大可用班位数(默认6，如果不足6个会自动缩小),是否订阅公告更新0/1(默认否),允许青铜班用于查公告0/1(不会影响非青铜班)默认否";
+        const blob = new Blob([contentWithBOM], { type: 'text/csv;charset=UTF-8' });
+        const url = URL.createObjectURL(blob);
+        this.href = url;
+        this.download = '账号信息配置模板.csv';
+    };
+    // 新增placeholder
+    document.querySelector('textarea[name="content"]').placeholder = `请下载模板查看说明`
+    // 监听提交事件
+    function submit() {
+        // 阻止默认行为
+        event.preventDefault();
+        // 获取用户输入的字符串
+        var content = document.querySelector('textarea[name="content"]').value + '\n';
+        // 发送请求到服务器
+        var xhr = new XMLHttpRequest();
+        url = window.location.protocol + '//' + window.location.hostname + ':' + window.location.port + '/delete/submit';
+        xhr.open('POST', url);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.send(JSON.stringify({ content: content }));
+        xhr.onload = function() {
+            if (xhr.status === 200) {
+                document.querySelector('#result').innerHTML = xhr.responseText.replace(/\\n/g, '<br>');
+                url = window.location.protocol + '//' + window.location.hostname + ':' + window.location.port + '/accounts/reload';
+                xhr.open('GET', url);
+                xhr.send();
+                xhr.onload = function() {
+                    if (xhr.status === 200) {
+                        alert('提交成功，已删除，已刷新账号列表');
+                    } else {
+                        alert('提交成功，已删除。刷新账号列表失败' + xhr.status + ':'+ xhr.statusText);
+                    }
+                };
+            } else {
+                alert('提交失败' + xhr.status + ':'+ xhr.statusText);
+            }
+        };
+    }
+</script>
+</html>
