@@ -900,7 +900,7 @@ class advertise:
         return result
 
 
-    def advertise_get_main_view_top_banner_advs(self, user_cookie, user_config):
+    def advertise_get_main_view_top_banner_advs(self, user_cookie, user_config) -> list:
         '''get_main_view_top_banner_advs'''
         transport = TTransport.TMemoryBuffer()
         protocol = TCompactProtocol.TCompactProtocol(transport)

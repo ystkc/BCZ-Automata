@@ -27,8 +27,11 @@ MEMBERS_GROUPS_LIMIT = 2147483647 # 数据库循环队列的大小（旧的会�
 DICT_DB_PATH = 'lookup.db'
 
 # 功能开关
-BCZ_NCSVC = False # 已于12.5结束
-YZDD = False # 2024.12.2已经结束
+BCZ_NCSVC = True
+YZDD = False
+INITYEAR = 2024
+YEAR = 2025
+CODE = 'TRhFkMj0Vf'
 
 def clear_learnt_list(unique_id):
     conn = sqlite3.connect('learnt_words.db')
@@ -84,6 +87,7 @@ def get_history_learnt_list(unique_id, delta=1):
 from src.bcz import getRandomWordIDInBook
 
 class daka_list_class:
+    @staticmethod
     def is_default_avatar(avatar_url: str):
         return avatar_url.endswith('default_avatar_new2.png') or avatar_url.endswith('default_avatar.png')
 
@@ -130,7 +134,7 @@ class daka_list_class:
         if BCZ_NCSVC:
             puzzle_conn = sqlite3.connect(self.puzzle_path)
             cursor = puzzle_conn.cursor()
-            cursor.execute(f'''CREATE TABLE IF NOT EXISTS BCZ_NCSVC (
+            cursor.execute('''CREATE TABLE IF NOT EXISTS BCZ_NCSVC (
                 INDEX_ID INTEGER PRIMARY KEY AUTOINCREMENT,
                 ID INTEGER UNIQUE,
                 QUESTION TEXT,
@@ -158,6 +162,39 @@ class daka_list_class:
         # 公告数据库
         conn = sqlite3.connect(self.notice_and_rank_path)
         cursor = conn.cursor()
+        self.create_table(cursor)
+        conn.commit()
+        conn.close()
+        # 检查lookup.db
+        # wl_conn = sqlite3.connect(DICT_DB_PATH)
+        if not os.path.exists('lookup.db'):
+            if not os.path.exists('lookup.rar'): 
+                raise Exception('lookup.rar不存在，请重新安装程序')
+            with zipfile.ZipFile('lookup.rar', 'r') as z:
+                z.extractall()
+                logger.info('解压lookup.rar成功')
+        
+        # 加载king状态
+        try:
+            with open('king_status.json', 'r', encoding='utf-8') as f:
+                self.is_king = json.load(f)
+            # 将所有key转为int
+            self.is_king = {int(k):v for k,v in self.is_king.items()}
+        except:
+            self.is_king = {}
+        self.latest_check_notice_timestamp = 0
+        self.notice_parser = NoticeParser()
+
+        # init_notice_db函数内准备的内容：
+        self.check_list = []
+        self.bad_words = []
+
+
+        # 创建线程来执行耗时的初始化任务
+        self.__not_prepared = True
+
+    def create_table(self, cursor):
+        """（初始化以及确保表存在）创建数据库表"""
         cursor.execute('''CREATE TABLE IF NOT EXISTS notice (
             GROUP_ID INTEGER,
             RANK_TYPE_RANK INTEGER, -- rank_type * 1000 + rank
@@ -217,30 +254,20 @@ class daka_list_class:
             TOTAL_DAKA_COUNT INTEGER,
             FINISHING_RATE REAL,
             UNIQUE(DATE, GROUP_ID))''')
-        conn.commit()
-        conn.close()
-        # 检查lookup.db
-        # wl_conn = sqlite3.connect(DICT_DB_PATH)
-        if not os.path.exists('lookup.db'):
-            if not os.path.exists('lookup.rar'): 
-                raise Exception('lookup.rar不存在，请重新安装程序')
-            with zipfile.ZipFile('lookup.rar', 'r') as z:
-                z.extractall()
-                logger.info('解压lookup.rar成功')
-        
-        # 加载king状态
-        try:
-            with open('king_status.json', 'r', encoding='utf-8') as f:
-                self.is_king = json.load(f)
-            # 将所有key转为int
-            self.is_king = {int(k):v for k,v in self.is_king.items()}
-        except:
-            self.is_king = {}
-        self.latest_check_notice_timestamp = 0
-        self.notice_parser = NoticeParser()
-
-        # 创建线程来执行耗时的初始化任务
-        self.__not_prepared = True
+    
+    def clear_buffer(self):
+        '''初始化数据库内存缓冲区'''
+        self.notice_buffer = [] # 每天最多7000条，暂无需设置大小
+        self.notice_cleared_buffer = []
+        self.notice_cleared_delete_buffer = []
+        self.notice_time_buffer = []
+        self.notice_time_delete_buffer = []
+        self.group_info_buffer = [] # 每天最多7000条，暂无需设置大小
+        self.user_info_buffer = [] # 每天最多700000条，暂无需设置大小
+        self.member_buffer = [] # 每天最多700000条，暂无需设置大小
+        self.book_name_buffer = []
+        self.group_rank_buffer = []
+        self.rank_and_daka_count_temp = {}
     
     def set_is_king(self, unique_id, rank, star, energy):
         self.is_king[unique_id] = [rank, star, energy]
@@ -334,7 +361,7 @@ class daka_list_class:
                 raise Exception(f'请求失败，状态码{response.status_code}')
             data = response.json()
             if data['code'] != 200 or data['retcode'] != 0:
-                raise Exception(f'请求出错，返回值{data}')
+                raise Exception(f'请求出错，返回值{data}<br>')
         except Exception as e:
             self.add_warning(f'从Group-Manager获取小班{group_id}信息失败 {e}')
             return default_group_info
@@ -358,7 +385,7 @@ class daka_list_class:
                 self.store_member(member['id'], group_id, member['completed_time_stamp'], today_date, today_date_mmdd, today_date_datetime, member['today_word_count'], member['today_study_cheat'] == '是', member['completed_times'], member['duration_days'], member['book_name'], member['nickname'], member['avatar'])
             return [group_id, share_key, monitor_id, name, introduction, avatar]
         except Exception as e:
-            self.add_warning(f'解析Group-Manager返回数据失败 {e}\n数据如下\n{data}')
+            self.add_warning(f'解析Group-Manager返回数据失败 {e}\n数据如下\n{data}<br>')
         return default_group_info
     
     def stopper_thread(self):
@@ -402,11 +429,12 @@ class daka_list_class:
 
         # 读取今天的cheat_tracker
         if not db_name:
+            self.logger.info('开始读取cheat_tracker')
             self.load_cheat_tracker(datetime.datetime.now().strftime('%Y-%m-%d'))# 防止数据跨天
+            self.logger.info('开始读取自学习答题机')
+            self.load_dict_db(self.logger)
 
         self.logger.info('开始读取数据库')
-        if not db_name:
-            self.load_dict_db(self.logger)
         conn = None
         if not db_name:
             conn = sqlite3.connect(self.notice_and_rank_path, uri=True)
@@ -420,8 +448,6 @@ class daka_list_class:
         cursor.execute('''PRAGMA temp_store = MEMORY''')
         cursor.execute('''PRAGMA cache_size = -100000''')
         # 读取需要检查的notice
-        if not db_name:
-            self.check_list = []
         # 加载坏词
         try:
             if not db_name:
@@ -562,17 +588,7 @@ class daka_list_class:
         self.latest_check_notice_timestamp = self.latest_check_user_timestamp = max_timestamp
         self.logger.info(f'上次更新用户和通知状态于{int(today_date.timestamp()) - max_timestamp}秒前({max_filename})')
         # 初始化数据库内存缓冲区
-        self.notice_buffer = [] # 每天最多7000条，暂无需设置大小
-        self.notice_cleared_buffer = []
-        self.notice_cleared_delete_buffer = []
-        self.notice_time_buffer = []
-        self.notice_time_delete_buffer = []
-        self.group_info_buffer = [] # 每天最多7000条，暂无需设置大小
-        self.user_info_buffer = [] # 每天最多700000条，暂无需设置大小
-        self.member_buffer = [] # 每天最多700000条，暂无需设置大小
-        self.book_name_buffer = []
-        self.group_rank_buffer = []
-        self.rank_and_daka_count_temp = {}
+        self.clear_buffer()
         self.logger.info('\033[32m数据库初始化完毕\033[0m')
         
         # 将2048列表中的班级ID转换为shareKey
@@ -703,6 +719,7 @@ class daka_list_class:
         conn = sqlite3.connect(self.notice_and_rank_path)
         self.optimize_db(conn)
         cursor = conn.cursor()
+        self.create_table(cursor)
         self.save_other_info(cursor)
         # 删除35天前的日志
         latest_log = self.delete_old_logs() # 这家伙也是log很多（故意的）
@@ -904,8 +921,8 @@ class daka_list_class:
     def puzzle_solver(self, puzzle_dict): # 适用于BCZ_NCSVC
         if not BCZ_NCSVC:
             self.add_warning('BCZ_NCSVC未导入，无法使用puzzle_solver')
-            return None
-        id = int(puzzle_dict['id'])
+            return 1
+        puzzle_id = int(puzzle_dict['id'])
         chn_mean = puzzle_dict['chnMean']
         if chn_mean is None:
             puzzle_dict['chnMean'] = ''
@@ -914,15 +931,18 @@ class daka_list_class:
         question = puzzle_dict['question']
         topic_id = puzzle_dict['topicId']
         # 查找答案
-        result = self.puzzles.get(id) # 得到的是答案的文本
+        self.wait() # puzzles等待加载
+        result = self.puzzles.get(puzzle_id) # 得到的是答案的文本
+        if not result:
+            result = self.puzzles.get(question) # 尝试用题目查找答案
         stored = False
         if result is not None:
             stored = True
             puzzle_dict['chnMean'] += 'Stored'
-            # print(id ,result, option_list)
+            print("命中缓存", puzzle_id ,result, option_list)
             if answer is None: # 还未作答
                 for i, option in enumerate(option_list):
-                    # print(i, option, result[0], answer)
+                    print("检查选项", i, option, result[0], answer)
                     for item in result:
                         if option == item:
                             answer = i + 1
@@ -930,20 +950,22 @@ class daka_list_class:
                     if answer is not None:
                         break
                 if answer is None:
-                    # print(i, option, result[0], answer, puzzle_dict['chnMean'])
+                    print("匹配失败", i, option, result[0], answer, puzzle_dict['chnMean'])
                     puzzle_dict['chnMean'] += '.Expired'
                     stored = False
-                    self.add_warning(f'id={id} 题目过期...更新中')
+                    self.add_warning(f'id={puzzle_id} 题目过期...更新中')
         
         # print(stored, answer, puzzle_dict['chnMean'])
         if not stored and answer is not None:
             answer_text = option_list[answer - 1]
-            self.puzzle_buffer.append((id, question, chn_mean, answer_text, option_list[0], option_list[1], option_list[2], topic_id))
+            self.puzzle_buffer.append((puzzle_id, question, chn_mean, answer_text, option_list[0], option_list[1], option_list[2], topic_id))
+            print("储存", (puzzle_id, question, chn_mean, answer_text, option_list[0], option_list[1], option_list[2], topic_id))
             puzzle_dict['chnMean'] += 'Learnt'
         if answer is None:
             answer = random.randint(0, 4)
             if answer == 0:
                 answer = 1 # 干扰概率
+            print("随机选择答案", answer)
         return answer
 
     def load_dict_db(self, logger):
@@ -1974,6 +1996,7 @@ class notice_subscriber:
                 if msg_class["messageType"] != 4: # 1:不断电 2:精选 3:同桌 4:小班 6:调查 7:点赞 9:组队
                     continue
                 unread_count = msg_class["unread"]
+            # unread_count = 1 # debug
             while unread_count > 0:
                 # https://notify.baicizhan.com/rest/notify/v2/notify_list
                 payload = {
@@ -2023,7 +2046,7 @@ class notice_subscriber:
                                                 'group_id': group_id, 
                                                 'unique_id': unique_id,
                                                 'group_share_key': appliant_sharekey,
-                                                    'notice_hash': '#auth#'})
+                                                    'notice_hash': 'auth'})
                     elif msg["title"] == "\u62db\u65b0\u6d77\u62a5\u5ba1\u6838\u901a\u8fc7": # 招新海报审核通过
                         try:
                             poster_id = msg['link'].split('id%3D')[1].split('%26')[0]
@@ -2049,15 +2072,17 @@ class notice_subscriber:
                                                  'group_id': group_id, 
                                                  'unique_id': user_id,
                                                  'group_share_key': group_share_key,
-                                                 'notice_hash': '#poster#'})
+                                                 'notice_hash': 'poster'})
                 time.sleep(random.randint(12, 18) / 10)
             time.sleep(random.randint(15, 18) / 10)
         # 将所有授权申请放到最前面
-        self.new_notice.sort(key=lambda x: x.get('notice_hash', '') == '#auth#', reverse=True)
+        self.new_notice.sort(key=lambda x: x.get('notice_hash', '') == 'auth', reverse=True)
         self.logger.info(f'发现{len(self.new_notice)}条新的订阅公告，{apply_count}条小班授权申请')
 
-    def get_top_notice(self, daka_list_obj: daka_list_class, force_refresh = False):
-        if force_refresh or int(time.time()) - self.latest_timestamp > 36000: # 超过10h，重新获取公告哈希值
+    def get_top_notice(self, daka_list_obj: daka_list_class, force_refresh = False, force_refresh_only_id = -1):
+        if force_refresh_only_id > 0:
+            self.get_subscription([daka_list_obj.get_user_dict(force_refresh_only_id)])
+        elif force_refresh or int(time.time()) - self.latest_timestamp > 36000: # 超过10h，重新获取公告哈希值
             users = daka_list_obj.get_user_dict_list()
             random.shuffle(users)
             self.get_subscription(users)
@@ -2071,11 +2096,11 @@ class notice_subscriber:
         if unique_id == -1:
             return 400, "没有订阅，不需要回复"
         result_str = ''
-        if notice_hash[0] == '#':
+        if notice_hash in ('auth', 'poster'):
             # correspond True表示确认，False表示拒绝
             self.new_notice.pop(0)
             if correspond:
-                if notice_hash == '#auth#':
+                if notice_hash == 'auth':
                     # https://group.baicizhan.com/group/authorization_handle
                     payload = {
                         "shareKey": group_share_key,
@@ -2088,7 +2113,7 @@ class notice_subscriber:
                         return 200, '确认成功<br>'
                     else:
                         return 400, f'确认失败{response_json["message"]}<br>'
-                elif notice_hash == '#poster#':
+                elif notice_hash == 'poster':
                     return 200, '已阅<br>'
             else:
                 # https://group.baicizhan.com/group/authorization_handle
@@ -2230,45 +2255,65 @@ def pkonline(user_cookie, user_config, http2_client_obj: http2_client, daka_list
     '''pkonline'''# max_round用来随机轮数，用来调用2次分散打卡时间
     if not BCZ_NCSVC:
         return # 已于12.5结束
-    # 领奖
-    # https://pkonline1.baicizhan.com/api/contest/2024/prepare/giftMain?code=mB5AG9fCzo
     headers = getHeaders("$pkonline1", user_cookie, int(time.time()), index=1)
-    url = f'https://{headers["Host"]}/api/contest/2024/prepare/giftMain?code=mB5AG9fCzo'
-    response = http2_client_obj.send_http2_request('GET', url, headers, None)
-    data = response.json()['data']
-    cnt = data['blindBox']
-    while cnt > 0:
-        # https://pkonline1.baicizhan.com/api/contest/2024/prepare/useBlindBox
-        headers = getHeaders("$pkonline1", user_cookie, int(time.time()), index=1)
-        url = f'https://{headers["Host"]}/api/contest/2024/prepare/useBlindBox'
-        response = http2_client_obj.send_http2_request('POST', url, headers, content={})
-        data = response.json()['data']
-        yield f'领取{data["name"]}成功:{data["url"]}，剩余{cnt-1}个'
-
-        url = f'https://{headers["Host"]}/api/contest/2024/prepare/giftMain?code=mB5AG9fCzo'
+    if YEAR == 2024:
+        # 领奖
+        # https://pkonline1.baicizhan.com/api/contest/2024/prepare/giftMain?code={CODE}
+        url = f'https://{headers["Host"]}/api/contest/{YEAR}/prepare/giftMain?code={CODE}'
         response = http2_client_obj.send_http2_request('GET', url, headers, None)
         data = response.json()['data']
         cnt = data['blindBox']
-        time.sleep(random.randint(1, 2))
+        while cnt > 0:
+            # https://pkonline1.baicizhan.com/api/contest/2024/prepare/useBlindBox
+            headers = getHeaders("$pkonline1", user_cookie, int(time.time()), index=1)
+            url = f'https://{headers["Host"]}/api/contest/{YEAR}/prepare/useBlindBox'
+            response = http2_client_obj.send_http2_request('POST', url, headers, content={})
+            data = response.json()['data']
+            yield f'领取{data["name"]}成功:{data["url"]}，剩余{cnt-1}个'
 
-    # https://pk.baicizhan.com/contest2024/sign/?code=mB5AG9fCzo
-    # https://pk.baicizhan.com/contest2024/preparation/index.html?code=mB5AG9fCzo
-    # https://pkonline1.baicizhan.com/api/contest/2024/tournament/status?code=mB5AG9fCzo
+            url = f'https://{headers["Host"]}/api/contest/{YEAR}/prepare/giftMain?code={CODE}'
+            response = http2_client_obj.send_http2_request('GET', url, headers, None)
+            data = response.json()['data']
+            cnt = data['blindBox']
+            time.sleep(random.randint(1, 2))
+
+    # https://pk.baicizhan.com/contest2024/sign/?code={CODE}
+    # https://pk.baicizhan.com/contest2024/preparation/index.html?code={CODE}
+    # https://pkonline1.baicizhan.com/api/contest/2024/tournament/status?code={CODE}
     time_long = int(time.time() * 1000)
     headers = getHeaders("$pk", user_cookie, int(time.time()), index=1)
-    url = f'https://{headers["Host"]}/contest2024/sign/?code=mB5AG9fCzo'
-    response = http2_client_obj.send_http2_request('GET', url, headers, None, False)
+    url = f'https://{headers["Host"]}/contest{YEAR}/sign/?code={CODE}'
+    response = http2_client_obj.send_http2_request('GET', url, headers, None)
     if response.status_code != 200:
         yield f'<p style="color:red">单词pk接口请求失败</p>{response.text}'
-    url = f'https://{headers["Host"]}/contest2024/preparation/index.html?code=mB5AG9fCzo'
+    url = f'https://{headers["Host"]}/contest{YEAR}/preparation/index.html?code={CODE}'
     response = http2_client_obj.send_http2_request('GET', url, headers, None)
 
+    # 获取状态、报名
     headers = getHeaders("$pkonline1", user_cookie, int(time.time()), index=3)
-    url = f'https://{headers["Host"]}/api/contest/2024/tournament/status?code=mB5AG9fCzo'
+    url = f'https://{headers["Host"]}/api/contest/{INITYEAR}/tournament/status?code={CODE}'
     response = http2_client_obj.send_http2_request('GET', url, headers, None)
     data = response.json()['data']
-    if data['status'] == 1:
-        yield f'pk正在进行 '
+    status = data['status']
+    if status == 0 and data['enableApply']: # 还没报名
+        # https://pkonline1.baicizhan.com/api/contest/2024/tournament/preApply?code=TRhFkMj0Vf&type=1
+        url_apply = f'https://{headers["Host"]}/api/contest/{INITYEAR}/tournament/preApply?code={CODE}&type=1'
+        response = http2_client_obj.send_http2_request('POST', url_apply, headers, content={})
+        data = response.json()['data']
+        yield f'报名信息 {response.status_code} {data}<br>'
+        # 重新检测状态
+        response = http2_client_obj.send_http2_request('GET', url, headers, None)
+        data = response.json()['data']
+        status = data['status']
+        if status == 0:
+            yield '报名失败'
+            daka_list.add_warning(f'{user_config["unique_id"]} 报名失败')
+            return
+    elif status not in (1, 2): # 1围观 2大学生
+        yield f'pk状态异常{status}'
+        daka_list.add_warning(f'{user_config["unique_id"]} pk状态异常{status}')
+        return
+
     extra_info = "{\"ABPage\":\"B\"}"
     if data['college'] == False:
         extra_info = "{\"ABPage\":\"A\"}"
@@ -2276,23 +2321,23 @@ def pkonline(user_cookie, user_config, http2_client_obj: http2_client, daka_list
         {"index": 29, "extra_info": extra_info}, # pk加载
     ]
     report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=1)
-    # https://pkonline1.baicizhan.com/api/contest/2024/prepare/main?code=mB5AG9fCzo
-    url = f'https://{headers["Host"]}/api/contest/2024/prepare/main?code=mB5AG9fCzo'
+    # https://pkonline1.baicizhan.com/api/contest/2024/prepare/main?code={CODE}
+    url = f'https://{headers["Host"]}/api/contest/{INITYEAR}/prepare/main?code={CODE}'
     response = http2_client_obj.send_http2_request('GET', url, headers, None)
     data = response.json()['data']
     if data is None:
-        yield f'<p style="color:red">请手动登录并报名pk再运行</p>'
+        yield '<p style="color:red">请手动登录并报名pk再运行</p>'
         return
     if data['todayPKFinished'] == True:
-        yield f'今日PK已结束'
+        yield '今日PK已结束'
         return
     yield '开始pk'
     payload = [
         {"index": 30}, # pk主页
     ]
     report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=1)
-    # https://pkonline1.baicizhan.com/api/contest/2024/prepare/pkMain?code=mB5AG9fCzo
-    url = f'https://{headers["Host"]}/api/contest/2024/prepare/pkMain?code=mB5AG9fCzo'
+    # https://pkonline1.baicizhan.com/api/contest/2024/prepare/pkMain?code={CODE}
+    url = f'https://{headers["Host"]}/api/contest/{INITYEAR}/prepare/pkMain?code={CODE}'
     response = http2_client_obj.send_http2_request('GET', url, headers, None)
     data = response.json()['data']
     daily_round = data['dailyRound']
@@ -2310,7 +2355,7 @@ def pkonline(user_cookie, user_config, http2_client_obj: http2_client, daka_list
         # https://pkonline1.baicizhan.com/api/contest/2024/tournament/failed_puzzle?lastId=
         time_long = int(time.time() * 1000)
         headers = getHeaders("$pkonline1", user_cookie, int(time.time()), index=3)
-        url = f'https://{headers["Host"]}/api/contest/2024/tournament/failed_puzzle?lastId='
+        url = f'https://{headers["Host"]}/api/contest/{INITYEAR}/tournament/failed_puzzle?lastId='
         response = http2_client_obj.send_http2_request('GET', url, headers, None)
         data = response.json()['data']
 
@@ -2323,10 +2368,10 @@ def pkonline(user_cookie, user_config, http2_client_obj: http2_client, daka_list
             {"index": 33} # 点击开始按钮
         ]
         report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=1)
-        # https://pk.baicizhan.com/contest2024/contest/index.html?code=mB5AG9fCzo&mode=practice
+        # https://pk.baicizhan.com/contest2024/contest/index.html?code={CODE}&mode=practice
         time_long = int(time.time() * 1000)
         headers = getHeaders("$pk", user_cookie, int(time.time()), index=3)
-        url = f'https://{headers["Host"]}/contest2024/contest/index.html?code=mB5AG9fCzo&mode=practice'
+        url = f'https://{headers["Host"]}/contest{YEAR}/contest/index.html?code={CODE}&mode=practice'
         response = http2_client_obj.send_http2_request('GET', url, headers, None)
 
         while True:
@@ -2335,11 +2380,11 @@ def pkonline(user_cookie, user_config, http2_client_obj: http2_client, daka_list
             ]
             report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=1)
             # 匹配
-            # https://pkonline1.baicizhan.com/api/contest/practice/match?code=mB5AG9fCzo&contestId=null
+            # https://pkonline1.baicizhan.com/api/contest/practice/match?code={CODE}&contestId=null
             
             time_long = int(time.time() * 1000)
             headers = getHeaders("$pkonline1", user_cookie, int(time.time()), index=3)
-            url = f'https://{headers["Host"]}/api/contest/practice/match?code=mB5AG9fCzo&contestId=null'
+            url = f'https://{headers["Host"]}/api/contest/practice/match?code={CODE}&contestId=null'
             response = http2_client_obj.send_http2_request('GET', url, headers, None)
             data = response.json()['data']
             challenge_id = data['challengeId']
@@ -2356,6 +2401,7 @@ def pkonline(user_cookie, user_config, http2_client_obj: http2_client, daka_list
             time.sleep(3)
 
             prev_order = 0
+            order = 0
             while True:
                 # 开始答题
                 # https://pkonline1.baicizhan.com/api/contest/practice/heartbeat
@@ -2366,56 +2412,116 @@ def pkonline(user_cookie, user_config, http2_client_obj: http2_client, daka_list
                 }
                 response = http2_client_obj.send_http2_request('POST', url, post_headers, content=content)
                 data = response.json()['data']
-                order = data['order']
-                while order == 0 or order == prev_order:
-                    response = http2_client_obj.send_http2_request('POST', url, post_headers, content=content)
-                    data = response.json()['data']
+                try:
                     order = data['order']
-                    time.sleep(1)
-                yield f'第{order}题'
-                rival_escaped = data['rivalEscaped']
-                ans = daka_list.puzzle_solver(data['puzzle'])
+                    while order == 0 or order == prev_order:
+                        response = http2_client_obj.send_http2_request('POST', url, post_headers, content=content)
+                        data = response.json()['data']
+                        order = data['order']
+                        time.sleep(1)
+                    yield f'第{order}题'
+                    rival_escaped = data['rivalEscaped']
+                except Exception as e:
+                    error_str = f'获取题目失败 {e} 数据：{response.status_code} {data}<br>'
+                    yield error_str
+                    daka_list.add_warning(error_str)
+                    break # 比赛已过期，重新开始
+                ans = None
+                try:
+                    ans = daka_list.puzzle_solver(data['puzzle'])
+                except Exception as e:
+                    ans = 1
+                    error_str = f'自动答题失败 {e} 数据：{response.status_code} {data}<br>'
+                    yield error_str
+                    daka_list.add_warning(error_str)
                 response_thresh = 4000
                 response_delay = random.randint(2000, response_thresh)
                 start_timestamp = int(time.time() * 1000)
                 session_cnt = int(response_delay / 1000)
                 session_delay = response_delay % 1000
-                for i in range(session_cnt):
-                    time.sleep(1)
-                    response = http2_client_obj.send_http2_request('POST', url, post_headers, content = content)
-                    rival_escaped = response.json()['data']['rivalEscaped']
-                    if rival_escaped:
-                        break
-                time.sleep(session_delay / 1000)
-                ans_content = {
-                    "challengeId": challenge_id,
-                    "order": order,
-                    "answer": ans
-                }
-                response = http2_client_obj.send_http2_request('POST', url, post_headers, ans_content)
-                data = response.json()['data']
-                rival_escaped = data['rivalEscaped']
-                payload = [
-                    {"index": 36, "extra_info": "{\"ContestId\":null,\"ChallengeId\":%d,\"QuesOrder\":%d,\"PuzzleId\":%d,\"ChoiceOrder\":%d,\"CostTime\":%d,\"IsRight\":false}" % (challenge_id, order, data['puzzle']['id'], ans, int(time.time() * 1000 - start_timestamp))} # pk答题成功
-                ]
-                report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=1)
-                if data['rivalAnswer'] is None and not rival_escaped:
-                # 等待对手作答
-                    while True:
-                        response = http2_client_obj.send_http2_request('POST', url, post_headers, content)
-                        data = response.json()['data']
-                        if data['rivalAnswer'] is not None or data['rivalEscaped']:
-                            break
+                try:
+                    for i in range(session_cnt):
                         time.sleep(1)
+                        response = http2_client_obj.send_http2_request('POST', url, post_headers, content = content)
+                        rival_escaped = response.json()['data']['rivalEscaped']
+                        if rival_escaped:
+                            break
+                except Exception as e:
+                    error_str = f"作答前延时失败 {e} 数据：{response.status_code} {data}<br>"
+                    yield error_str
+                    daka_list.add_warning(error_str)
+                time.sleep(session_delay / 1000)
+                for i in range(9):
+                    ans_content = {
+                        "challengeId": challenge_id,
+                        "order": order,
+                        "answer": ans
+                    }
+                    response = http2_client_obj.send_http2_request('POST', url, post_headers, ans_content)
+                    data = response.json()['data']
+                    try:
+                        rival_escaped = data['rivalEscaped']
+                        my_answer = data['meAnswer']
+                        if rival_escaped or (my_answer is not None):
+                            break
+                    except Exception as e:
+                        error_str = (f"答案上传出错 {e} 数据：{response.status_code} {data}<br>")
+                        yield error_str
+                        daka_list.add_warning(error_str)
+                    time.sleep(2)
+                try:
+                    puzzle_id = data['puzzle']['id']
+                    payload = [
+                        {"index": 36, "extra_info": "{\"ContestId\":null,\"ChallengeId\":%d,\"QuesOrder\":%d,\"PuzzleId\":%d,\"ChoiceOrder\":%d,\"CostTime\":%d,\"IsRight\":false}" % (challenge_id, order, puzzle_id, ans, int(time.time() * 1000 - start_timestamp))} # pk答题成功
+                    ]
+                    report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=1)
+                except Exception as e:
+                    error_str = (f'事件报告失败 {e} 数据：{response.status_code} {data}<br>')
+                    yield error_str
+                    daka_list.add_warning(error_str)
+                try:
+                    if data['rivalAnswer'] is None and not rival_escaped:
+                    # 等待对手作答
+                        while True:
+                            response = http2_client_obj.send_http2_request('POST', url, post_headers, content)
+                            data = response.json()['data']
+                            if data['rivalAnswer'] is not None or data['rivalEscaped']:
+                                break
+                            time.sleep(1)
+                except Exception as e:
+                    error_str = (f'等待对手作答失败 {e} 数据：{response.status_code} {data}<br>')
+                    yield error_str
+                    daka_list.add_warning(error_str)
                 # 检查答案
-                daka_list.puzzle_solver(data['puzzle'])
-                right_answer = data['puzzle']['rightAnswer']
-                my_answer = '√' if data['meAnswer'] == right_answer else '×'
-                rival_answer = '已逃跑'
-                if not rival_escaped:
-                    rival_answer = '√' if data['rivalAnswer'] == right_answer else '×'
-                puzzle_str = print_puzzle(data['puzzle'])
-                yield f'{puzzle_str} {my_answer}/{rival_answer}<br>'
+                try:
+                    daka_list.puzzle_solver(data['puzzle'])
+                except Exception as e:
+                    error_str = (f"检查答案失败 {e} 数据：{response.status_code} {data}<br>")
+                    yield error_str
+                    daka_list.add_warning(error_str)
+                my_answer = None
+                rival_answer = None
+                right_answer = None
+                try:
+                    right_answer = data['puzzle']['rightAnswer']
+                    my_answer = data['meAnswer']
+                    assert my_answer is not None
+                    my_answer = '√' if my_answer == right_answer else '×'
+                    
+                    rival_answer = '已逃跑'
+                    if not rival_escaped:
+                        rival_answer = '√' if data['rivalAnswer'] == right_answer else '×'
+                except Exception as e:
+                    error_str = f'作答和获取作答情况不符，失败 {e} 数据 {response.status_code} {data}<br>'
+                    yield error_str
+                    daka_list.add_warning(error_str)
+                try:
+                    puzzle_str = print_puzzle(data['puzzle'])
+                    yield f'{puzzle_str} {my_answer}/{rival_answer}<br>'
+                except Exception as e:
+                    error_str = f'打印结果失败 {e} 数据：{response.status_code} {data}<br>'
+                    yield error_str
+                    daka_list.add_warning(error_str)
 
                 time.sleep(3)
                 if order == 7:
@@ -2428,10 +2534,10 @@ def pkonline(user_cookie, user_config, http2_client_obj: http2_client, daka_list
                 {"index": 37, "extra_info": "{\"CurrentRound\":%d}" % current_round} # pk结束
             ]
             report_event(user_cookie=user_cookie, user_config=user_config, http2_client_obj=http2_client_obj, jsons=payload, type=1, host=1)
-            # https://pkonline1.baicizhan.com/api/contest/practice/result?contestId=null&challengeId=&code=mB5AG9fCzo
+            # https://pkonline1.baicizhan.com/api/contest/practice/result?contestId=null&challengeId=&code={CODE}
             time_long = int(time.time() * 1000)
             headers = getHeaders("$pkonline1", user_cookie, int(time.time()), index=3)
-            url = f'https://{headers["Host"]}/api/contest/practice/result?contestId=null&challengeId={challenge_id}&code=mB5AG9fCzo'
+            url = f'https://{headers["Host"]}/api/contest/practice/result?contestId=null&challengeId={challenge_id}&code={CODE}'
             response = http2_client_obj.send_http2_request('GET', url, headers, None)
             data = response.json()['data']
             daily_finished = data['dailyFinished']
@@ -2876,10 +2982,10 @@ def yzdd(user_cookie, user_config, http2_client_obj: http2_client, daka_list: da
     # 如果是星期日，跳过
     if datetime.datetime.now().weekday() == 6:
         return "$星期日，跳过"
-    # https://pkonline2.baicizhan.com/api/contest/2024/one_fight/get_exam_question?bczId=0&day=
+    # https://pkonline2.baicizhan.com/api/contest/2025/one_fight/get_exam_question?bczId=0&day=
     time_long = int(time.time() * 1000)
     headers = getHeaders("$pkonline2", user_cookie, int(time.time()), index=1)
-    url = f'https://{headers["Host"]}/api/contest/2024/one_fight/get_exam_question?bczId=0&day='
+    url = f'https://{headers["Host"]}/api/contest/{YEAR}/one_fight/get_exam_question?bczId=0&day='
     response = http2_client_obj.send_http2_request('GET', url, headers, None)
     data = response.json()['data']
 
@@ -2908,7 +3014,7 @@ def yzdd(user_cookie, user_config, http2_client_obj: http2_client, daka_list: da
         time.sleep(random.randint(2000, 4000) / 1000)
         headers = getHeaders("$pkonline2", user_cookie, int(time.time()), index=1)
         headers['Content-Type'] = 'application/json; charset=UTF-8'
-        url = f'https://{headers["Host"]}/api/contest/2024/one_fight/submit_exam'
+        url = f'https://{headers["Host"]}/api/contest/{YEAR}/one_fight/submit_exam'
         payload = {
             "qid": data['qid'],
             "answer": random.randint(1, 4)
@@ -2919,7 +3025,7 @@ def yzdd(user_cookie, user_config, http2_client_obj: http2_client, daka_list: da
         # 重新请求题目
         # https://pkonline2.baicizhan.com/api/contest/2024/one_fight/get_exam_question?bczId=0&day=
         headers = getHeaders("$pkonline2", user_cookie, int(time.time()), index=1)
-        url = f'https://{headers["Host"]}/api/contest/2024/one_fight/get_exam_question?bczId=0&day='
+        url = f'https://{headers["Host"]}/api/contest/{YEAR}/one_fight/get_exam_question?bczId=0&day='
         response = http2_client_obj.send_http2_request('GET', url, headers, None)
         data = response.json()['data']
 
@@ -3011,7 +3117,7 @@ def deskmate_pk(cookie, config, http2_client_obj: http2_client):
                     if found > 0:
                         break
             if topic_id == -1:
-                raise f'{name} 没有找到未完成的题目'
+                raise IndexError(f'{name} 没有找到未完成的题目')
 
             time.sleep(random.randint(3000, 4000) / 1000)
 
@@ -3108,7 +3214,7 @@ def task_center(user_cookie, user_config, http2_client_obj: http2_client, daka_l
     win_streak_days = data['winStreakDays']
     level_in_rank = -1
     if rank is None:
-        daka_list_obj.add_warning(f'用户{user_config["name"]}的学习记录异常: {data}')
+        daka_list_obj.add_warning(f'用户{user_config["name"]}的学习记录异常: {data}<br>')
     else:
         rank = rank['level']
         level_in_rank = 1
@@ -3163,6 +3269,7 @@ def task_center(user_cookie, user_config, http2_client_obj: http2_client, daka_l
         headers = getHeaders("$social", user_cookie, int(time.time()), index=1)
         response = http2_client_obj.send_http2_request('GET', f'https://{headers["Host"]}/api/task/v2/home', headers, None)
         data = response.json()['data']
+        can_pk = user_config.get('can_pk', 1)
         yield "任务中心：<br>"
         for task in data['taskList']:
             task_id = task['userTaskId']
@@ -3187,11 +3294,15 @@ def task_center(user_cookie, user_config, http2_client_obj: http2_client, daka_l
                 elif '单词PK' in task_name and '3' in task_name:
                     for msg in pkonline2(user_cookie, user_config, http2_client_obj, daka_list_obj, max_round=8, max_win_round=3):
                         yield msg
+                    if not can_pk:
+                        continue
                     time.sleep(1.5)
                     yield f"领取{get_award(task['userTaskId'], task['awardList'])}<br>"
                 elif '单词PK' in task_name and '1' in task_name:
                     for msg in pkonline2(user_cookie, user_config, http2_client_obj, daka_list_obj, max_round=8, max_win_round=1):
                         yield msg
+                    if not can_pk:
+                        continue
                     time.sleep(1.5)
                     yield f"领取{get_award(task['userTaskId'], task['awardList'])}<br>"
                 elif task_name == '单词速听复习10个单词':
@@ -4118,7 +4229,7 @@ def daka(daka_list: daka_list_class, user_cookie, user_config, http2_client_obj:
         time.sleep(5)
         have_deskmate, have_group, have_ordinary_group, today_daka, received_group_rank_rewards, received_group_daily_rewards, task_state, deskmate_daka_today, daily_reward_obtained = get_task_status_desc()
         if not today_daka:
-            raise '打卡未同步'
+            raise AssertionError('打卡未同步')
         
     if task_state > 0:
         message_str += f'{task_state}任务请手领 '

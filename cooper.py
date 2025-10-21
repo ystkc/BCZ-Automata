@@ -12,6 +12,10 @@ names = []
 coopers = []
 for user_dict in user_cookie:
     if not user_dict['config']['can_daka']:
+        print(f"{user_dict['config']['name']} 不打卡，跳过")
+        continue
+    if user_dict['config']['subscribe_notice'] != 1 and user_dict['config']['arbiter'] != 1:
+        print(f"{user_dict['config']['name']} 未订阅公告且不是arbiter，跳过")
         continue
     names.append(user_dict['config']["name"])
     coopers.append(user_dict['config'].get("cooper", -1))

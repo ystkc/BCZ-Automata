@@ -56,6 +56,7 @@
 <input placeholder="回复" id="reply_content" type="text"><br>
 <button onclick="reply()" id="texta">收到并回复</button>
 <button onclick="reply(false)" id="textb">标记已读</button>
+<button onclick="reload_id()" id="reload_id">刷新指定ID</button>
 <button onclick="load_data(true)" id="refresh">强制刷新</button>（正常情况10分钟自动刷新一次）
 <script>
 // const data = {
@@ -65,6 +66,13 @@
 //         {nickname: "李四", group_nickname:"2", completed_times: 3, duration_days: 7, two_week_daka_dates: [1, 1, -2, 0, 0, 0, 1,1, 0, 1, -1, 0, 1, 0]}
 //     ]
 // };
+
+function reload_id() {
+    let unique_id = prompt("请输入要刷新的ID:");
+    if (unique_id == null || unique_id == "")
+        return;
+    load_data(true, unique_id);
+}
 
 function createSquare(value) {
     let className = 'square';
@@ -98,12 +106,12 @@ function displayData(data) {
     container.innerHTML += `<div class="my-reply">我：${data.my_reply}</div><br>`;
     container.innerHTML += `<div class="monitor-reply">组长：${data.monitor_reply}</div>`;
 }
-function load_data(force_refresh=false) {
+function load_data(force_refresh=false, force_refresh_only_id=-1) {
     if (force_refresh) {
         document.getElementById("notice").innerHTML = "获取中，请稍候...";
         document.getElementById("notice_hash").innerHTML = "";
     }
-    fetch(window.location.href + "/data?force_refresh=" + force_refresh)
+    fetch(window.location.href + "/data?force_refresh=" + force_refresh + "&force_refresh_only_id=" + force_refresh_only_id)
     .then(function(response) {
         return response.json();
     })
@@ -116,7 +124,7 @@ function load_data(force_refresh=false) {
         document.getElementById("introduction").innerHTML = data.introduction;
         document.getElementById("notice").innerHTML = data.notice;
         document.getElementById("notice_hash").innerHTML = data.notice_hash;
-        if (data.notice_hash == '#auth#') {
+        if (data.notice_hash == 'auth') {
             document.getElementById("texta").textContent = "通过授权";
             document.getElementById("textb").textContent = "拒绝授权";
             document.getElementById("refresh").textContent = "强制刷新(刷新页面或强制刷新都会导致请求无法找回)";
@@ -142,7 +150,7 @@ function load_data(force_refresh=false) {
 window.onload = load_data(false);
 function reply(correspond=true) {
 let content = document.getElementById("reply_content").value;
-let not_auth = document.getElementById("notice_hash").innerHTML != "#auth#";
+let not_auth = document.getElementById("notice_hash").innerHTML != "auth";
 if (content == "" && not_auth) {
     if (confirm("只收到不回复？") == false)
         return;
@@ -153,8 +161,8 @@ group_share_key = document.getElementById("group_share_key").innerHTML;
 notice_hash = document.getElementById("notice_hash").innerHTML;
 content = {"reply_content": content, correspond: correspond};
 url = window.location.href + "/reply?unique_id=" + user_id + "&group_id=" + class_id + "&notice_hash=" + notice_hash + "&group_share_key=" + group_share_key;
-
-fetch(url, {
+console.log(url);
+fetch(encodeURI(url), {
     method: "POST",
     headers: {
         "Content-Type": "application/json"

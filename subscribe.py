@@ -43,7 +43,7 @@ def display_info(base_url, last_action: str) -> bool:
         return False
     
     data = user_data['data']
-    auth = data['notice_hash'] == '#auth#'
+    auth = data['notice_hash'] == 'auth'
     if auth:
         print("\033[1;31m发现了新的授权请求！ʕ⊙ᴥ⊙ʔ\033[0m")
     if not data['notice']:

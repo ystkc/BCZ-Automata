@@ -130,6 +130,15 @@
         );
       };
       copyAt = () => {
+        const day100Str = {
+          700: "\n🌈700天以上🌈\n",
+          600: "\n❄️600天以上❄️\n",
+          500: "\n🎉500天以上🎉\n",
+          400: "\n🌟400天以上🌟\n",
+          300: "\n🍬300天以上🍬\n",
+          200: "\n🪄200天以上🪄\n",
+          100: "\n☁️100天以上☁️\n",
+        }
         const minPeriod = parseInt(prompt("请输入最小在班总天数"));
         if (minPeriod === null) return;
         let copyStr = document.getElementById("group-name").innerText + "\n";
@@ -155,9 +164,15 @@
         const yesterdaytm = yesterdayDate.getTime();
         console.log(yesterdaytm);
         const atList = document.querySelectorAll(".user-info");
+        let day100 = parseInt(atList[0].dataset.period / 100) * 100; // 取整
+        copyStr += day100Str[day100];
         for (const at of atList) {
           const period = at.dataset.period;
           if (period >= minPeriod) {
+            if (period < day100) {
+              day100 -= 100;
+              copyStr += day100Str[day100];
+            }
             const atName = at.dataset.name;
             const id = at.dataset.id;
             const latesttm = utils.parseDate(at.dataset.latestDate).getTime();
