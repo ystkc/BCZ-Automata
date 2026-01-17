@@ -107,6 +107,12 @@ async def message_dispatcher():
             while not daka_list_obj.is_empty():
                 await asyncio.sleep(1)
                 print('wait for daka_list_obj empty', daka_list_obj.daka_list)
+                # -2状态表示正在等待，可以直接清理
+                new_daka_list = {}
+                for item, value in daka_list_obj.daka_list.items():
+                    if value != -2:
+                        new_daka_list[item] = value
+                daka_list_obj.daka_list = new_daka_list
             break
         try:
             # await asyncio.gather(*[client.send_text(data=f'{unique_id}#{msg_type}#{msg}') for client in connected_clients])
@@ -888,12 +894,12 @@ async def change_token(_: Request, item: dict):
         access_token = daka_list_obj.get_access_token(unique_id)
         if not access_token:
             return restful(400, '调用方法异常Σ(っ °Д °;)っ')
-        response = http2_client_obj.send_http2_request('GET', f'http://mitm.it', headers={}, content=None)
-        if 'traffic is not passing through mitmproxy' in response.text or \
-           'This page is served by your local mitmproxy instance' not in response.text:
+        response = http2_client_obj.send_http2_request('GET', 'http://www.baidu.com', headers={}, content=None)
+        if response.status_code != 418: # 代理中过滤了，返回418
             return restful(400, '请先启动BCZ-Automata的mitmproxy脚本，并正确设置代理，详细信息：'+response.text)
         
-        response = http2_client_obj.send_http2_request('GET', f'http://www.baicizhan.com/change_token/{access_token}/{unique_id}', headers={}, content=None)
+        escaped_access_token = parse.quote(access_token, safe='') # token中可能有/，也要转义（默认safe='/'不会转义）
+        response = http2_client_obj.send_http2_request('GET', f'http://www.baicizhan.com/change_token/{escaped_access_token}/{unique_id}', headers={}, content=None)
         return restful(200, response.text)
     except Exception as e:
         return restful(400, f'{e}')
@@ -1048,16 +1054,35 @@ async def user_login(_: Request, item: dict):
     except Exception as e:
         return restful(400, f'{e}')
 
+def check_target_process(name):
+    '''检查本地是否有目标进程正在运行，以此决定运行哪条关机指令'''
+    # 找不到的结果：'信息: 没有运行的任务匹配指定标准。\n'长度19
+    if len(os.popen(f'tasklist /fi "imagename eq {name}"').read()) < 30:
+        return False
+    return True
+
 # 以下是定时任务部分
 def shutdown():
     if not config.local: # 仅本地模式（呃，懒？）
         return
+    logger.info(f'正在检查{config.target_process_name}是否正在运行')
+    target_exist = check_target_process(config.target_process_name)
+    if target_exist:
+        delay = config.shutdown_delay_with_target
+        logger.info(f'{config.target_process_name}正在运行，将在{delay}秒后关闭设备...')
+    else:
+        delay = config.shutdown_delay_without_target
+        logger.info(f'{config.target_process_name}未运行，将在{delay}秒后关闭设备...')
+    logger.info(f'BCZ-Automata 运行结束，将在{delay}秒后关闭设备...')
+    time.sleep(delay)
     try:
-        logger.info('BCZ-Automata 关闭中...')
-        if os.system(config.shutdown_command):
+        if os.system('shutdown -s -t 30 -c "BCZ-Automata 计划的关闭设备"'):
             logger.error('关闭失败')
         else:
             logger.info('BCZ-Automata 关闭命令执行成功')
+        logger.info('BCZ-Automata 正在允许设备休眠...')
+        allow_sleep() # 设置180s休眠
+        logger.info('设备已允许进入休眠状态')
     except Exception:
         pass
 
@@ -1094,8 +1119,7 @@ def shutdown_sallow_unotice_getuv(): # 在每天的58-59 23 * * 运行，根据�
     if weekday == 6: # 星期日晚上
         ...
     elif 0 <= weekday <= 5: # 星期一到星期六晚上
-        shutdown() # 180s内关机（否则会被休眠）
-        allow_sleep() # 设置180s休眠
+        shutdown() # 关机
 
 def buka(check_only=False, include_not_daka=False):
     not_daka_users = daka_list_obj.check_not_daka_users(include_not_daka=include_not_daka)
@@ -1150,11 +1174,11 @@ def schedule_task():
     if not debug and '--static' not in sys.argv:
         Schedule("58-59 23 * * 0-6 shutdown_sallow_unotice_getuv", lambda: shutdown_sallow_unotice_getuv())
 
-        Schedule("* 5-10 * * 0 daka_schedule", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj,http2_client_obj,-1, random_delay=3000))
-        Schedule("* 5-10 * * 1-6 daka_schedule", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj,http2_client_obj,-1, random_delay=2000))
+        Schedule("* 5-10 * * 0 daka_schedule", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj,http2_client_obj,-1, random_delay=3000, only_not_daka=True))
+        Schedule("* 5-10 * * 1-6 daka_schedule", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj,http2_client_obj,-1, random_delay=2000, only_not_daka=True))
         Schedule("* 6-7 * * 0-6 sync_and_subscribe", lambda: sync_and_subscribe())
         Schedule("* 4-8,21-23 * * 0-6 prevent_sleep", lambda: prevent_sleep())
-        Schedule("3-59 9 * * 1-6 prevent_sleep", lambda: allow_sleep())
+        Schedule("3-59 9 * * 1-6 allow_sleep", lambda: allow_sleep())
 
         if '--test' in sys.argv:
             Schedule("* * * * * tester", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=2048, random_delay=21))
@@ -1170,8 +1194,8 @@ def schedule_task():
             Schedule("44-59 23 * * * rank_and_notice_champion", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=7, random_delay=168))
             # 以后可能加一个legend(doge)
             Schedule("48-59 23 * * * rank_and_notice_official", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=0, random_delay=168))
-            Schedule("52-59 23 * * * rank_and_notice_2048", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=2048, random_delay=42))
-        Schedule("30-59 23 * * * buka", lambda: buka(False, True)) # 补卡
+        Schedule("52-59 23 * * * rank_and_notice_2048", lambda: daka_utils.daka_all_headless(user_messages, daka_list_obj, http2_client_obj, only_rank_and_notice=2048, random_delay=42))
+        Schedule("45-59 23 * * * buka", lambda: buka(False, True)) # 补卡
         daka_list_obj.get_uv() # 测试网络连接，同时标明不是static模式
     try:
         daka_list_obj.init_notice_storage()

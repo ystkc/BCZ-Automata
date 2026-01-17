@@ -25,7 +25,9 @@ class Config:
             'sync_command': [], # 每天早上执行一次，可以手动添加备份命令，或启动如订阅公告start subscribe.py等方便管理的小工具
             'prevent_sleep_command': 'timeout', # 每天傍晚执行一次，防止在晚上爬取数据时本地设备休眠而无法正常运行，功能：设置笔记本合盖操作无，睡眠永不，休眠永不
             'allow_sleep_command': 'timeout reverse', # 每天半夜数据爬取结束后执行一次，功能：睡眠3分钟，休眠3分钟
-            'shutdown_command': 'shutdown -s -t 90', # 每天半夜数据爬取结束后执行一次，180s以内
+            'shutdown_delay_with_target': 23400, # 每天半夜数据爬取结束后执行一次，用于自动关机。当目标进程存在时执行
+            'shutdown_delay_without_target': 90, # 同上，当目标进程不存在时执行
+            'target_process_name': 'java.exe', # 关机时根据这个进程是否运行决定运行哪条关机指令
             'log_dir': './logs/', # 日志目录，包括daka、pk、subscribe、stargazer、cheat_tracker
             'check_notice_pace': 3, # 涉嫌违禁公告自动后往前查违禁步长。在公告前面加上#可以取消自动，加>改方向为前往后
             'pk_blacklist': [], # pk黑名单，遇到后改为强反挂模式。但属于被动反挂，对于极端挂无法获胜。反极端挂请使用stargazer
@@ -57,7 +59,9 @@ class Config:
         self.sync_command = self.raw.get('sync_command', [])
         self.prevent_sleep_command = self.raw.get('prevent_sleep_command', 'timeout')
         self.allow_sleep_command = self.raw.get('allow_sleep_command', 'timeout reverse')
-        self.shutdown_command = self.raw.get('shutdown_command','shutdown -s -t 90')
+        self.shutdown_delay_with_target = self.raw.get('shutdown_delay_with_target', 23400) # 90: 1.5分钟  23400:6.5小时
+        self.shutdown_delay_without_target = self.raw.get('shutdown_delay_without_target', 90)
+        self.target_process_name = self.raw.get('target_process_name', 'java.exe') # 关机时根据这个进程是否运行决定运行哪条关机指令
         self.log_dir = self.raw.get('log_dir', './logs/')
         self.check_notice_pace = self.raw.get('check_notice_pace', 3)
         self.puzzle_path = self.raw.get('puzzle_path', 'puzzle.db')

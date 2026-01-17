@@ -28,6 +28,6 @@ try:
 except:
     pass
 os.system('title stargazer - Exiting...')
-daka_list_obj.close(no_check_daka=True)
+daka_list_obj.close(no_check_daka=True, no_update_db=True)
 http2_client_obj.set_closing_state(True)
 

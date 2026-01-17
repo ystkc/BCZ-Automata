@@ -19,6 +19,8 @@ def read_pk_result(filename):
         return result
 
 def search_pk_result(result, query_str):
+    # 转义
+    query_str = re.escape(query_str)
     pattern = re.compile(query_str, re.IGNORECASE)
     matches = []
     for row in result:

@@ -1,13 +1,12 @@
 # king.py
 '''【独立工具】将所有允许pk的用户进行上段，到王者为止'''
 from src.config import Config
-from src.daka_utils import daka_list_class, stargazer_class
+from src.daka_utils import daka_list_class, stargazer_class, open_console_window
 from src.http2_client import http2_client
 import logging
 import datetime
-import subprocess
+import traceback
 import os
-import sys
 # 设置从当前文件的位置开始运行
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 os.system('title king')
@@ -16,6 +15,37 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 config = Config()
 http2_client_obj = http2_client()
 daka_list_obj = daka_list_class(logger, http2_client_obj, config)
+print("默认订阅账号：", daka_list_obj.user_dict_obj.subscriber_unique_ids)
+print("默认虚拟账号：", daka_list_obj.user_dict_obj.arbiter_unique_ids)
+print("请输入指定id(多个请用英文逗号分隔)，不输入默认全部订阅、虚拟账号")
+mode = input("请确保账号信息已添加至数据库：")
+
+if len(mode) > 0:
+    ids = mode.split(',')
+    int_id = 0
+    int_ids = []
+    for id in ids:
+        try:
+            int_id = int(id)
+            uindex = daka_list_obj.user_dict_obj.get_index_by_unique_id(int_id)  # 由于历史遗留问题，如果数据库查找不到id会返回第一个账号
+            user_config = daka_list_obj.user_dict_obj.get_config(uindex)
+            user_cookie = daka_list_obj.user_dict_obj.get_cookie(uindex)
+            config_id = user_config.get('unique_id', 0)
+            assert config_id == int_id
+            config_pk_status = user_config.get('can_pk', False)
+            if not config_pk_status: 
+                logger.warning(f"账号{config_id}配置为不允许PK，已临时允许")
+                user_config['can_pk'] = True
+                daka_list_obj.user_dict_obj.update_user_dict({'config': user_config, 'cookie': user_cookie}, save_to_db=False)
+            int_ids.append(int_id)
+        except ValueError:
+            logger.error(f"id必须是数字:{id}")
+            exit(0)
+        except AssertionError:
+            logger.error(f"数据库中没有找到id:{int_id}")
+            exit(0)
+    daka_list_obj.user_dict_obj.subscriber_unique_ids = set(int_ids)
+    daka_list_obj.user_dict_obj.arbiter_unique_ids = set()
 import queue
 user_messages = queue.Queue()
 star_gazer = stargazer_class(logger, http2_client_obj, config, daka_list_obj, user_messages, king=True)
@@ -25,26 +55,8 @@ try:
 except:
     http2_client_obj.set_closing_state(True)
     raise
-os.system('title king - Enter to exit...P to check progress...')
+os.system('title king - q to quit... p to check progress...')
 
-def open_console_window(message):
-    if sys.platform == 'win32':
-        message = message.replace('\n','&&echo .')
-        cmd = f'start cmd /c "echo {message}&&echo.&&pause"'
-        subprocess.Popen(cmd, shell=True)
-    elif sys.platform == 'linux':
-        subprocess.Popen(['xterm', '-e', f'echo "{message}" && read -p "Press any key to continue..." -n 1'])
-    elif sys.platform == 'darwin':
-        script = f'''
-tell application "Terminal"
-    activate
-    do script "echo '{message}' && read -p 'Press any key to continue...' -n 1"
-end tell
-'''
-        subprocess.Popen(['osascript', '-e', script])
-    else:
-        print("Unsupported platform. Print out directly.")
-        print(message)
 def calc_progress(level, star):
     accumulated_star = 0
     if level == 'wood':
@@ -71,8 +83,8 @@ try:
     s=" "
     items = ['name', 'id', '段位', '星级', '能量', '进度'] # 每个字段占16个字符
     items_str = ''.join([f'{item:<16}' for item in items])
-    while s!="":
-        s = input("Press Enter to exit... p to check progress...\n\n\n")
+    while s!="q":
+        s = input("Press q to quit... p to check progress...\n\n\n")
         if s=="p":
             stars = 0
             users = len(daka_list_obj.user_dict_obj.subscriber_unique_ids)
@@ -80,7 +92,7 @@ try:
             for unique_id in daka_list_obj.user_dict_obj.subscriber_unique_ids:
                 config = daka_list_obj.user_dict_obj.get_config(daka_list_obj.user_dict_obj.get_index_by_unique_id(unique_id))
                 name = config.get('name', '未知')
-                pk_infos = daka_list_obj.is_king[unique_id]
+                pk_infos = daka_list_obj.is_king.get(unique_id, ["unknown", 0, 60])
                 st = calc_progress(pk_infos[0], pk_infos[1])
                 stars += st
                 result += f"{name:<16}{str(unique_id):<16}{str(pk_infos[0]):<16}{str(pk_infos[1]):<16}{str(pk_infos[2]):<16}{st}/49\n"
@@ -89,7 +101,7 @@ try:
             for unique_id in daka_list_obj.user_dict_obj.arbiter_unique_ids:
                 config = daka_list_obj.user_dict_obj.get_config(daka_list_obj.user_dict_obj.get_index_by_unique_id(unique_id))
                 name = config.get('name', '未知')
-                pk_infos = daka_list_obj.is_king[unique_id]
+                pk_infos = daka_list_obj.is_king.get(unique_id, ["unknown", 0, 60])
                 st = calc_progress(pk_infos[0], pk_infos[1])
                 stars += st
                 result += f"{name:<16}{str(unique_id):<16}{str(pk_infos[0]):<16}{str(pk_infos[1]):<16}{str(pk_infos[2]):<16}{st}/49\n"
@@ -97,9 +109,12 @@ try:
             open_console_window(result)
             
 
-except:
+except KeyboardInterrupt:
+    pass
+except Exception as e:
+    traceback.print_exc()
     pass
 os.system('title king - Exiting...')
 http2_client_obj.set_closing_state(True)
-daka_list_obj.close(no_check_daka=True)
+daka_list_obj.close(no_check_daka=True, no_update_db=True)
 

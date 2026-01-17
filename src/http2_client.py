@@ -12,7 +12,7 @@ if winreg_exists:
 
 
 FULL_ASYNC = False
-NO_RETRY_STATUS_CODE = (200, 404, 400, 204)
+NO_RETRY_STATUS_CODE = (200, 404, 400, 204, 418)
 
 # def send_request(method, url, headers, content = None):
 #     '''此处没有gzip'''
@@ -61,7 +61,7 @@ class http2_client:
             winreg.SetValueEx(internet_settings, "ProxyEnable", 0, winreg.REG_DWORD, 0)
         winreg.CloseKey(internet_settings)
         
-    def send_http2_request(self, method: str, url: str, headers: dict, content: dict) -> httpx.Response:
+    def send_http2_request(self, method: str, url: str, headers: dict, content: dict, retry: bool=True) -> httpx.Response:
         '''同步http2请求（可多线程并发使用，但不适用于FastAPI）
         当FULL_ASYNC=True时，本函数将使用异步请求（兼容性考虑）'''
         self.check_closing_state()
@@ -69,23 +69,25 @@ class http2_client:
             return self.rua(self.asyncFetch(url, method, headers, content))
         method = method.upper()
         if method == 'POST':
-            return self.__post(url, headers=headers, json=content, timeout=10)
+            return self.__post(url, headers=headers, json=content, timeout=10, retry=retry)
         elif method == 'GET':
-            return self.__get(url, headers=headers, timeout=10)
+            return self.__get(url, headers=headers, timeout=10, retry=retry)
         elif method == 'OPTIONS':
-            return self.__options(url, headers=headers, timeout=10)
+            return self.__options(url, headers=headers, timeout=10, retry=retry)
 
-    def __options(self, url, headers=None, timeout=10):
+    def __options(self, url, headers=None, timeout=10, retry: bool=True):
         '''同步options'''
         client = self.get_http2_client()
         failed_count = 0
         while True:
             try:
                 response = client.options(url, headers=headers, timeout=timeout)
-                if response.status_code not in NO_RETRY_STATUS_CODE:
+                if response.status_code not in NO_RETRY_STATUS_CODE and retry:
                     raise Exception(f'status_code: {response.status_code}')
                 return response
             except Exception as e:
+                if not retry:
+                    return None
                 print(f'http2 options error: {e} {url}')
                 if client.is_closed:
                     client = self.get_http2_client()
@@ -100,7 +102,7 @@ class http2_client:
                     failed_count = 0
                 continue
 
-    def __post(self, url, headers=None, json=None, timeout=10):
+    def __post(self, url, headers=None, json=None, timeout=10, retry: bool=True):
         '''同步post'''
         client = self.get_http2_client()
         failed_count = 0
@@ -110,10 +112,12 @@ class http2_client:
                     response = client.post(url, headers=headers, json=json, timeout=timeout)
                 else:
                     response = client.post(url, headers=headers, data=json, timeout=timeout) # thrift
-                if response.status_code not in NO_RETRY_STATUS_CODE:
+                if response.status_code not in NO_RETRY_STATUS_CODE and retry:
                     raise Exception(f'status_code: {response.status_code}')
                 return response
             except Exception as e:
+                if not retry:
+                    return None
                 print(f'http2 post error: {e} {url}')
                 if client.is_closed:
                     client = self.get_http2_client()
@@ -128,7 +132,7 @@ class http2_client:
                     failed_count = 0
                 continue
 
-    def __get(self, url, headers=None, timeout=10):
+    def __get(self, url, headers=None, timeout=10, retry: bool=True):
         '''同步get'''
         if FULL_ASYNC:
             return self.rua(self.asyncFetch(url, 'GET', headers))
@@ -137,10 +141,12 @@ class http2_client:
         while True:
             try:
                 response = client.get(url, headers=headers, timeout=timeout)
-                if response.status_code not in NO_RETRY_STATUS_CODE:
+                if response.status_code not in NO_RETRY_STATUS_CODE and retry:
                     raise Exception(f'status_code: {response.status_code}')
                 return response
             except Exception as e:
+                if not retry:
+                    return None
                 print(f'http2 get error: {e} {url}')
                 if client.is_closed:
                     client = self.get_http2_client()

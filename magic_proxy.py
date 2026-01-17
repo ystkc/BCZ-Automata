@@ -63,6 +63,11 @@ def request(flow: http.HTTPFlow) -> None:
     global proxy_token
     global proxy_device_id
     global proxy_id
+
+    if 'baidu.com' in flow.request.url:
+        # 测试代理启动链接
+        flow.response = http.Response.make(418, b"I'm a teapot", {"Content-Type": "text/plain"})
+        return
     
     if 'baicizhan.com/change_token' in flow.request.url or 'change_token' in flow.request.url:
         proxy_token = flow.request.url.split('/')[4] # www.baicizhan.com/change_token/xxx
@@ -210,6 +215,7 @@ def test_port(port):
 def main():# 注意：if __name__ == "__main__": 内不能用global关键字
     global enable_fiddler_proxy
     os.system("ipconfig")
+    os.chdir(os.path.dirname(__file__))
     try:
         print('使用方式:运行magic_proxy.py,然后运行app.py点击魔法账号,然后启动客户端/模拟器,如果魔法未生效则手动设置代理本机ip:8080')
         print('若使用fiddler，请【先启动fiddler】，【再启动本程序】，如果没反应请关闭再打开fiddler的捕获开关')

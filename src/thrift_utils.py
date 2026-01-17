@@ -70,8 +70,8 @@ class user_dict:
         results = []
         for id in available:
             index = self.unique_id_index[id]
-            if daka_pk_status.get(self.__user_dict_list[index]['config']['unique_id'], 0) == 2:
-                continue # 能量耗尽的用户不参与选取
+            # if daka_pk_status.get(self.__user_dict_list[index]['config']['unique_id'], 0) == 2:
+            #     continue # 能量耗尽的用户参与选取，在顶层剔除（防止和所有账户都被占用混淆）
             results.append(self.__user_dict_list[index])
             cnt -= 1
             if cnt == 0:
@@ -90,12 +90,13 @@ class user_dict:
     def get_user_dict_list(self):
         return self.__user_dict_list.copy()
     
-    def update_user_dict(self, user_dict):
+    def update_user_dict(self, user_dict, save_to_db=True):
         unique_id = user_dict['config']['unique_id']
         index = self.get_index_by_unique_id(unique_id)
         if index is not None:
             self.__user_dict_list[index] = user_dict
-            self.modified = True
+            if save_to_db:
+                self.modified = True
     
     def delete_user(self, unique_id):
         index = self.get_index_by_unique_id(unique_id)
