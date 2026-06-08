@@ -14,3 +14,5 @@ while True:
     print(notice_parser.check_notice_auto(result))
     print("\n\n模糊词检查：")
     print(notice_parser.check_notice_auto(result, include_compulsory=True))
+    print("\n\n不清洗检查：")
+    print(notice_parser.check_notice_auto(result, include_compulsory=True, clean_text=False))

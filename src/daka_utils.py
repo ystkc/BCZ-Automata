@@ -147,10 +147,11 @@ class daka_list_class:
         self.puzzle_path = config.puzzle_path
         self.dict_patch_db_path = config.dict_patch_db_path
         self.log_dir = config.log_dir
-        if not os.path.exists(self.log_dir):
-            os.makedirs(self.log_dir, exist_ok=True)
+        # 创建log目录，防止访问出错
+        self.create_log_dir()
         self.pk_blacklist = config.pk_blacklist
         self.pk_whitelist = config.pk_whitelist
+        self.check_notice_pace = config.check_notice_pace
 
         # 初始化单词大赛数据库
         if BCZ_NCSVC:
@@ -348,6 +349,11 @@ class daka_list_class:
         '''删除账号'''
         self.user_dict_obj.delete_user(unique_id)
 
+    def create_log_dir(self):
+        '''创建log目录，防止后续访问出错'''
+        if not os.path.exists(self.log_dir):
+            os.makedirs(self.log_dir, exist_ok=True)
+
     def delete_old_logs(self) -> str:
         '''删除35天前的日志文件，并返回最新的日志文件名'''
         today = datetime.date.today()
@@ -451,14 +457,17 @@ class daka_list_class:
 
         # 删除35天前的日志
         latest_log = self.delete_old_logs() # 这家伙也是log很多（故意的）
-        with open(os.path.join(self.log_dir, latest_log), 'r', encoding='utf-8') as f:
-            try:
-                buka_users = f.read().split('_*')[1]
-            except:
-                buka_users = ''
-        buka_user_str = f'35天前的日志删除完毕，上一个补卡用户：\033[1;36m{buka_users}\033[0m'
-        self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', buka_user_str, True)
-        open_console_window(buka_user_str)
+        if latest_log != "":
+            with open(os.path.join(self.log_dir, latest_log), 'r', encoding='utf-8') as f:
+                try:
+                    buka_users = f.read().split('_*')[1]
+                except:
+                    buka_users = ''
+            buka_user_str = f'35天前的日志删除完毕，上一个补卡用户：\033[1;36m{buka_users}\033[0m'
+            self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', buka_user_str, True)
+            open_console_window(buka_user_str)
+        else:
+            self.add_log(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '', '', '没有找到日志', True)
 
         # 读取今天的cheat_tracker
         if not db_name:
@@ -1563,8 +1572,8 @@ class daka_list_class:
     def clear_bad_words(self): # 清除检查结果
         self.bad_words = []
 
-    def check_notice(self, content, include_compulsory=False):
-        return self.notice_parser.check_notice(content, include_compulsory=include_compulsory)
+    def check_notice(self, content, include_compulsory=False, clean_text=True):
+        return self.notice_parser.check_notice(content, include_compulsory=include_compulsory, clean_text=clean_text)
     
     def get_check_notice(self):
         self.wait()
@@ -2129,10 +2138,11 @@ class notice_subscriber:
     def get_top_notice(self, daka_list_obj: daka_list_class, force_refresh = False, force_refresh_only_id = -1):
         if force_refresh_only_id > 0:
             self.get_subscription([daka_list_obj.get_user_dict(force_refresh_only_id)])
-        elif force_refresh or int(time.time()) - self.latest_timestamp > 36000: # 超过10h，重新获取公告哈希值
-            users = daka_list_obj.get_user_dict_list()
-            random.shuffle(users)
-            self.get_subscription(users)
+        elif force_refresh or (int(time.time()) - self.latest_timestamp > 36000): # 超过10h
+            if not hasattr(self, 'new_notice') or len(self.new_notice) == 0: # 且上次获取的公告已经全部已读，重新获取公告哈希值
+                users = daka_list_obj.get_user_dict_list()
+                random.shuffle(users)
+                self.get_subscription(users)
         if len(self.new_notice) == 0:
             return {'user_name': '', 'group_name': '', 'notice': '没有新的订阅～', 'introduction': '', 'group_id': -1, 'unique_id': -1, 'group_share_key': '', 'notice_hash': '', 'remain_count': 0}
         self.new_notice[0]['remain_count'] = len(self.new_notice)
@@ -3093,7 +3103,7 @@ def yzdd(user_cookie, user_config, http2_client_obj: http2_client, daka_list: da
     conn.close()
     return f'$今日题目:{title}:<img src="{image}" width="100px" height="100px"><br>正确答案:{options[0]}<br>选项1:{options[1]}<br>选项2:{options[2]}<br>选项3:{options[3]}<br>'
 
-def deskmate_pk(cookie, config, http2_client_obj: http2_client):
+def deskmate_pk(cookie, config, http2_client_obj: http2_client, daka_list: daka_list_class):
     '''同桌PK'''
     
     data = {}
@@ -3172,14 +3182,22 @@ def deskmate_pk(cookie, config, http2_client_obj: http2_client):
             headers = getHeaders('$social', cookie, time_long, index = 1)
             headers['Content-Type'] = 'application/json'
             response = http2_client_obj.send_http2_request('POST',f'https://{headers["Host"]}/api/deskmate/game/word_match', headers, {"topicId":topic_id,"topicOption":topic_option})
-            response_json = response.json()['data']
+            j = response.json()
+            if j['code'] == -99999999:
+                daka_list.add_warning(f'上游服务器错误')
+                raise SystemError(f'上游服务器错误')
+            response_json = j['data']
             # 刷新
             while True:
                 # https://social.baicizhan.com/api/deskmate/game/get_word_match_info
                 time_long = int(time.time() * 1000)
                 headers = getHeaders('$social', cookie, time_long, index = 1)
                 response = http2_client_obj.send_http2_request('GET',f'https://{headers["Host"]}/api/deskmate/game/get_word_match_info', headers, None)
-                data = response.json()['data']
+                j = response.json()
+                if j['code'] == -99999999:
+                    daka_list.add_warning(f'上游服务器错误')
+                    raise SystemError(f'上游服务器错误')
+                data = j['data']
                 if data['needCompletedTopicList'] is not None:
                     break
                 time.sleep(1)
@@ -3189,6 +3207,9 @@ def deskmate_pk(cookie, config, http2_client_obj: http2_client):
             if response_json['credit'] > 0:
                 yield (f'铜板+{response_json["credit"]} <br>')
                 time.sleep(0.5)
+        except SystemError as e:
+            yield (f'{name} {e}')
+            break
         except Exception as e:
             yield (f'{name} {e}')
             time.sleep(1)
@@ -3297,7 +3318,12 @@ def task_center(user_cookie, user_config, http2_client_obj: http2_client, daka_l
         response = http2_client_obj.send_http2_request('POST', f'https://{headers["Host"]}/api/task/v2/getAward?userTaskId={user_task_id}', headers, content = {})
         data = response.json()
         if data.get('code', 0) == 1:
-            return get_award_str(task_award_list)
+            try:
+                return get_award_str(task_award_list)
+            except:
+                warning_str = f'{user_config["name"]}的未知奖励{task_award_list}(id={user_task_id};resp={data})'
+                daka_list_obj.add_warning(warning_str)
+                return warning_str
         else:
             return f'失败{data.get("msg", "")}'
         
@@ -4027,12 +4053,12 @@ def send_content(group_share_key, content, user_cookie, http2_client_obj:http2_c
     else:
         return response_json["message"]
 
-def notice_checker_core(group_share_key, user_cookie, item:dict, http2_client_obj:http2_client):
+def notice_checker_core(group_share_key, user_cookie, item:dict, http2_client_obj:http2_client, PACE, PACE_REVERSED):
     
     ONE_BUFFER = 30 # 最多增加ONE_BUFFER个1在末尾
     MAX_LEN = 1000 # 最多发送MAX_LEN个字符
-    PACE = 10 # 倒找的步长
-    PACE_REVERSED = 10 # 正找的步长
+    # PACE = 10 # 倒找的步长
+    # PACE_REVERSED = 10 # 正找的步长
     
     
     content = item['content']
@@ -4131,6 +4157,8 @@ def notice_checker(daka_list: daka_list_class, user_cookie, user_config, http2_c
                 if item == None:
                     return None, tmp_message_str
                 check_result = daka_list.check_notice(item['content']) # (posA, posB, result_str)
+                if check_result[0] == -1:
+                    check_result = daka_list.check_notice(item['content'], clean_text=False) # 存在一些例如4000+这样的违禁词，因此若清洗后找不到，则不清晰再找一次
                 if check_result[0] > -1:
                     tmp_message_str += f'[已知][{item["group_id"]}][{item["date"]}] {check_result}<br>'
                     item['content'] = f'[已知][{item["group_id"]}][{item["date"]}] {check_result[2]}'
@@ -4154,7 +4182,8 @@ def notice_checker(daka_list: daka_list_class, user_cookie, user_config, http2_c
         yield message_str
 
         msg = ''
-        for msg in notice_checker_core(group_share_key, user_cookie, item, http2_client_obj):
+        pace = reversed_pace = daka_list.check_notice_pace
+        for msg in notice_checker_core(group_share_key, user_cookie, item, http2_client_obj, pace, reversed_pace):
             yield message_str + msg
         message_str += msg
         
@@ -4200,7 +4229,7 @@ def daka(daka_list: daka_list_class, user_cookie, user_config, http2_client_obj:
         yield message_str
     time.sleep(react_wait_second)
 
-    for msg in deskmate_pk(cookie=user_cookie, config=user_config, http2_client_obj=http2_client_obj):
+    for msg in deskmate_pk(cookie=user_cookie, config=user_config, http2_client_obj=http2_client_obj, daka_list=daka_list):
         message_str += msg
         yield message_str
     time.sleep(react_wait_second)

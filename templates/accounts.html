@@ -59,9 +59,11 @@
     <div class="dropzone" id="dropzone" style="display:none;" onclick="this.style.display='none';"></div>
     <div>
         <div>账号列表</div><li>小技巧：在昵称或公告中加入"下次互动字母A"可以将A开头昵称用户前置显示</li>
+        <li>自动查找公告违禁词时，请关闭魔法令牌和其他含有代理中间人插件的程序，否则可能影响实时结果显示</li>
         <button onclick="loadAccountListAndData()">加载所有小班数据</button>
         <button onclick="refresh(this)">查看打卡情况</button>
-        <button onclick="buKa(this)">未打卡的打卡</button>
+        <button onclick="buKa(this)">未打卡的打卡(保持浏览器打开)</button>
+        <button onclick="buKaOffline(this)">未打卡的打卡(可关闭浏览器)</button>
         <button onclick="connect_ws(this)">重新连接服务器</button>
         <div id="info"></div>
         <button onclick="joinAll(this)">全部加入</button>

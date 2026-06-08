@@ -584,6 +584,11 @@ function joinAll() {
     }, 1000);
   });
 }
+function buKaOffline() {
+  if (!confirm("点击确认后跳转到补卡页面，补卡结束后才会加载完成。开始加载后即可关闭浏览器")) return ;
+  // 跳转到/buka
+  window.location.href = "/buka";
+}
 function buKa() {
   // 给未打卡的账号打卡
   buttons = document.querySelectorAll(".daka");

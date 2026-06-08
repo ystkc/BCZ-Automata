@@ -213,9 +213,13 @@ class NoticeParser:
         #     result.append(text[-1])
         return result
 
-    def check_notice_auto(self, content: str, include_compulsory=False) -> [str, int]:
+    def check_notice_auto(self, content: str, include_compulsory=False, clean_text=True) -> [str, int]:
         '''检查违规词，并替换为■'''
-        content = self.slice_invalid_char(content)
+        if clean_text:
+            content = self.slice_invalid_char(content)
+            print("检测文本：" + content)
+        else:
+            self.invalid_storage = {}
         cnt = 0
         for check_word in self.bad_words:
             if not include_compulsory and (check_word[0] == '!' or check_word[0] == '?'):
@@ -234,9 +238,10 @@ class NoticeParser:
         return self.restore_invalid_char_unaccept(content), cnt
 
     
-    def check_notice(self, content: str, include_compulsory=False):
+    def check_notice(self, content: str, include_compulsory=False, clean_text=True):
         '''检查通知内容是否包含违规词汇（默认不包含强制违禁词）'''
-        content = self.filter_string(content)
+        if clean_text:
+            content = self.filter_string(content)
         for check_word in self.bad_words:
             if not include_compulsory and (check_word[0] == '!' or check_word[0] == '?'):
                 continue

@@ -40,7 +40,9 @@ def team_up_recite(publish_team=False):
     input(f"请确认活动ID：{activity_id}")
     # activity_id = str(input('请输入活动ID：(team-up-recite/home的请求JSON里面有，一般是1xx)'))
     random.shuffle(cookie)
-    for user in cookie:
+    n = len(cookie)
+    for i, user in enumerate(cookie):
+        print(f'[{i}/{n}] ', end='')
         config = user['config']
         user_cookie = user['cookie']
         name = config['name']
@@ -209,72 +211,15 @@ def publish_team():
         print(f'公开{response.json()["message"]}')
         time.sleep(1)
         
-    
-
-def flag_bet():
-    print("功能分离到flag.py中")
-    # activity_id = str(input('请输入活动ID：(bet的请求JSON里面有，例如12)'))
-    # for user in cookie:
-    #     config = user['config']
-    #     user_cookie = user['cookie']
-    #     name = config['name']
-    #     unique_id = config['unique_id']
-    #     access_token = user_cookie['access_token']
-    #     print(f'正在为{name}.{unique_id}立flag...')
-    #     # https://activity.baicizhan.com/api/activity/bet/info?id=12
-    #     url = f'https://activity.baicizhan.com/api/activity/bet/info?id={activity_id}'
-    #     time_long = int(time.time() * 1000)
-    #     headers = getHeaders('$activity', user_cookie, time_long, index = 1)
-    #     response = requests.get(url, headers=headers)
-    #     data = response.json()['data']
-    #     home = data['home']
-    #     status = home['status']
-    #     can_apply = home['canApply']
-    #     if can_apply == False:
-    #         print('立flag活动已结束')
-    #         return
-    #     if status == 1:
-    #         print('已立flag，跳过')
-    #         time.sleep(1)
-    #         continue
-    #     # https://activity.baicizhan.com/api/activity/bet/apply?type=2&id=12
-    #     url = f'https://activity.baicizhan.com/api/activity/bet/apply?type=2&id={activity_id}'
-    #     content = {
-    #     }
-    #     time_long = int(time.time() * 1000)
-    #     headers = getHeaders('$activity', user_cookie, time_long, index = 1)
-    #     headers['Content-Type'] = 'application/json; charset=UTF-8'
-    #     response = requests.post(url, headers=headers, data=json.dumps(content))
-    #     print(response.json())
-    #     print(f'{name}.{unique_id}立flag完成')
-    #     # 重新获取队伍信息
-    #     url = f'https://activity.baicizhan.com/api/activity/bet/info?id={activity_id}'
-    #     time_long = int(time.time() * 1000)
-    #     headers = getHeaders('$activity', user_cookie, time_long, index = 1)
-    #     response = requests.get(url, headers=headers)
-    #     data = response.json()['data']
-    #     home = data['home']
-    #     status = home['status']
-    #     accumulative_task = home['accumulativeTask']
-    #     credit_cnt_list = [(task['day'], task['creditCnt']) for task in accumulative_task]
-    #     credit_cnt_list.extend([(task['day'], task['creditCnt']) for task in home['dailyTask']])
-    #     print(f"status:{status} list:{credit_cnt_list}")
-    #     time.sleep(random.randint(2, 4))
-
-
-
 if __name__ == '__main__':
-    # if input("组队 or 立flag？(1/2)") == '1':
-        try:
-            team_up_recite()
-            if input(f'剩余{len(current_code)}个队伍可能未满，是否要公开剩余有效队伍？(y/n)') == 'y':
-                publish_team()
-            input('完成，按任意键退出')
-        except Exception as e:
-            print(e)
-            input('出错，按任意键退出')
-    # else:
-        # flag_bet()
+    try:
+        team_up_recite()
+        if input(f'剩余{len(current_code)}个队伍可能未满，是否要公开剩余有效队伍？(y/n)') == 'y':
+            publish_team()
+        input('完成，按任意键退出')
+    except Exception as e:
+        print(e)
+        input('出错，按任意键退出')
     
 
         
