@@ -6,6 +6,8 @@
     flex-direction: column;
     margin: 20px;
     gap: 15px;
+    max-height: 500px;
+    overflow: scroll;
 }
 .item {
     display: grid;
@@ -47,17 +49,23 @@
 }
 </style>
 <body>
-用户<span id="user_name"></span>(<span id="unique_id"></span>)[<span id="group_share_key"></span>]的组：<span id="group_name"></span>(<span id="group_id"></span>)<br>
+班长<span id="user_name"></span>(<span id="unique_id"></span>)的组 <span id="group_name"></span>[<span id="group_share_key"></span>](<span id="group_id"></span>)<br>
+(来自<span id="from_unique_id"></span>)
 介绍：<span id="introduction"></span><br>
 剩余<span id="remain_count"></span>订阅<br><br>
 <span id="notice">获取中，请稍候...</span><br>(<span id="notice_hash" style="color:grey;"></span>)<br>
-<div class="container" id="data-container">
+<div class="container" id="data-container"></div>
+<div id="reply-container"></div>
+<div id="operations"></div>
+
+<div style="display: none;">
+    <span id="latest_timestamp"></span>
+    <span id="reply_required"></span>
 </div>
-<input placeholder="回复" id="reply_content" type="text"><br>
-<button onclick="reply()" id="texta">收到并回复</button>
-<button onclick="reply(false)" id="textb">标记已读</button>
-<button onclick="reload_id()" id="reload_id">刷新指定ID</button>
-<button onclick="load_data(true)" id="refresh">强制刷新</button>（正常情况10分钟自动刷新一次）
+<button onclick="reply()">操作(Space)</button>
+<button onclick="window.location.reload()">刷新页面</button>
+<button onclick="reload_id()">刷新指定ID</button>
+<button onclick="load_data(true)">强制刷新</button>（正常情况10分钟自动刷新一次）
 <script>
 // const data = {
 //     my_reply: "这是我的回复内容",
@@ -66,7 +74,7 @@
 //         {nickname: "李四", group_nickname:"2", completed_times: 3, duration_days: 7, two_week_daka_dates: [1, 1, -2, 0, 0, 0, 1,1, 0, 1, -1, 0, 1, 0]}
 //     ]
 // };
-
+let currentHash = '';
 function reload_id() {
     let unique_id = prompt("请输入要刷新的ID:");
     if (unique_id == null || unique_id == "")
@@ -103,8 +111,8 @@ function displayData(data) {
             </div>
         `;
     };
-    container.innerHTML += `<div class="my-reply">我：${data.my_reply}</div><br>`;
-    container.innerHTML += `<div class="monitor-reply">组长：${data.monitor_reply}</div>`;
+    document.querySelector("#reply-container").innerHTML = `<div class="my-reply">我的回复：${data.my_reply}</div><br>
+    <div class="monitor-reply">组长回复：${data.monitor_reply}</div>`;
 }
 function load_data(force_refresh=false, force_refresh_only_id=-1) {
     if (force_refresh) {
@@ -119,20 +127,18 @@ function load_data(force_refresh=false, force_refresh_only_id=-1) {
         data = data.data;
         document.getElementById("user_name").innerHTML = data.user_name;
         document.getElementById("unique_id").innerHTML = data.unique_id;
+        document.getElementById("from_unique_id").innerHTML = data.from_unique_id;
         document.getElementById("group_name").innerHTML = data.group_name;
         document.getElementById("group_id").innerHTML = data.group_id;
         document.getElementById("introduction").innerHTML = data.introduction;
         document.getElementById("notice").innerHTML = data.notice;
         document.getElementById("notice_hash").innerHTML = data.notice_hash;
+        document.getElementById("latest_timestamp").innerHTML = data.timestamp || 0;
+        document.getElementById("reply_required").innerHTML = data.reply_required || -1;
+        currentHash = data.notice_hash;
+        document.getElementById("operations").innerHTML = data.operation;
         if (data.notice_hash == 'auth') {
-            document.getElementById("texta").textContent = "通过授权";
-            document.getElementById("textb").textContent = "拒绝授权";
-            document.getElementById("refresh").textContent = "强制刷新(刷新页面或强制刷新都会导致请求无法找回)";
             alert("发现了新的授权请求！ʕ⊙ᴥ⊙ʔ");
-        } else {
-            document.getElementById("texta").textContent = "收到并回复";
-            document.getElementById("textb").textContent = "标记已读";
-            document.getElementById("refresh").textContent = "强制刷新";
         }
         document.getElementById("group_share_key").innerHTML = data.group_share_key;
         document.getElementById("remain_count").innerHTML = data.remain_count;
@@ -147,33 +153,44 @@ function load_data(force_refresh=false, force_refresh_only_id=-1) {
         });
     });
 }
-window.onload = load_data(false);
-function reply(correspond=true) {
-let content = document.getElementById("reply_content").value;
-let not_auth = document.getElementById("notice_hash").innerHTML != "auth";
-if (content == "" && not_auth) {
-    if (confirm("只收到不回复？") == false)
-        return;
+window.onload = () => {
+    document.addEventListener("keydown", (e) => {
+        if (e.keyCode == 32) {
+            reply();
+        }
+    });
+    load_data(false);
 }
+function reply() {
+let operationCode = prompt("请输入操作码:");
+if (operationCode == null || operationCode == "")
+    return;
+reply_required = document.getElementById("reply_required").innerHTML;
+let content = null;
+if (operationCode == reply_required)
+    content = prompt("请输入回复内容(留空=只收到不回复/不附加文本，其他场景无需填写):");
 user_id = document.getElementById("unique_id").innerHTML;
+from_unique_id = document.getElementById("from_unique_id").innerHTML;
 class_id = document.getElementById("group_id").innerHTML;
 group_share_key = document.getElementById("group_share_key").innerHTML;
 notice_hash = document.getElementById("notice_hash").innerHTML;
-content = {"reply_content": content, correspond: correspond};
-url = window.location.href + "/reply?unique_id=" + user_id + "&group_id=" + class_id + "&notice_hash=" + notice_hash + "&group_share_key=" + group_share_key;
-console.log(url);
+latest_timestamp = document.getElementById("latest_timestamp").innerHTML;
+
+content = {reply_content: content, code: operationCode};
+url = window.location.href + "/reply?unique_id=" + user_id + "&from_unique_id=" + from_unique_id + "&group_id=" + class_id + "&notice_hash=" + notice_hash + "&group_share_key=" + group_share_key + "&operation_code=" + operationCode + "&latest_timestamp=" + latest_timestamp;
 fetch(encodeURI(url), {
     method: "POST",
     headers: {
         "Content-Type": "application/json"
     },
     body: JSON.stringify(content)
-}).then(function(response) {
-    if (response.ok) {
-        alert("成功");
+}).then(response => response.json())
+.then(data => {
+    if (data.code == 200) {
+        alert("成功"+data.msg);
         location.reload();
     } else {
-        alert("失败");
+        alert("失败"+data.msg);
     }
 });
 }

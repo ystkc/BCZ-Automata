@@ -582,15 +582,15 @@ async def subscribe_data(_: Request, force_refresh: bool=False, force_refresh_on
     return restful(200, '获取公告成功', top_notice)
 
 @app.post('/subscribe/reply')
-async def subscribe_reply(_: Request, item: dict, unique_id: str='', group_share_key: str='', group_id: int='', notice_hash: str=''):
+async def subscribe_reply(_: Request, item: dict, unique_id: str='', from_unique_id: str='', group_share_key: str='', group_id: int='', notice_hash: str='', latest_timestamp: int=0):
     '''回复订阅公告和通知的账号'''
     # 从content中获取reply_content
     reply_content = item.get('reply_content', '')
-    correspond = item.get('correspond', True)
+    code = item.get('code', '')
     if not unique_id or not group_id:
         return restful(400, '调用方法异常Σ(っ °Д °;)っ')
     user_dict = daka_list_obj.get_user_dict(unique_id)
-    code, result_str = notice_subscriber_obj.read_reply_and_ack(unique_id, user_dict, group_share_key, group_id, notice_hash, reply_content, correspond)
+    code, result_str = notice_subscriber_obj.operate(unique_id, from_unique_id, user_dict, group_share_key, group_id, notice_hash, reply_content, code, latest_timestamp)
     return restful(code, result_str)
 
 @app.post('/api/change_avatar')

@@ -32,15 +32,15 @@ def display_squares(dates):
     # 每7个换行显示两周数据
     return '\n'.join([' '.join(squares[i:i+7]) for i in range(0, len(squares), 7)])
 
-def display_info(base_url, last_action: str) -> bool:
+def display_info(base_url, force_refresh) -> dict:
     # 获取用户信息
     url_str = f"{base_url}/subscribe/data"
-    if last_action == '4':
+    if force_refresh:
         url_str += '?force_refresh=true'
     user_data = fetch_data(url_str)
     if not user_data:
         print("无效的用户数据")
-        return False
+        return {}
     
     data = user_data['data']
     auth = data['notice_hash'] == 'auth'
@@ -51,21 +51,22 @@ def display_info(base_url, last_action: str) -> bool:
     data['notice'] = data.get('notice', '').replace('<br>','\n')
     data['introduction'] = data.get('introduction', '').replace('<br>','\n')
     print(dedent(f"""
-用户\033[1;33m{data['user_name']}\033[0m({data['unique_id']})[{data['group_share_key']}]的组：
-\033[1;36m{data['group_name']}\033[0m({data['group_id']})
+班长\033[1;33m{data['user_name']}\033[0m({data['unique_id']})的组
+\033[1;36m{data['group_name']}\033[0m({data['group_id']})[{data['group_share_key']}]
+来自{data.get('from_unique_id', '')}
 介绍：{data['introduction']}
 剩余{data['remain_count']}订阅"""))
     time.sleep(1)
     print(dedent(f"""通知：{data['notice']} ({data['notice_hash']})
     """))
     if data['unique_id'] == -1:
-        return auth
+        return data
 
     # 获取打卡数据
     nickname_url = f"{base_url}/subscribe/get_nickname?unique_id={data['unique_id']}&group_share_key={data['group_share_key']}"
     nick_data = fetch_data(nickname_url)
     if not nick_data:
-        return auth
+        return data
 
     print("\n打卡记录：")
     for unique_id, item in nick_data['data']['group_nickname'].items():
@@ -77,70 +78,62 @@ def display_info(base_url, last_action: str) -> bool:
     
     print(f"我的回复: {nick_data['data']['my_reply']}")
     print(f"组长回复: {nick_data['data']['monitor_reply']}")
-    return auth
+    
+    return data
 
-def send_reply(base_url, content, correspond=True):
+def send_reply(data, content, operation_code: int):
     """发送回复"""
-    user_data = fetch_data(f"{base_url}/subscribe/data")
-    if not user_data:
-        return
-
-    data = user_data['data']
-    params = {
-        "unique_id": data['unique_id'],
-        "group_id": data['group_id'],
-        "notice_hash": data['notice_hash'],
-        "group_share_key": data['group_share_key']
-    }
     url = f"{base_url}/subscribe/reply"
     
+    params = {
+        'group_id': data['group_id'],
+        'unique_id': data['unique_id'],
+        'from_unique_id': data.get('from_unique_id', ''),
+        'group_share_key': data['group_share_key'],
+        'notice_hash': data['notice_hash'],
+        'latest_timestamp': data['timestamp'],
+    }
     try:
         response = requests.post(
             url,
             params=params,
-            json={"reply_content": content, "correspond": correspond}
-        )
-        if response.ok:
-            print("操作成功！")
+            json={"reply_content": content, "code": operation_code},
+            timeout=10
+        ).json()
+        if response['code'] == 200:
+            print("操作成功！"+response['msg'])
         else:
-            print(f"操作失败: {response.status_code}")
+            print(f"操作失败: {response['msg']}")
             input("按任意键继续...")
     except Exception as e:
         print(f"请求错误: {e}")
         input("按任意键继续...")
 
 def main():
-    parser = argparse.ArgumentParser(description="订阅管理客户端")
-    parser.add_argument("--reply", help="回复内容，留空则标记已读")
-    args = parser.parse_args()
-
-    if args.reply is not None:
-        # 如果有回复参数则直接发送
-        send_reply(base_url, args.reply, correspond=(args.reply != ""))
-    else:
-        action = ''
-        # 否则显示信息并进入交互模式
+    action = ''
+    # 否则显示信息并进入交互模式
+    force_refresh = False
+    while True:
+        os.system('cls')
+        data = display_info(base_url, force_refresh)
+        force_refresh = False
+        
         while True:
-            os.system('cls')
-            if display_info(base_url, action):
-                action = input("\n操作：\n1. 同意申请\n2. 拒绝申请\n3. 刷新(无法找回!)\n4. 强制刷新\n请选择（1/2/3）: ")
-            else:
-                action = input("\n操作：\n1. 回复\n2. 标记已读\n3. 刷新\n4. 强制刷新\n请选择（1/2/3）: ")
-            while True:
-                if action == '1':
-                    content = input("输入回复内容: ")
-                    # if content == '':
-                        # if input("只收到不回复，确认吗？(y/n): ") != 'y':
-                            # continue
-                    send_reply(base_url, content)
-                    break
-                elif action == '2':
-                    send_reply(base_url, "", correspond=False)
-                    break
-                elif action == '3' or action == '4':
-                    break
-                else:
-                    action = input("无效选择，请重新选择:")
+            action = input("\n请输入：\n1. 操作\n2. 刷新\n3. 强制刷新\n请选择（1/2/3）: ")
+            if action == '1':
+                print(f"操作提示: {data['operation']}")
+                code = input("请输入操作码: ")
+                reply_content = None
+                if code == data.get('reply_required'):
+                    reply_content = input("请输入回复内容: ")
+                send_reply(data, reply_content, int(code))
+                break
+            elif action == '2':
+                break
+            elif action == '3':
+                force_refresh = True
+                break
+                
 
 if __name__ == "__main__":
     main()

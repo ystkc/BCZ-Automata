@@ -1966,7 +1966,11 @@ class notice_subscriber:
         self.http2_client_obj = http2_client_obj
         self.logger = logger
         self.log_dir = config.log_dir
-        self.last_hash = {}
+        self.last_hash = {} # 上一个小班公告
+        self.last_subgroup_timestamp = {} # 支援该小班的时间
+        self.last_notify_timestamp = {} # 上次读取通知时间
+        self.account_stayed = {} # 是否有小号在该班
+        self.apply_account = {} # 是否有小号申请该班的授权
         self.latest_timestamp = 0
         self.get_last_hash()
 
@@ -1987,7 +1991,14 @@ class notice_subscriber:
         with open(os.path.join(self.log_dir, latest_file_name), 'r', encoding='utf-8') as f:
             reader = csv.reader(f)
             for row in reader:
-                self.last_hash[(int(row[0]), int(row[1]))] = row[2] # (unique_id, group_id) = hash
+                if row[2] == 'notify_timestamp': # 这个账号上次读取通知时间
+                    self.last_notify_timestamp[int(row[0])] = int(row[3])
+                elif row[2] == 'subgroup': # 上一次支援该小班的时间
+                    self.last_subgroup_timestamp[int(row[0]), int(row[1])] = int(row[3])
+                    self.account_stayed[int(row[0]), int(row[1])] = int(row[4])
+                    self.apply_account[int(row[0]), int(row[1])] = int(row[5])
+                else:
+                    self.last_hash[(int(row[0]), int(row[1]))] = row[2] # (unique_id, group_id) = hash
         self.logger.info(f'加载了{len(self.last_hash)}条订阅记录')
 
     def num_to_rank(self, num):
@@ -2005,12 +2016,29 @@ class notice_subscriber:
         elif num == 5:
             return '星耀'
         return '王者'
+
+    def get_unread_count(self, user_cookie):
+        '''获取这个账号的【小班】未读消息数量
+        deprecated: 由于是破坏性的，只能读取一次（自动标记已读）。已经不再使用'''
+        # https://notify.baicizhan.com/rest/notify/v2/home
+        notifyHeader = getHeaders("$notify", user_cookie, int(time.time()), index=1)
+        response = self.http2_client_obj.send_http2_request('GET', 'https://notify.baicizhan.com/rest/notify/v2/home', headers=notifyHeader, content=None)
+        messages = response.json()['data']
+        unread_count = 0
+        for msg_class in messages:
+            if msg_class["messageType"] != 4: # 1:不断电 2:精选 3:同桌 4:小班 6:调查 7:点赞 9:组队
+                continue
+            unread_count = msg_class["unread"]
+        return unread_count
         
+    MAX_NOTIFY_CNT = 5 # 最多读取通知数（因为第一次没有上一个已读通知时间）
     def get_subscription(self, users):
         # 读取最新公告，检测哪些公告需要更新
         self.latest_timestamp = int(time.time())
         self.new_notice = []
-        apply_count = 0
+        new_notice_count = 0 # 新的公告
+        apply_count = 0 # 新的授权申请
+        new_poster_count = 0
         for user in users:
             if user['config'].get('subscribe_notice', 0) == 0:
                 continue
@@ -2018,8 +2046,8 @@ class notice_subscriber:
             user_name = user['config']['name']
             self.logger.info(f'开始检测{unique_id}的订阅公告')  
             user_cookie = user['cookie']
-            headers = getHeaders("$group", user_cookie, int(time.time()), index=1)
-            response = self.http2_client_obj.send_http2_request('GET', 'https://group.baicizhan.com/group/own_groups?uniqueId=0', headers=headers, content=None) # 我的小班
+            groupHeader = getHeaders("$group", user_cookie, int(time.time()), index=1)
+            response = self.http2_client_obj.send_http2_request('GET', 'https://group.baicizhan.com/group/own_groups?uniqueId=0', headers=groupHeader, content=None) # 我的小班 
             for group in response.json()['data']['list']:
                 if group['rank'] == 1: # 公告测试用
                     continue
@@ -2033,6 +2061,7 @@ class notice_subscriber:
                 notice_hash = hashlib.md5(notice.encode('utf-8')).hexdigest()
                 if (unique_id, group_id) not in self.last_hash or self.last_hash[(unique_id, group_id)] != notice_hash:
                     self.logger.info(f'发现{unique_id}的{group_id}有更新(*^o^*)')
+                    new_notice_count += 1
                     self.new_notice.append({'user_name': user_name, 
                                              'group_name': group_name, 
                                               'notice': notice, 
@@ -2040,38 +2069,38 @@ class notice_subscriber:
                                                  'group_id': group_id, 
                                                   'unique_id': unique_id,
                                                    'group_share_key': group_share_key,
-                                                    'notice_hash': notice_hash})
+                                                    'notice_hash': notice_hash,
+                                                    'reply_required': 1,
+                                                    'operation': '1收到并改名 2标记已读'})
             self.logger.info("开始检测未读消息")
-            # https://notify.baicizhan.com/rest/notify/v2/home
-            headers = getHeaders("$notify", user_cookie, int(time.time()), index=1)
-            response = self.http2_client_obj.send_http2_request('GET', 'https://notify.baicizhan.com/rest/notify/v2/home', headers=headers, content=None)
-            messages = response.json()['data']
-            unread_count = 0
-            min_msg_id = 0
-            for msg_class in messages:
-                if msg_class["messageType"] != 4: # 1:不断电 2:精选 3:同桌 4:小班 6:调查 7:点赞 9:组队
-                    continue
-                unread_count = msg_class["unread"]
-            # unread_count = 1 # debug
-            while unread_count > 0:
+            latest_timestamp = last_notify_t = int(time.time() * 1000)
+            min_notify_t = self.last_notify_timestamp.get(unique_id, 0) # 上次读到的最后一条通知
+            has_pending_message = False # 是否有需要人工处理的订阅信息
+            min_msg_id = float('inf')
+            processed_count = 1
+            
+            while last_notify_t > min_notify_t and processed_count <= self.MAX_NOTIFY_CNT:
                 # https://notify.baicizhan.com/rest/notify/v2/notify_list
                 payload = {
-                    "lastMessageId": min_msg_id, 
+                    "lastMessageId": min_msg_id if min_msg_id != float('inf') else 0, 
                     "messageType": 4
                 }
-                headers['Content-Type'] = 'application/json; charset=UTF-8'
-                response = self.http2_client_obj.send_http2_request('POST', 'https://notify.baicizhan.com/rest/notify/v2/notify_list', headers=headers, content = payload)
+                notifyHeader = getHeaders("$notify", user_cookie, int(time.time()), index=1)
+                notifyHeader['Content-Type'] = 'application/json; charset=UTF-8'
+                response = self.http2_client_obj.send_http2_request('POST', 'https://notify.baicizhan.com/rest/notify/v2/notify_list', headers=notifyHeader, content = payload)
                 messages = response.json()['data']
-                print(f"正在检测{unread_count}条未读消息")
+                self.logger.info(f"正在检测第{processed_count}条未读消息")
                 if messages == []:
-                    print(f"出现错误，剩余未读消息为{unread_count}")
+                    self.logger.info(f"出现错误，当前最后读到的时间是{last_notify_t}，当前已处理{processed_count}条消息")
                     break
                 for msg in messages:
-                    if not unread_count:
+                    processed_count += 1
+                    min_msg_id = min(min_msg_id, msg["messageId"])
+                    timestamp = msg["timestamp"]
+                    print('timestamp 专项', last_notify_t, timestamp)
+                    last_notify_t = min(last_notify_t, timestamp)
+                    if last_notify_t < min_notify_t or processed_count > self.MAX_NOTIFY_CNT:
                         break
-                    unread_count -= 1
-                    if msg["messageId"] < min_msg_id or min_msg_id == 0:
-                        min_msg_id = msg["messageId"]
                     if msg["title"] == "\u5206\u73ed\u6388\u6743\u7533\u8bf7": # 分班授权申请
                         try:
                             appliant_sharekey = msg['link'].split('id%3D')[1].split('%26')[0]
@@ -2081,8 +2110,8 @@ class notice_subscriber:
                         print(f"发现申请:{appliant_sharekey}")
                         # 获取申请者的相关信息
                         # https://group.baicizhan.com/group/information?shareKey=
-                        headers = getHeaders("$group", user_cookie, int(time.time()), index=1)
-                        response = self.http2_client_obj.send_http2_request('GET', f'https://group.baicizhan.com/group/information?shareKey={appliant_sharekey}', headers=headers, content=None)
+                        groupHeader = getHeaders("$group", user_cookie, int(time.time()), index=1)
+                        response = self.http2_client_obj.send_http2_request('GET', f'https://group.baicizhan.com/group/information?shareKey={appliant_sharekey}', headers=groupHeader, content=None)
                         data = response.json()['data']
                         appliant_info = data['groupInfo']
                         group_id = appliant_info['id']
@@ -2093,16 +2122,20 @@ class notice_subscriber:
                         group_introduction = appliant_info['introduction']
                         group_notice = appliant_info['notice']
                         group_finishing_rate = appliant_info['finishingRate']
-                        leader_name, leader_id = get_leader_info(data['members'])
+                        leader_id, leader_name = get_leader_info(data['members'])
                         apply_count += 1
+                        has_pending_message = True
                         self.new_notice.append({'user_name': user_name, 
-                                            'group_name': f'{leader_name}[{leader_id}]的小班授权申请({group_name})[{group_id}]\n{group_type} {group_count}/{group_limit} 完成率{group_finishing_rate*100:.2f}%\n', 
+                                            'group_name': f'{leader_name}({leader_id})的【授权申请】小班 {group_name}({group_id})\n{group_type} {group_count}/{group_limit} 完成率{group_finishing_rate*100:.2f}%\n', 
                                             'notice': group_notice, 
                                             'introduction': group_introduction, 
                                                 'group_id': group_id, 
                                                 'unique_id': unique_id,
+                                                'from_unique_id': leader_id,
                                                 'group_share_key': appliant_sharekey,
-                                                    'notice_hash': 'auth'})
+                                                    'notice_hash': 'auth',
+                                                    'timestamp': latest_timestamp,
+                                                    'operation': '1同意 2拒绝 3忽略'})
                     elif msg["title"] == "\u62db\u65b0\u6d77\u62a5\u5ba1\u6838\u901a\u8fc7": # 招新海报审核通过
                         try:
                             poster_id = msg['link'].split('id%3D')[1].split('%26')[0]
@@ -2110,30 +2143,40 @@ class notice_subscriber:
                             print(msg['link'])
                             print(f"出现错误，无法获取海报的id，请更新解析器: {e}")
                         content = msg['content']
+                        if content == '你在招新广场发布的内容，已通过审核。': # 自己发的不用再扫描了
+                            continue
                         # https://group.baicizhan.com/group/get_recruitment_post?id=
-                        poster_data = self.http2_client_obj.send_http2_request('GET', f'https://group.baicizhan.com/group/get_recruitment_post?id={poster_id}', headers=headers, content=None).json()['data']
+                        poster_data = self.http2_client_obj.send_http2_request('GET', f'https://group.baicizhan.com/group/get_recruitment_post?id={poster_id}', headers=groupHeader, content=None).json()['data']
                         poster_content = poster_data['content']
                         group_id = poster_data['groupId']
                         user_id = poster_data['uniqueId']
                         # https://group.baicizhan.com/group/get_group_info?groupId=
-                        group_data = self.http2_client_obj.send_http2_request('GET', f'https://group.baicizhan.com/group/get_group_info?groupId={group_id}', headers=headers, content=None).json()['data']
+                        group_data = self.http2_client_obj.send_http2_request('GET', f'https://group.baicizhan.com/group/get_group_info?groupId={group_id}', headers=groupHeader, content=None).json()['data']
                         group_name = group_data['name']
                         group_share_key = group_data['shareKey']
 
                         print(f"发现海报:{poster_id} ({content})")
-                        self.new_notice.append({'user_name': "",
-                                                'group_name': group_name,
+                        new_poster_count += 1
+                        has_pending_message = True
+                        self.new_notice.append({'user_name': user_name,
+                                                'group_name': group_name+"的【海报】",
                                                  'notice': poster_content, 
                                                  'introduction': content,
                                                  'group_id': group_id, 
-                                                 'unique_id': user_id,
+                                                 'unique_id': unique_id,
+                                                 'from_unique_id': user_id,
                                                  'group_share_key': group_share_key,
-                                                 'notice_hash': 'poster'})
+                                                 'notice_hash': 'poster',
+                                                 'timestamp': latest_timestamp,
+                                                 'operation': '1点赞 2已读'})
                 time.sleep(random.randint(12, 18) / 10)
+            if not has_pending_message:
+                # 没有新的订阅信息，直接写入已读时间点
+                self.last_notify_timestamp[unique_id] = latest_timestamp
             time.sleep(random.randint(15, 18) / 10)
         # 将所有授权申请放到最前面
         self.new_notice.sort(key=lambda x: x.get('notice_hash', '') == 'auth', reverse=True)
-        self.logger.info(f'发现{len(self.new_notice)}条新的订阅公告，{apply_count}条小班授权申请')
+        self.logger.info(f'发现{new_notice_count}条新的订阅公告，{apply_count}条小班授权申请，{new_poster_count}条新的海报')
 
     def get_top_notice(self, daka_list_obj: daka_list_class, force_refresh = False, force_refresh_only_id = -1):
         if force_refresh_only_id > 0:
@@ -2147,69 +2190,137 @@ class notice_subscriber:
             return {'user_name': '', 'group_name': '', 'notice': '没有新的订阅～', 'introduction': '', 'group_id': -1, 'unique_id': -1, 'group_share_key': '', 'notice_hash': '', 'remain_count': 0}
         self.new_notice[0]['remain_count'] = len(self.new_notice)
         return self.new_notice[0]
+
+    def auth_handle(self, user_dict, group_share_key, accept):
+        '''处理授权申请'''
+        # https://group.baicizhan.com/group/authorization_handle
+        payload = {
+            "shareKey": group_share_key,
+            "type": 1 if accept else 2
+        }
+        headers = getHeaders("$group", user_dict['cookie'], int(time.time()), index=1)
+        headers['Content-Type'] = 'application/json; charset=UTF-8'
+        response_json = self.http2_client_obj.send_http2_request('POST', f'https://group.baicizhan.com/group/authorization_handle', headers=headers, content = payload).json()
+        if response_json['code'] == 1:
+            return True, response_json['message']
+        return False, response_json['message']
     
-    def read_reply_and_ack(self, unique_id, user_dict, group_share_key, group_id, notice_hash, reply_content, correspond = True):
-        '''标记已读、回复和确认'''
+    def like_unlike(self, user_dict, target_id):
+        '''为指定用户点赞'''
+        # POST https://social.baicizhan.com/api/deskmate/like_unlike
+        payload = {"uniqueId":target_id,"type":1}# 取消也是1  
+        headers = getHeaders("$social", user_dict['cookie'], int(time.time()), index=1)
+        headers['Content-Type'] = 'application/json; charset=UTF-8'
+        response_json = self.http2_client_obj.send_http2_request('POST', f'https://social.baicizhan.com/api/deskmate/like_unlike', headers=headers, content = payload).json()
+        if response_json['code'] == 1:
+            return True, response_json['message']
+        return False, response_json['message']
+
+
+    def operate(self, unique_id, from_unique_id, user_dict, group_share_key, group_id, notice_hash, reply_content, operation_code, latest_timestamp):
+        '''操作'''
         if unique_id == -1:
             return 400, "没有订阅，不需要回复"
         result_str = ''
-        if notice_hash in ('auth', 'poster'):
-            # correspond True表示确认，False表示拒绝
-            self.new_notice.pop(0)
-            if correspond:
-                if notice_hash == 'auth':
-                    # https://group.baicizhan.com/group/authorization_handle
-                    payload = {
-                        "shareKey": group_share_key,
-                        "type": 1
-                    }
-                    headers = getHeaders("$group", user_dict['cookie'], int(time.time()), index=1)
-                    headers['Content-Type'] = 'application/json; charset=UTF-8'
-                    response_json = self.http2_client_obj.send_http2_request('POST', f'https://group.baicizhan.com/group/authorization_handle', headers=headers, content = payload).json()
-                    if response_json['code'] == 1:
-                        return 200, '确认成功<br>'
-                    else:
-                        return 400, f'确认失败{response_json["message"]}<br>'
-                elif notice_hash == 'poster':
-                    return 200, '已阅<br>'
+        try:
+            operation_code = int(operation_code)
+        except ValueError:
+            return 400, "操作码必须是整数"
+        
+        def markread():
+            '''标记已读并储存状态信息'''
+            if notice_hash == 'subgroup':
+                self.last_subgroup_timestamp[(int(unique_id), int(group_id))] = latest_timestamp
+            elif notice_hash == 'account':
+                self.account_stayed[(int(unique_id), int(group_id))] = account_stayed
+            elif notice_hash == 'sponsor':
+                self.apply_account[(int(unique_id), int(group_id))] = apply_account
+            elif notice_hash in ['auth', 'poster']:
+                self.last_notify_timestamp[int(unique_id)] = latest_timestamp # 注意：只记录最后时间，因此只能在最后一次保存！
             else:
-                # https://group.baicizhan.com/group/authorization_handle
-                payload = {
-                    "shareKey": group_share_key,
-                    "type": 2
-                }
-                headers = getHeaders("$group", user_dict['cookie'], int(time.time()), index=1)
-                headers['Content-Type'] = 'application/json; charset=UTF-8'
-                response_json = self.http2_client_obj.send_http2_request('POST', f'https://group.baicizhan.com/group/authorization_handle', headers=headers, content = payload).json()
-                if response_json['code'] == 1:
+                self.last_hash[(int(unique_id), int(group_id))] = notice_hash
+            
+            # 如果是最后一条订阅，则写入log文件
+            if len(self.new_notice) == 0:
+                self.save_log()
+                self.logger.info(f'保存了{len(self.last_hash)}条订阅 已读记录')
+
+        if notice_hash == 'auth':
+            # operation_code 1表示确认，2表示拒绝，3表示已读
+            if operation_code == 1:
+                status, message_str = self.auth_handle(user_dict, group_share_key, True)
+                if status:
+                    self.new_notice.pop(0)
+                    markread()
+                    return 200, '确认成功<br>'
+                else:
+                    return 400, f'确认失败{message_str}<br>'
+            elif operation_code == 2:
+                status, message_str = self.auth_handle(user_dict, group_share_key, False)
+                if status:
+                    self.new_notice.pop(0)
+                    markread()
                     return 200, '拒绝成功<br>'
                 else:
-                    return 400, f'拒绝失败{response_json["message"]}<br>'
-        if correspond:
-            # 回复公告并确认
-            result_str, status = self.reply_and_ack(unique_id, user_dict, group_share_key, reply_content)
-            if status == 0:
-                self.logger.error(f'出现错误，不标记已读：{result_str}')
-                return 400, '出现了错误，不标记已读'
-        # 在内存中标记
-        self.last_hash[(int(unique_id), int(group_id))] = notice_hash
-
-        self.new_notice.pop(0) # 弹出已读的公告
-        self.logger.info(f'将{unique_id}的{group_id}的公告 标记已读')
-
-        # 如果是最后一条订阅，则写入log文件
-        if len(self.new_notice) & 7 == 0:
-            self.save_log()
-            self.logger.info(f'保存了{len(self.last_hash)}条订阅 已读记录')
-
-        return 200, result_str
+                    return 400, f'拒绝失败{message_str}<br>'
+            elif operation_code == 3:
+                self.new_notice.pop(0)
+                markread()
+                return 200, '已读成功<br>'
+            else:
+                return 400, "操作码必须是1、2或3"
+        elif notice_hash == 'poster':
+            # operation_code 1表示点赞，2表示已读
+            if operation_code == 1:
+                status, message_str = self.like_unlike(user_dict, from_unique_id)
+                if status:
+                    self.new_notice.pop(0)
+                    markread()
+                    return 200, '点赞成功<br>'
+                else:
+                    return 400, f'点赞失败{message_str}<br>'
+            elif operation_code == 2:
+                self.new_notice.pop(0)
+                markread()
+                return 200, '已读成功<br>'
+            else:
+                return 400, "操作码必须是1或2"
+        else: # 普通公告 1收到并改名 2标记已读
+            if operation_code == 1:
+                # 回复公告并确认
+                result_str, status = self.reply_and_ack(unique_id, user_dict, group_share_key, reply_content)
+                if status == 0:
+                    self.logger.error(f'出现错误，不标记已读：{result_str}')
+                    return 400, '出现了错误，不标记已读'
+                markread()
+                return 200, '收到回复成功<br>'
+            elif operation_code == 2:
+                self.new_notice.pop(0)
+                markread()
+                return 200, '已读成功<br>'
+            else:
+                return 400, "操作码必须是1或2"
     
     def save_log(self):
         '''保存公告哈希值到log文件'''
         with open(os.path.join(self.log_dir, f'subscriber_{datetime.datetime.now().strftime("%Y-%m-%d %H-%M-%S")}.{int(time.time())}.csv'), 'w', encoding='utf-8', newline='') as f:
             writer = csv.writer(f)
+            print('last_hash', self.last_hash)
+            print('last_notify_timestamp', self.last_notify_timestamp)
+            print('last_subgroup_timestamp', self.last_subgroup_timestamp)
+            print('account_stayed', self.account_stayed)
+            print('apply_account', self.apply_account)
+
             for key, value in self.last_hash.items():
                 writer.writerow(list(key) + [value])
+            for key, value in self.last_notify_timestamp.items():
+                writer.writerow([key, None, 'notify_timestamp'] + [value]) # last_notify_timestamp的key只有unique_id，特此补位
+            for key, value in self.last_subgroup_timestamp.items():
+                writer.writerow(list(key) + ['subgroup_timestamp'] + [value])
+            for key, value in self.account_stayed.items():
+                writer.writerow(list(key) + ['account_stayed'] + [value])
+            for key, value in self.apply_account.items():
+                writer.writerow(list(key) + ['apply_account'] + [value])
         self.logger.info(f'保存了{len(self.last_hash)}条订阅记录')
 
     def reply_and_ack(self, unique_id, user_dict, group_share_key, content):
