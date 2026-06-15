@@ -1,7 +1,7 @@
 
 import logging
 import queue
-from src.thrift_utils import report_event, social_send_share_success, user_study, user_dict, http2_client
+from src.thrift_utils import report_event, social_send_share_success, unified_user, user_study, user_dict, http2_client
 from src.config import Config
 from src.get_headers import getHeaders
 # from src.avatar import find_unique_id
@@ -1973,6 +1973,7 @@ class notice_subscriber:
         self.apply_account = {} # 是否有小号申请该班的授权
         self.latest_timestamp = 0
         self.get_last_hash()
+        self.new_notice = []
 
     def get_last_hash(self):
         '''先获取上次公告哈希值(初始化以及距离上次更新时间超过1h)'''
@@ -2002,7 +2003,7 @@ class notice_subscriber:
         self.logger.info(f'加载了{len(self.last_hash)}条订阅记录')
 
     def num_to_rank(self, num):
-        '''将数字转换为等级'''
+        '''将数字转换为等级（注意！这是一般从0开始的info，如果是和官方小班放一起的要-1再调用）'''
         if num == 0:
             return '青铜'
         elif num == 1:
@@ -2030,22 +2031,96 @@ class notice_subscriber:
                 continue
             unread_count = msg_class["unread"]
         return unread_count
+
+    def get_prop_card_cnt(self, user_cookie):
+        '''获取用户当前拥有招新卡的数量'''
+        # GET https://social.baicizhan.com/api/deskmate/goods/get_user_goods
+        header = getHeaders("$social", user_cookie, int(time.time()), index=1)
+        response = self.http2_client_obj.send_http2_request('GET', 'https://social.baicizhan.com/api/deskmate/goods/get_user_goods', headers=header, content=None)
+        data = response.json()['data']
+        for item in data:
+            if item['id'] == 261 and item['name'] == '小班招新卡':
+                return item['num']
+        return None
+    
+    def get_cooper_and_prop_card_price(self, user_cookie):
+        '''获取当前用户铜板数量和他看到的招新卡的价格（访问小卖部）'''
+        # GET /api/deskmate/goods/get_sale_goods
+        header = getHeaders("$social", user_cookie, int(time.time()), index=1)
+        response = self.http2_client_obj.send_http2_request('GET', 'https://social.baicizhan.com/api/deskmate/goods/get_sale_goods', headers=header, content=None)
+        data = response.json()['data']
+        cooper_cnt = data['creditCount']
+        goodslist = data['goodsInfoList']
+        for good in goodslist:
+            if good['id'] == 261 and good['name'] == '小班招新卡':
+                return cooper_cnt, good['credit']
+        return cooper_cnt, None
+    
+    def buy_prop_card(self, user_cookie):
+        '''为当前用户购买招新卡'''
+        # POST https://social.baicizhan.com/api/deskmate/goods/buy_goods?goodsId=261 {} => {"data":null,"message":"ok","code":1}
+        header = getHeaders("$social", user_cookie, int(time.time()), index=1)
+        header['Content-Type'] = 'application/json'
+        response = self.http2_client_obj.send_http2_request('POST', 'https://social.baicizhan.com/api/deskmate/goods/buy_goods?goodsId=261', headers=header, content={})
+        if response.json()['code'] != 1:
+            self.logger.error(f'购买招新卡失败{response.json()}')
+            return False
+        return True
+
+    def use_prop_card(self, user_cookie, group_id):
+        '''为用户的班级使用招新卡'''
+        # POST https://group.baicizhan.com/group/use_prop_card {"groupId":2865525,"propCardId":261}
+        header = getHeaders("$group", user_cookie, int(time.time()), index=1)
+        header['Content-Type'] = 'application/json'
+        response = self.http2_client_obj.send_http2_request('POST', 'https://group.baicizhan.com/group/use_prop_card', headers=header, content={'groupId': group_id, 'propCardId': 261})
+        print(response.json())
+        if response.json()['code'] != 1:
+            return False, f'使用招新卡失败{response.json()}'
+        return True, f'使用招新卡成功{response.json()}'
+    
+    def getRoleUp(self, user_cookie, user_config):
+        '''获取用户当前的年级区（注意不是年级）
+        1:小学1-3
+        2:小学4-6
+        3:初中
+        4:高中
+        5:大学、硕博、成人'''
+        # GET 'https://group.baicizhan.com/group/get_group_user_info'
+        if user_config.get('grade') is not None:
+            return user_config['grade']
+        header = getHeaders("$group", user_cookie, int(time.time()), index=1)
+        response = self.http2_client_obj.send_http2_request('GET', 'https://group.baicizhan.com/group/get_group_user_info', headers=header, content=None)
+        user_config['grade'] = response.json()['data']['grade']
+        return user_config['grade']
+
+        
+    
+    def changeRoleUp(self, user_cookie, user_config, target_role_up):
+        '''为用户改变年级（以便在不同区使用招新卡）'''
+        unified_user_obj = unified_user(self.http2_client_obj)
+        return unified_user_obj.unified_user_update_role_extra(user_cookie, user_config, 1, target_role_up)
         
     MAX_NOTIFY_CNT = 5 # 最多读取通知数（因为第一次没有上一个已读通知时间）
     def get_subscription(self, users):
         # 读取最新公告，检测哪些公告需要更新
         self.latest_timestamp = int(time.time())
-        self.new_notice = []
+        self.new_notice.clear()
         new_notice_count = 0 # 新的公告
         apply_count = 0 # 新的授权申请
         new_poster_count = 0
+        is_monday = datetime.datetime.now().weekday() == 0
         for user in users:
-            if user['config'].get('subscribe_notice', 0) == 0:
-                continue
-            unique_id = user['config']['unique_id']
-            user_name = user['config']['name']
-            self.logger.info(f'开始检测{unique_id}的订阅公告')  
+            user_config = user['config']
             user_cookie = user['cookie']
+            if user_config.get('subscribe_notice', 0) == 0:
+                continue
+            unique_id = user_config['unique_id']
+            user_name = user_config['name']
+            
+            prop_card_cnt = self.get_prop_card_cnt(user_cookie)
+            cooper_cnt, prop_card_price = self.get_cooper_and_prop_card_price(user_cookie)
+
+            self.logger.info(f'开始检测{unique_id}的订阅公告')  
             groupHeader = getHeaders("$group", user_cookie, int(time.time()), index=1)
             response = self.http2_client_obj.send_http2_request('GET', 'https://group.baicizhan.com/group/own_groups?uniqueId=0', headers=groupHeader, content=None) # 我的小班 
             for group in response.json()['data']['list']:
@@ -2072,6 +2147,17 @@ class notice_subscriber:
                                                     'notice_hash': notice_hash,
                                                     'reply_required': 1,
                                                     'operation': '1收到并改名 2标记已读'})
+                # 如果是班长且今天是周一，提示是否要发卡
+                if is_monday and group['leader']:
+                    self.new_notice.append({'user_name': user_name, 
+                                             'group_name': group_name, 
+                                              'notice': f'【招新提醒】今天是周一({datetime.datetime.now().strftime("%H:%M:%S")})，班级人数{group["memberCount"]}/{group["countLimit"]}，完成率{group["finishingRate"]*100}%\n现有招新卡{prop_card_cnt}张，铜板{cooper_cnt}个，招新卡每张{prop_card_price}铜板。要发招新卡吗？', 
+                                               'introduction': introduction, 
+                                                 'group_id': group_id,
+                                                  'unique_id': unique_id,
+                                                   'group_share_key': group_share_key,
+                                                    'notice_hash': 'propcard',
+                                                    'operation': '1选择年级&发卡 2忽略'})
             self.logger.info("开始检测未读消息")
             latest_timestamp = last_notify_t = int(time.time() * 1000)
             min_notify_t = self.last_notify_timestamp.get(unique_id, 0) # 上次读到的最后一条通知
@@ -2097,7 +2183,6 @@ class notice_subscriber:
                     processed_count += 1
                     min_msg_id = min(min_msg_id, msg["messageId"])
                     timestamp = msg["timestamp"]
-                    print('timestamp 专项', last_notify_t, timestamp)
                     last_notify_t = min(last_notify_t, timestamp)
                     if last_notify_t < min_notify_t or processed_count > self.MAX_NOTIFY_CNT:
                         break
@@ -2215,7 +2300,68 @@ class notice_subscriber:
         if response_json['code'] == 1:
             return True, response_json['message']
         return False, response_json['message']
+    
+    
+    def humanize_time_ago(self, time_str):
+        """
+        将日期字符串转换为人类易读的相对时间描述（仅处理过去时间）
+        
+        参数:
+            time_str: 日期字符串，格式如 '2026-06-15 19:12:01'
+        
+        返回:
+            相对时间描述字符串，如 '3秒前', '5分钟前', '2小时前' 等
+        """
+        # 解析输入时间
+        try:
+            target_time = datetime.datetime.strptime(time_str, '%Y-%m-%d %H:%M:%S')
+        except ValueError:
+            raise ValueError("时间格式错误，应为 'YYYY-MM-DD HH:MM:SS'")
+        
+        # 获取当前时间
+        now = datetime.datetime.now()
+        
+        # 可能是卡了一些时差
+        if target_time > now:
+            return "现在"
+        
+        # 计算时间差
+        delta = now - target_time
+        seconds = int(delta.total_seconds())
+        
+        # 定义时间单位和对应的秒数
+        intervals = (
+            (31536000, '年'),
+            (2592000, '个月'),
+            (604800, '周'),
+            (86400, '天'),
+            (3600, '小时'),
+            (60, '分钟'),
+            (1, '秒'),
+        )
+        
+        # 找到合适的时间单位
+        for seconds_in_unit, unit_name in intervals:
+            count = seconds // seconds_in_unit
+            if count >= 1:
+                return f"{count}{unit_name}前"
+        
+        # 如果所有单位都不满足（理论上不会发生）
+        return "刚刚"
 
+    def preview_recommended_ordinary_groups(self, user_cookie):
+        '''查看当前用户这个年级下的推荐小班'''
+        # POST https://group.baicizhan.com/group/get_recommend_ordinary_groups {direction: 1}
+        payload = {"direction": 1}
+        header = getHeaders("$group", user_cookie, int(time.time()), index=1)
+        header['Content-Type'] = 'application/json; charset=UTF-8'
+        response_json = self.http2_client_obj.send_http2_request('POST', 'https://group.baicizhan.com/group/get_recommend_ordinary_groups', headers=header, content = payload).json()
+        results = []
+        if response_json['code'] == 1:
+            groups = response_json['data']['groupVoList']
+            for group in groups:
+                results.append(f'{self.num_to_rank(group["rank"]-1)} {group["memberCount"]}/{group["countLimit"]} {group["finishingRate"]*100:.2f}% {self.humanize_time_ago(group["buyTime"])}发布 {"[需要邀请码]"if group["onlyPublicKeyJoin"] else ""}{"[我的班级]"if group["leader"] else ""}{group["name"]} {group["introduction"]}')
+        return '\n<br>'.join(results)
 
     def operate(self, unique_id, from_unique_id, user_dict, group_share_key, group_id, notice_hash, reply_content, operation_code, latest_timestamp):
         '''操作'''
@@ -2227,6 +2373,9 @@ class notice_subscriber:
         except ValueError:
             return 400, "操作码必须是整数"
         
+        user_cookie = user_dict['cookie']
+        user_config = user_dict['config']
+
         def markread():
             '''标记已读并储存状态信息'''
             if notice_hash == 'subgroup':
@@ -2237,6 +2386,9 @@ class notice_subscriber:
                 self.apply_account[(int(unique_id), int(group_id))] = apply_account
             elif notice_hash in ['auth', 'poster']:
                 self.last_notify_timestamp[int(unique_id)] = latest_timestamp # 注意：只记录最后时间，因此只能在最后一次保存！
+            elif notice_hash in ['propcard', 'propcard_2', 'propcard_3']:
+                # do nothing
+                ...
             else:
                 self.last_hash[(int(unique_id), int(group_id))] = notice_hash
             
@@ -2285,6 +2437,61 @@ class notice_subscriber:
                 return 200, '已读成功<br>'
             else:
                 return 400, "操作码必须是1或2"
+        elif notice_hash == 'propcard':
+            # operation_code 1表示发卡，2表示忽略
+            if operation_code == 1:
+                self.new_notice[0]['notice_hash'] = 'propcard_2'
+                self.new_notice[0]['notice'] = '【招新卡年级】请选择要切换到的年级\n义务教育1-9、高中10-12，大学14-19，成人23-24'
+                self.new_notice[0]['operation'] = '输入0取消'
+                return 200, '请继续选择年级<br>'
+            elif operation_code == 2:
+                self.new_notice.pop(0)
+                markread() # 虽然不用储存任何状态信息，但是有可能要做最后一个订阅的信息储存
+                return 200, '已读成功<br>'
+            else:
+                return 400, "操作码必须是1或2"
+        elif notice_hash == 'propcard_2':
+            # operation_code 0表示取消，其他表示继续
+            if operation_code == 0:
+                self.new_notice.pop(0)
+                markread()
+                return 200, '已取消发卡<br>'
+            else:
+                if operation_code not in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 16, 17, 18, 19, 23, 24):
+                    return 400, '无效的年级<br>'
+                result_str = self.changeRoleUp(user_cookie, user_config, operation_code)
+                if result_str != '':
+                    return 400, '切换年级失败' + result_str
+                time.sleep(1)
+                self.new_notice[0]['notice_hash'] = 'propcard_3'
+                self.new_notice[0]['notice'] = "【招新卡池预览】" + self.preview_recommended_ordinary_groups(user_cookie)
+                self.new_notice[0]['operation'] = '0切换年级或取消、1刷新、1400确认发送'
+                return 200, '切换年级成功' + result_str
+        elif notice_hash == 'propcard_3':
+            # operation_code 0表示上一步，1刷新，1400表示确认
+            if operation_code == 0:
+                self.new_notice[0]['notice_hash'] = 'propcard_2'
+                self.new_notice[0]['notice'] = '【招新卡年级】请选择要切换到的年级\n义务教育1-9、高中10-12，大学14-19，成人23-24'
+                self.new_notice[0]['operation'] = '输入0取消'
+                return 200, '请重新选择年级<br>'
+            elif operation_code == 1:
+                self.new_notice[0]['notice'] = "【招新卡池预览】" + self.preview_recommended_ordinary_groups(user_cookie)
+                return 200, '刷新成功<br>'
+            elif operation_code == 1400:
+                # 检查招新卡数量
+                prop_card_cnt = self.get_prop_card_cnt(user_cookie)
+                time.sleep(1)
+                if prop_card_cnt is None or prop_card_cnt == 0:
+                    self.buy_prop_card(user_cookie)
+                    time.sleep(1)
+                status, message_str = self.use_prop_card(user_cookie, group_id)
+                if status:
+                    return 200, f'发卡成功:{message_str}<br>'
+                else:
+                    return 400, f'发卡失败:{message_str}<br>'
+            else:
+                return 400, "操作码必须是0、1或1400"
+                
         else: # 普通公告 1收到并改名 2标记已读
             if operation_code == 1:
                 # 回复公告并确认

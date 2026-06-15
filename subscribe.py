@@ -91,7 +91,7 @@ def send_reply(data, content, operation_code: int):
         'from_unique_id': data.get('from_unique_id', ''),
         'group_share_key': data['group_share_key'],
         'notice_hash': data['notice_hash'],
-        'latest_timestamp': data['timestamp'],
+        'latest_timestamp': data.get('timestamp'),
     }
     try:
         response = requests.post(
@@ -119,18 +119,18 @@ def main():
         force_refresh = False
         
         while True:
-            action = input("\n请输入：\n1. 操作\n2. 刷新\n3. 强制刷新\n请选择（1/2/3）: ")
-            if action == '1':
-                print(f"操作提示: {data['operation']}")
-                code = input("请输入操作码: ")
+            print(f"操作提示: {data['operation']}")
+            action = input("\n请输入：\n数字会被识别为操作\nr. 刷新\nfr. 强制刷新\n请选择（数字/r/fr）: ")
+            if action.isdigit():
+                code = int(action)
                 reply_content = None
                 if code == data.get('reply_required'):
                     reply_content = input("请输入回复内容: ")
                 send_reply(data, reply_content, int(code))
                 break
-            elif action == '2':
+            elif action == 'r':
                 break
-            elif action == '3':
+            elif action == 'fr':
                 force_refresh = True
                 break
                 
