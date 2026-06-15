@@ -1545,6 +1545,31 @@ class unified_user:
 
         return result
 
+    def unified_user_update_role_extra(self, user_cookie, user_config, grade=1, role_up=1):
+        '''update_role_extra
+        grade始终为1，role_up义务教育1-9、高中10-12，大学14-19，成人23-24
+        '''
+        transport = TTransport.TMemoryBuffer()
+        protocol = TCompactProtocol.TCompactProtocol(transport)
+        client = UnifiedUserService.Client(protocol)
+        client.send_update_role_extra(grade=grade, role_up=role_up)
+        content = transport.getvalue()
+        time_long = int(time.time() * 1000)
+        headers = getHeaders("$passport", user_cookie, int(time.time()))
+        url = f'https://{headers["Host"]}/rpc/unified_user_service/update_role_extra/{time_long}'
+        content = gzip.compress(struct.pack("!i", len(content)) + content)
+        response = self.send_http2_request('POST', url, headers, content)
+        transport.close()
+
+        result = response.content[4:]
+        transport = TTransport.TMemoryBuffer(result)
+        protocol = TCompactProtocol.TCompactProtocol(transport)
+        client = UnifiedUserService.Client(protocol)
+        result = client.recv_update_role_extra()
+        transport.close()
+
+        return result
+
 class assistant:
     
     def __init__(self, http2_client_obj: http2_client):
@@ -1934,14 +1959,23 @@ class cold_launch:
         logger.close()
 
 if __name__ == '__main__':
+    # init
     user_dict_obj = user_dict()
     user_config = user_dict_obj.get_config(0)
     user_cookie = user_dict_obj.get_cookie(0)
     http2_client_obj = http2_client()
-    cold_launch_ = cold_launch(http2_client_obj)
-    cold_launch_.example(user_cookie, user_config)
+
+
+    unified_user = unified_user(http2_client_obj)
+    result = unified_user.unified_user_update_role_extra(user_cookie, user_config, grade=1, role_up=8)
+    print_thrift_object(result)
+    exit()
+    # cold_launch_ = cold_launch(http2_client_obj)
+    # cold_launch_.example(user_cookie, user_config)
+    # exit()
     # user_study_ = user_study(http2_client_obj)
     # result = user_study_.user_study_user_daka_v2(user_cookie, user_config)
     # print_thrift_object(result)
+    # exit()
 
 

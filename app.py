@@ -480,7 +480,7 @@ def change_notice_sse_func_(unique_id, group_share_key, content, mentioned_ids, 
                     acceptable = True
                     break
                 # 随机延迟
-                time.sleep(random.randint(750, 1500) / 1000)
+                time.sleep(random.randint(75, 150) / 1000)
         else:
             # 从前面往后找
             while not acceptable:
@@ -499,7 +499,7 @@ def change_notice_sse_func_(unique_id, group_share_key, content, mentioned_ids, 
                     acceptable = True
                     break
                 # 随机延迟
-                time.sleep(random.randint(750, 1500) / 1000)
+                time.sleep(random.randint(75, 150) / 1000)
     else:
         message_str = f'通知发送失败{msg}<br><br>'
         yield message_str

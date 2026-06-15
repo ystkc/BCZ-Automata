@@ -90,6 +90,15 @@ struct check_access_token_result{
     2: SystemException boom,
     3: LogicException bomb
 }
+struct update_role_extra_args{
+    1: i32 grade,
+    2: i32 role_up
+}
+struct update_role_extra_result{
+    1: string success,
+    2: SystemException boom,
+    3: LogicException bomb
+}
 service UnifiedUserService {
     void send_sms_verify_code(1: send_sms_verify_code_args args_)
     UserLoginResult login_with_phone(1: login_with_phone_args args_) throws (1: LogicException bomb, 2: SystemException boom) 
@@ -97,6 +106,8 @@ service UnifiedUserService {
     list<UserBindInfo> get_bind_info() throws (1: LogicException bomb, 2: SystemException boom) 
     # C, S
     AccessTokenCheckResult check_access_token(1: string device) throws (1: LogicException bomb, 2: SystemException boom) 
+    # Other(Change Grade)
+    string update_role_extra(1: i32 grade, 2: i32 role_up) throws (1: LogicException bomb, 2: SystemException boom) 
 }
 
 

@@ -4055,7 +4055,8 @@ def send_content(group_share_key, content, user_cookie, http2_client_obj:http2_c
 
 def notice_checker_core(group_share_key, user_cookie, item:dict, http2_client_obj:http2_client, PACE, PACE_REVERSED):
     
-    ONE_BUFFER = 30 # 最多增加ONE_BUFFER个1在末尾
+    WATER_STR = '#违禁词退散#东南形胜，三吴都会，钱塘自古繁华，烟柳画桥，风帘翠幕，参差十万人家。云树绕堤沙，怒涛卷霜雪，天障无涯。市列珠玑，户盈罗绮，竞豪奢'
+    ONE_BUFFER = len(WATER_STR) # 最多增加ONE_BUFFER个1在末尾
     MAX_LEN = 1000 # 最多发送MAX_LEN个字符
     # PACE = 10 # 倒找的步长
     # PACE_REVERSED = 10 # 正找的步长
@@ -4084,9 +4085,22 @@ def notice_checker_core(group_share_key, user_cookie, item:dict, http2_client_ob
         check_part = ''
         if item['checked'] == 0: 
             water_part = '\n'
-            for i in range(ONE_BUFFER):# 加一
+            for i in range(0, ONE_BUFFER, 2):# 加一
                 # 不断的在结尾加上1
-                water_part += '1'
+                water_part += '11'
+
+                yield msg + f'<br>{content}<u>{water_part}</u>'
+                msg = send_content(group_share_key, content + water_part, user_cookie, http2_client_obj)
+
+                if msg is None or msg == '公告不能超过1000个字':
+                    break
+            if msg is None:
+                yield f'通知发送成功(数字软违禁)<br>{content}{water_part}<br>'
+                item['checked'] = 2
+                return
+            water_part = WATER_STR
+            while len(water_part) > 0:
+                water_part = water_part[:-1]
 
                 yield msg + f'<br>{content}<u>{water_part}</u>'
                 msg = send_content(group_share_key, content + water_part, user_cookie, http2_client_obj)
@@ -4094,9 +4108,10 @@ def notice_checker_core(group_share_key, user_cookie, item:dict, http2_client_ob
                 if msg is None:
                     break
             if msg is None:
-                yield f'通知发送成功(软违禁)<br>{content}{water_part}<br>'
+                yield f'通知发送成功(中文软违禁)<br>{content}{water_part}<br>'
                 item['checked'] = 2
                 return
+            msg = '小班公告内容涉嫌违规，请修改'
             while msg == '小班公告内容涉嫌违规，请修改': # 倒找
                 # 将content最后的pace个字符加入到check_part
                 # if check_part == content[-PACE:]: # 因为有可能重复字符是违规的，这样会概率跳过
@@ -4156,7 +4171,7 @@ def notice_checker(daka_list: daka_list_class, user_cookie, user_config, http2_c
                 item = daka_list.get_check_notice()
                 if item == None:
                     return None, tmp_message_str
-                check_result = daka_list.check_notice(item['content']) # (posA, posB, result_str)
+                check_result = daka_list.check_notice(item['content'], include_compulsory=True) # (posA, posB, result_str)
                 if check_result[0] == -1:
                     check_result = daka_list.check_notice(item['content'], clean_text=False) # 存在一些例如4000+这样的违禁词，因此若清洗后找不到，则不清晰再找一次
                 if check_result[0] > -1:

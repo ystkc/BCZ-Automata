@@ -1342,6 +1342,153 @@ class check_access_token_result(object):
         return not (self == other)
 
 
+class update_role_extra_args(object):
+    """
+    Attributes:
+     - grade
+     - role_up
+
+    """
+
+
+    def __init__(self, grade=None, role_up=None,):
+        self.grade = grade
+        self.role_up = role_up
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.I32:
+                    self.grade = iprot.readI32()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.I32:
+                    self.role_up = iprot.readI32()
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('update_role_extra_args')
+        if self.grade is not None:
+            oprot.writeFieldBegin('grade', TType.I32, 1)
+            oprot.writeI32(self.grade)
+            oprot.writeFieldEnd()
+        if self.role_up is not None:
+            oprot.writeFieldBegin('role_up', TType.I32, 2)
+            oprot.writeI32(self.role_up)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+
+
+class update_role_extra_result(object):
+    """
+    Attributes:
+     - success
+     - boom
+     - bomb
+
+    """
+
+
+    def __init__(self, success=None, boom=None, bomb=None,):
+        self.success = success
+        self.boom = boom
+        self.bomb = bomb
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, [self.__class__, self.thrift_spec])
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.STRING:
+                    self.success = iprot.readString().decode('utf-8', errors='replace') if sys.version_info[0] == 2 else iprot.readString()
+                else:
+                    iprot.skip(ftype)
+            elif fid == 2:
+                if ftype == TType.STRUCT:
+                    self.boom = SystemException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            elif fid == 3:
+                if ftype == TType.STRUCT:
+                    self.bomb = LogicException.read(iprot)
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, [self.__class__, self.thrift_spec]))
+            return
+        oprot.writeStructBegin('update_role_extra_result')
+        if self.success is not None:
+            oprot.writeFieldBegin('success', TType.STRING, 1)
+            oprot.writeString(self.success.encode('utf-8') if sys.version_info[0] == 2 else self.success)
+            oprot.writeFieldEnd()
+        if self.boom is not None:
+            oprot.writeFieldBegin('boom', TType.STRUCT, 2)
+            self.boom.write(oprot)
+            oprot.writeFieldEnd()
+        if self.bomb is not None:
+            oprot.writeFieldBegin('bomb', TType.STRUCT, 3)
+            self.bomb.write(oprot)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+
+
 class EducationInfo(object):
     """
     Attributes:
@@ -12876,6 +13023,19 @@ all_structs.append(check_access_token_result)
 check_access_token_result.thrift_spec = (
     None,  # 0
     (1, TType.STRUCT, 'success', [AccessTokenCheckResult, None], None, ),  # 1
+    (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
+    (3, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 3
+)
+all_structs.append(update_role_extra_args)
+update_role_extra_args.thrift_spec = (
+    None,  # 0
+    (1, TType.I32, 'grade', None, None, ),  # 1
+    (2, TType.I32, 'role_up', None, None, ),  # 2
+)
+all_structs.append(update_role_extra_result)
+update_role_extra_result.thrift_spec = (
+    None,  # 0
+    (1, TType.STRING, 'success', 'UTF8', None, ),  # 1
     (2, TType.STRUCT, 'boom', [SystemException, None], None, ),  # 2
     (3, TType.STRUCT, 'bomb', [LogicException, None], None, ),  # 3
 )
