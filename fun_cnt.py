@@ -1,3 +1,5 @@
+# fun_cnt.py
+'''【调试工具】统计项目中每个函数的出现次数'''
 import os
 import sys
 from collections import defaultdict

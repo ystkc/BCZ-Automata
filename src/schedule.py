@@ -1,3 +1,5 @@
+# schedule.py
+'''计划调用类'''
 import time
 import logging
 import threading

@@ -1,4 +1,5 @@
-
+# http2_client.py
+'''http2客户端'''
 import asyncio
 import threading
 import time

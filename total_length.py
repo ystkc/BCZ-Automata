@@ -1,5 +1,5 @@
 # total_length.py
-'''用于计算某天的公告总长度'''
+'''【调试工具】用于计算某天的公告总长度'''
 db_path = "../BCZ-Notice-Examiner/bcz_notice.db"
 import sqlite3
 conn = sqlite3.connect(db_path, uri=True)

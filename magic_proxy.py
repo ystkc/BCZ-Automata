@@ -8,7 +8,8 @@
 
 每次设置：
 4.启动fiddler，启动客户端（确保代理有效），启动magic_proxy.py，刷新fiddler捕获状态
-5.启动automata网页端，点击魔法令牌，弹框CHANGE_TOKEN:...且magic_proxy出现绿色提示 即为成功'''
+5.启动automata网页端，点击魔法令牌，弹框CHANGE_TOKEN:...且magic_proxy出现绿色提示 即为成功
+⚠️本工具在查看小班时似乎会出现passport部分API无法访问的问题，先开着本程序设置好令牌，重启客户端App后关闭本程序即可正常使用'''
 from mitmproxy import http
 import hashlib
 import traceback

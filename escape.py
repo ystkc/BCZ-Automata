@@ -1,5 +1,5 @@
 # escape.py
-'''【独立工具】将剪切板中的令牌转义'''
+'''【调试工具】将剪切板中的令牌转义'''
 import pyperclip
 
 text = pyperclip.paste()

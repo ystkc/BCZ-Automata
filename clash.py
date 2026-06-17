@@ -1,3 +1,5 @@
+# clash.py
+'''【独立工具】将公告进行同音常见字替换，并暴力枚举以通过莫名其妙的违禁词审查'''
 import random
 import pyperclip
 import os

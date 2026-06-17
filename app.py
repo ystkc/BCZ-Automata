@@ -1,3 +1,5 @@
+# app.py
+'''【独立工具】账号矩阵管理主程序'''
 import asyncio
 from contextlib import asynccontextmanager
 import os

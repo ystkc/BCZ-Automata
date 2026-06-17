@@ -1,3 +1,5 @@
+# notice_parser.py
+'''通知、信息、违禁词和订阅类'''
 import datetime
 import zipfile
 import sqlite3

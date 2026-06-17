@@ -1,5 +1,9 @@
 # notice.py
-'''【独立工具】用于检查通知违禁词'''
+'''【独立工具】用于检查通知违禁词（需要配合BCZ-Notice-Examiner(已更名为ystkc.github.io)库才能正常工作，将该库解压到这个库的同级平行文件夹即可，结构如下）
+ root
+ - BCZ-Automata
+ - BCZ-Notice-Examiner
+'''
 from src.notice_parser import NoticeParser
 notice_parser = NoticeParser()
 while True:

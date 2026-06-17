@@ -1,3 +1,5 @@
+# get_headers.py
+'''获取请求头'''
 import hashlib
 import time
 

@@ -1,4 +1,4 @@
-'''已废弃（供以后参考？'''
+'''【已废弃】机器人'''
 from ncatbot.core import BotClient, GroupMessage, PrivateMessage
 from ncatbot.utils.config import config
 from ncatbot.utils.logger import get_log

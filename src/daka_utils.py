@@ -1,4 +1,5 @@
-
+# daka_utils.py
+'''打卡工具类'''
 import logging
 import queue
 from src.bcz import userBasicInfo

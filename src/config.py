@@ -1,3 +1,5 @@
+# config.py
+'''配置类'''
 import os
 import sys
 import time

@@ -1,3 +1,4 @@
+'''模拟打卡时间分布来生成随机数'''
 import numpy as np
 
 def exponential_with_constant(x, a, b):
