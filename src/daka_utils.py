@@ -1996,8 +1996,8 @@ class notice_subscriber:
             for row in reader:
                 if row[2] == 'notify_timestamp': # 这个账号上次读取通知时间
                     self.last_notify_timestamp[int(row[0])] = int(row[3])
-                elif row[2] == 'subgroup': # 上一次支援该小班的时间
-                    self.last_subgroup_timestamp[int(row[0]), int(row[1])] = int(row[3])
+                elif row[2] == 'subgroup_timestamp': # 上一次支援该小班的时间
+                    self.last_subgroup_timestamp[(int(row[0]), int(row[1]))] = int(row[3])
                 else:
                     self.last_hash[(int(row[0]), int(row[1]))] = row[2] # (unique_id, group_id) = hash
         self.logger.info(f'加载了{len(self.last_hash)}条订阅记录')
@@ -2007,200 +2007,258 @@ class notice_subscriber:
         
     MAX_NOTIFY_CNT = 9 # 最多读取通知数（因为第一次没有上一个已读通知时间）
     MIN_SUBGROUP_TIMEDELTA = 172800 # 最小支援时间间隔，单位秒
-    def get_subscription(self, users):
-        # 读取最新公告，检测哪些公告需要更新
-        self.latest_timestamp = int(time.time())
-        self.new_notice.clear()
-        new_notice_count = 0 # 新的公告
-        apply_count = 0 # 新的授权申请
-        new_poster_count = 0
+    def _process_user_subscription(self, user, is_monday, result_queue):
+        time.sleep(random.randint(0, 64) / 10) # 不要一起开始，降低网络负担
+        time_long = int(time.time() * 1000)
+        user_config = user['config']
+        user_cookie = user['cookie']
+        if user_config.get('subscribe_notice', 0) == 0:
+            result_queue.put(None)
+            return
+        
+        unique_id = user_config['unique_id']
+        user_name = user_config['name']
         
         prop_card_cnt = 0
         cooper_cnt = prop_card_price = 0
+        if is_monday:
+            prop_card_cnt = self.bcz_group.get_prop_card_cnt(user_cookie)
+            cooper_cnt, prop_card_price = self.bcz_group.get_cooper_and_prop_card_price(user_cookie)
+
+        self.logger.info(f'开始检测{unique_id}的订阅公告')
+        status, groups = self.bcz_group.ownGroups(user)
+        if not status:
+            self.logger.error(f'获取{unique_id}的订阅公告失败，请检查 {groups}')
+            result_queue.put(None)
+            return
         
-        is_monday = datetime.datetime.now().weekday() == 0
-        for user in users:
-            time_long = int(time.time() * 1000)
-            user_config = user['config']
-            user_cookie = user['cookie']
-            if user_config.get('subscribe_notice', 0) == 0:
+        user_results = {
+            'new_notice_items': [],
+            'new_notice_count': 0,
+            'apply_count': 0,
+            'new_poster_count': 0,
+            'last_notify_timestamp': None,
+            'latest_timestamp': time_long
+        }
+        
+        for group in groups:
+            if group['rank'] == 1:
                 continue
-            unique_id = user_config['unique_id']
-            user_name = user_config['name']
-            if is_monday:
-                prop_card_cnt = self.bcz_group.get_prop_card_cnt(user_cookie)
-                cooper_cnt, prop_card_price = self.bcz_group.get_cooper_and_prop_card_price(user_cookie)
-
-            self.logger.info(f'开始检测{unique_id}的订阅公告')
-            status, groups = self.bcz_group.ownGroups(user)
-            if not status:
-                self.logger.error(f'获取{unique_id}的订阅公告失败，请检查 {groups}')
-                continue
-            for group in groups:
-                if group['rank'] == 1: # 公告测试用
-                    continue
-                group_id = group['id']
-                group_share_key = group['shareKey']
-                group_name = group['name']
-                notice = group['notice']
-                introduction = group['introduction']
-                if notice is None:
-                    notice = '(空)'
-                notice_hash = hashlib.md5(notice.encode('utf-8')).hexdigest()
-                if (unique_id, group_id) not in self.last_hash or self.last_hash[(unique_id, group_id)] != notice_hash:
-                    self.logger.info(f'发现{unique_id}的{group_id}有更新(*^o^*)')
-                    new_notice_count += 1
-                    self.new_notice.append({'user_name': user_name, 
-                                             'group_name': group_name, 
-                                              'notice': notice, 
-                                               'introduction': introduction, 
-                                                 'group_id': group_id, 
-                                                  'unique_id': unique_id,
-                                                   'group_share_key': group_share_key,
-                                                    'notice_hash': notice_hash,
-                                                     'reply_required': 1,
-                                                      'memberlist_required': True,
-                                                       'operation': '1收到并改名 2标记已读'})
-                # 如果是班长且今天是周一，提示是否要发卡
-                if is_monday and group['leader']:
-                    self.new_notice.append({'user_name': user_name, 
-                                             'group_name': group_name, 
-                                              'notice': f'【招新提醒】今天是周一({datetime.datetime.now().strftime("%H:%M:%S")})，班级人数{group["memberCount"]}/{group["countLimit"]}，完成率{group["finishingRate"]*100}%\n现有招新卡{prop_card_cnt}张，铜板{cooper_cnt}个，招新卡每张{prop_card_price}铜板。要发招新卡吗？', 
-                                               'introduction': introduction, 
-                                                 'group_id': group_id,
-                                                  'unique_id': unique_id,
-                                                   'group_share_key': group_share_key,
-                                                    'notice_hash': 'propcard',
-                                                     'operation': '1选择年级&发卡 2忽略'})
-            self.logger.info("开始检测未读消息")
-            latest_timestamp = last_notify_t = time_long
-            min_notify_t = self.last_notify_timestamp.get(unique_id, 0) # 上次读到的最后一条通知
-            has_pending_message = False # 是否有需要人工处理的订阅信息
-            min_msg_id = float('inf')
-            processed_count = 1
+            group_id = group['id']
+            group_share_key = group['shareKey']
+            group_name = group['name']
+            notice = group['notice']
+            introduction = group['introduction']
+            if notice is None:
+                notice = '(空)'
+            notice_hash = hashlib.md5(notice.encode('utf-8')).hexdigest()
             
-            while True:
-                if last_notify_t <= min_notify_t or (processed_count > self.MAX_NOTIFY_CNT and min_notify_t == 0):
+            with self.subscription_lock:
+                need_update = (unique_id, group_id) not in self.last_hash or self.last_hash[(unique_id, group_id)] != notice_hash
+            
+            if need_update:
+                self.logger.info(f'发现{unique_id}的{group_id}有更新(*^o^*)')
+                user_results['new_notice_count'] += 1
+                user_results['new_notice_items'].append({'user_name': user_name, 
+                                                         'group_name': group_name, 
+                                                          'notice': notice, 
+                                                           'introduction': introduction, 
+                                                             'group_id': group_id, 
+                                                              'unique_id': unique_id,
+                                                               'group_share_key': group_share_key,
+                                                                'notice_hash': notice_hash,
+                                                                 'reply_required': 1,
+                                                                  'memberlist_required': True,
+                                                                   'operation': '1收到并改名 2标记已读'})
+                with self.subscription_lock:
+                    self.last_hash[(unique_id, group_id)] = notice_hash
+            
+            if is_monday and group['leader']:
+                user_results['new_notice_items'].append({'user_name': user_name, 
+                                                         'group_name': group_name, 
+                                                          'notice': f'【招新提醒】今天是周一({datetime.datetime.now().strftime("%H:%M:%S")})，班级人数{group["memberCount"]}/{group["countLimit"]}，完成率{group["finishingRate"]*100}%\n现有招新卡{prop_card_cnt}张，铜板{cooper_cnt}个，招新卡每张{prop_card_price}铜板。要发招新卡吗？', 
+                                                           'introduction': introduction, 
+                                                             'group_id': group_id,
+                                                              'unique_id': unique_id,
+                                                               'group_share_key': group_share_key,
+                                                                'notice_hash': 'propcard',
+                                                                 'operation': '1选择年级&发卡 2忽略'})
+        
+        self.logger.info("开始检测未读消息")
+        latest_timestamp = last_notify_t = time_long
+        
+        with self.subscription_lock:
+            min_notify_t = self.last_notify_timestamp.get(unique_id, 0)
+        
+        has_pending_message = False
+        min_msg_id = float('inf')
+        processed_count = 1
+        
+        while True:
+            if last_notify_t <= min_notify_t or (processed_count > self.MAX_NOTIFY_CNT and min_notify_t == 0):
+                break
+            
+            payload = {
+                "lastMessageId": min_msg_id if min_msg_id != float('inf') else 0, 
+                "messageType": 4
+            }
+            notifyHeader = getHeaders("$notify", user_cookie, time_long, index=1)
+            groupHeader = getHeaders("$group", user_cookie, time_long, index=1)
+            notifyHeader['Content-Type'] = 'application/json; charset=UTF-8'
+            response = self.http2_client_obj.send_http2_request('POST', 'https://notify.baicizhan.com/rest/notify/v2/notify_list', headers=notifyHeader, content=payload)
+            messages = response.json()['data']
+            self.logger.info(f"正在检测第{processed_count}条未读消息")
+            
+            if messages == []:
+                self.logger.info(f"出现错误，当前最后读到的时间是{last_notify_t}，当前已处理{processed_count}条消息")
+                break
+            
+            for msg in messages:
+                processed_count += 1
+                min_msg_id = min(min_msg_id, msg["messageId"])
+                timestamp = msg["timestamp"]
+                last_notify_t = min(last_notify_t, timestamp)
+                
+                if last_notify_t < min_notify_t or processed_count > self.MAX_NOTIFY_CNT:
                     break
-                # https://notify.baicizhan.com/rest/notify/v2/notify_list
-                payload = {
-                    "lastMessageId": min_msg_id if min_msg_id != float('inf') else 0, 
-                    "messageType": 4
-                }
-                notifyHeader = getHeaders("$notify", user_cookie, time_long, index=1)
-                groupHeader = getHeaders("$group", user_cookie, time_long, index=1)
-                notifyHeader['Content-Type'] = 'application/json; charset=UTF-8'
-                response = self.http2_client_obj.send_http2_request('POST', 'https://notify.baicizhan.com/rest/notify/v2/notify_list', headers=notifyHeader, content = payload)
-                messages = response.json()['data']
-                self.logger.info(f"正在检测第{processed_count}条未读消息")
-                if messages == []:
-                    self.logger.info(f"出现错误，当前最后读到的时间是{last_notify_t}，当前已处理{processed_count}条消息")
-                    break
-                for msg in messages:
-                    processed_count += 1
-                    min_msg_id = min(min_msg_id, msg["messageId"])
-                    timestamp = msg["timestamp"]
-                    last_notify_t = min(last_notify_t, timestamp)
-                    if last_notify_t < min_notify_t or processed_count > self.MAX_NOTIFY_CNT:
-                        break
-                    if msg["title"] == "\u5206\u73ed\u6388\u6743\u7533\u8bf7": # 分班授权申请
-                        try:
-                            appliant_sharekey = msg['link'].split('id%3D')[1].split('%26')[0]
-                        except Exception as e:
-                            self.logger.error(f"出现错误，无法获取申请者的sharekey，请更新解析器: {e} 信息:{msg['link']}")
-                            continue
-                        print(f"发现申请:{appliant_sharekey}")
-                        # 获取申请者的相关信息
-                        # https://group.baicizhan.com/group/information?shareKey=
-                        success, data = self.bcz_group.getGroupInfo(appliant_sharekey, user_cookie)
-                        if not success:
-                            self.logger.error(f"申请者的班级信息获取失败 {data}")
-                            continue
-                        appliant_info = data['groupInfo']
-                        group_id = appliant_info['id']
-                        group_name = appliant_info['name']
-                        group_introduction = appliant_info['introduction']
-                        group_notice = appliant_info['notice']
-                        leader_id, leader_name = get_leader_info(data['members'])
-                        apply_count += 1
-                        has_pending_message = True
-                        self.new_notice.append({'user_name': user_name, 
-                                            'group_name': f'{leader_name}({leader_id})的【授权申请】小班 \n' + self.bcz_group.formatGroupInfo(appliant_sharekey, user_cookie), 
-                                            'notice': group_notice, 
-                                            'introduction': group_introduction, 
-                                                'group_id': group_id, 
-                                                'unique_id': unique_id,
-                                                'from_unique_id': leader_id,
-                                                'group_share_key': appliant_sharekey,
-                                                    'notice_hash': 'auth',
-                                                    'timestamp': latest_timestamp,
-                                                    'memberlist_required': True,
-                                                    'operation': '1同意 2拒绝 3忽略'})
-                    elif msg["title"] == "\u62db\u65b0\u6d77\u62a5\u5ba1\u6838\u901a\u8fc7": # 招新海报审核通过
-                        try:
-                            poster_id = msg['link'].split('id%3D')[1].split('%26')[0]
-                        except Exception as e:
-                            print(msg['link'])
-                            print(f"出现错误，无法获取海报的id，请更新解析器: {e}")
-                        content = msg['content']
-                        if content == '你在招新广场发布的内容，已通过审核。': # 自己发的不用再扫描了
-                            continue
-                        # https://group.baicizhan.com/group/get_recruitment_post?id=
-                        poster_data = self.http2_client_obj.send_http2_request('GET', f'https://group.baicizhan.com/group/get_recruitment_post?id={poster_id}', headers=groupHeader, content=None).json()['data']
-                        poster_content = poster_data['content']
-                        group_id = poster_data['groupId']
-                        user_id = poster_data['uniqueId']
-                        # https://group.baicizhan.com/group/get_group_info?groupId=
-                        group_data = self.http2_client_obj.send_http2_request('GET', f'https://group.baicizhan.com/group/get_group_info?groupId={group_id}', headers=groupHeader, content=None).json()['data']
-                        group_name = group_data['name']
-                        group_share_key = group_data['shareKey']
+                
+                if msg["title"] == "\u5206\u73ed\u6388\u6743\u7533\u8bf7":
+                    try:
+                        appliant_sharekey = msg['link'].split('id%3D')[1].split('%26')[0]
+                    except Exception as e:
+                        self.logger.error(f"出现错误，无法获取申请者的sharekey，请更新解析器: {e} 信息:{msg['link']}")
+                        continue
+                    print(f"发现申请:{appliant_sharekey}")
+                    
+                    success, data = self.bcz_group.getGroupInfo(appliant_sharekey, user_cookie)
+                    if not success:
+                        self.logger.error(f"申请者的班级信息获取失败 {data}")
+                        continue
+                    
+                    appliant_info = data['groupInfo']
+                    group_id = appliant_info['id']
+                    group_name = appliant_info['name']
+                    group_introduction = appliant_info['introduction']
+                    group_notice = appliant_info['notice']
+                    leader_id, leader_name = get_leader_info(data['members'])
+                    
+                    user_results['apply_count'] += 1
+                    has_pending_message = True
+                    user_results['new_notice_items'].append({'user_name': user_name, 
+                                                        'group_name': f'{leader_name}({leader_id})的【授权申请】小班 \n' + self.bcz_group.formatGroupInfo(appliant_sharekey, user_cookie), 
+                                                        'notice': group_notice, 
+                                                        'introduction': group_introduction, 
+                                                            'group_id': group_id, 
+                                                            'unique_id': unique_id,
+                                                            'from_unique_id': leader_id,
+                                                            'group_share_key': appliant_sharekey,
+                                                                'notice_hash': 'auth',
+                                                                'timestamp': latest_timestamp,
+                                                                'memberlist_required': True,
+                                                                'operation': '1同意 2拒绝 3忽略'})
+                
+                elif msg["title"] == "\u62db\u65b0\u6d77\u62a5\u5ba1\u6838\u901a\u8fc7":
+                    try:
+                        poster_id = msg['link'].split('id%3D')[1].split('%26')[0]
+                    except Exception as e:
+                        print(msg['link'])
+                        print(f"出现错误，无法获取海报的id，请更新解析器: {e}")
+                    
+                    content = msg['content']
+                    if content == '你在招新广场发布的内容，已通过审核。':
+                        continue
+                    
+                    poster_data = self.http2_client_obj.send_http2_request('GET', f'https://group.baicizhan.com/group/get_recruitment_post?id={poster_id}', headers=groupHeader, content=None).json()['data']
+                    poster_content = poster_data['content']
+                    group_id = poster_data['groupId']
+                    user_id = poster_data['uniqueId']
+                    
+                    group_data = self.http2_client_obj.send_http2_request('GET', f'https://group.baicizhan.com/group/get_group_info?groupId={group_id}', headers=groupHeader, content=None).json()['data']
+                    group_name = group_data['name']
+                    group_share_key = group_data['shareKey']
 
-                        print(f"发现海报:{poster_id} ({content})")
-                        new_poster_count += 1
-                        has_pending_message = True
-                        self.new_notice.append({'user_name': user_name,
-                                                'group_name': group_name+"的【海报】",
-                                                 'notice': poster_content, 
-                                                 'introduction': content,
-                                                 'group_id': group_id, 
-                                                 'unique_id': unique_id,
-                                                 'from_unique_id': user_id,
-                                                 'group_share_key': group_share_key,
-                                                 'notice_hash': 'poster',
-                                                 'timestamp': latest_timestamp,
-                                                 'operation': '1点赞 2已读'})
-                time.sleep(random.randint(12, 18) / 10)
-            if not has_pending_message:
-                # 没有新的订阅信息，直接写入已读时间点
-                self.last_notify_timestamp[unique_id] = latest_timestamp
-            self.logger.info('开始访问授权分班')
-            subgroup_id, subgroup_timedelta, subgroup_info = self.get_auth_group(user_cookie, unique_id)
-            if subgroup_id == -1:
-                self.logger.info(f'用户 {unique_id} 没有授权分班')
-                continue
+                    print(f"发现海报:{poster_id} ({content})")
+                    user_results['new_poster_count'] += 1
+                    has_pending_message = True
+                    user_results['new_notice_items'].append({'user_name': user_name,
+                                                            'group_name': group_name+"的【海报】",
+                                                             'notice': poster_content, 
+                                                             'introduction': content,
+                                                             'group_id': group_id, 
+                                                             'unique_id': unique_id,
+                                                             'from_unique_id': user_id,
+                                                             'group_share_key': group_share_key,
+                                                             'notice_hash': 'poster',
+                                                             'timestamp': latest_timestamp,
+                                                             'operation': '1点赞 2已读'})
+            
+            time.sleep(random.randint(12, 18) / 10)
+        
+        if not has_pending_message:
+            user_results['last_notify_timestamp'] = {unique_id: latest_timestamp}
+        
+        self.logger.info('开始访问授权分班')
+        subgroup_id, subgroup_timedelta, subgroup_info = self.get_auth_group(user_cookie, unique_id)
+        if subgroup_id != -1:
             subgroup_sharekey = subgroup_info['shareKey']
             self.logger.info(f'最长时间没访问的授权分班 {subgroup_info["name"]}({subgroup_id})，上次访问：{self.bcz_group.humanize_second_ago(subgroup_timedelta//1000)}')
+            
             if subgroup_timedelta // 1000 > self.MIN_SUBGROUP_TIMEDELTA:
-                
                 status, leader_id, leader_name = self.bcz_group.getGroupLeader(subgroup_sharekey, user_cookie)
-                if not status:
-                    self.logger.error(f'用户 {unique_id} 获取该分班的班长失败')
-                    continue
-                self.new_notice.append({'user_name': user_name, 
-                                            'group_name': self.bcz_group.formatGroupInfo(subgroup_info['shareKey'], user_cookie),
-                                            'notice': f'【授权分班管理】最长时间没访问的授权分班 {subgroup_info["name"]}({subgroup_id})，班长{leader_name}({leader_id})，上次访问：{self.bcz_group.humanize_second_ago(subgroup_timedelta//1000)}\n订阅账号信息：请输入操作码2查询\n\n班级公告：{subgroup_info["notice"]}\n\n要访问分班吗？',
-                                            'introduction': subgroup_info['introduction'],
-                                            'group_id': subgroup_id, 
-                                            'unique_id': unique_id,
-                                            'from_unique_id': leader_id,
-                                            'group_share_key': subgroup_info['shareKey'],
-                                            'notice_hash': 'subgroup',
-                                            'timestamp': latest_timestamp,
-                                            'memberlist_required': True,
-                                            'operation': '1点赞班长 2管理账号(加/退/改名/海报/申授) 3结束访问 4稍后访问 -9999解除授权'})
-
-            time.sleep(random.randint(15, 18) / 10)
-        # 将所有授权申请放到最前面
+                if status:
+                    user_results['new_notice_items'].append({'user_name': user_name, 
+                                                        'group_name': self.bcz_group.formatGroupInfo(subgroup_info['shareKey'], user_cookie),
+                                                        'notice': f'【授权分班管理】最长时间没访问的授权分班 {subgroup_info["name"]}({subgroup_id})，班长{leader_name}({leader_id})，上次访问：{self.bcz_group.humanize_second_ago(subgroup_timedelta//1000)}\n订阅账号信息：请输入操作码2查询\n\n班级公告：{subgroup_info["notice"]}\n\n要访问分班吗？',
+                                                        'introduction': subgroup_info['introduction'],
+                                                        'group_id': subgroup_id, 
+                                                        'unique_id': unique_id,
+                                                        'from_unique_id': leader_id,
+                                                        'group_share_key': subgroup_info['shareKey'],
+                                                        'notice_hash': 'subgroup',
+                                                        'timestamp': latest_timestamp,
+                                                        'memberlist_required': True,
+                                                        'operation': '1点赞班长 2管理账号(加/退/改名/海报/申授) 3结束访问 4稍后访问 -9999解除授权'})
+        
+        time.sleep(random.randint(15, 18) / 10)
+        result_queue.put(user_results)
+    
+    def get_subscription(self, users):
+        self.latest_timestamp = int(time.time())
+        self.new_notice.clear()
+        new_notice_count = 0
+        apply_count = 0
+        new_poster_count = 0
+        
+        is_monday = datetime.datetime.now().weekday() == 0
+        
+        if not hasattr(self, 'subscription_lock'):
+            self.subscription_lock = threading.Lock()
+        
+        threads = []
+        result_queue = queue.Queue()
+        
+        for user in users:
+            t = threading.Thread(target=self._process_user_subscription, args=(user, is_monday, result_queue))
+            threads.append(t)
+            t.start()
+        
+        for t in threads:
+            t.join()
+        
+        while not result_queue.empty():
+            result = result_queue.get()
+            if result is None:
+                continue
+            
+            self.new_notice.extend(result['new_notice_items'])
+            new_notice_count += result['new_notice_count']
+            apply_count += result['apply_count']
+            new_poster_count += result['new_poster_count']
+            
+            if result['last_notify_timestamp']:
+                with self.subscription_lock:
+                    self.last_notify_timestamp.update(result['last_notify_timestamp'])
+        
         self.new_notice.sort(key=lambda x: x.get('notice_hash', '') == 'auth', reverse=True)
         self.logger.info(f'发现{new_notice_count}条新的订阅公告，{apply_count}条小班授权申请，{new_poster_count}条新的海报')
 
