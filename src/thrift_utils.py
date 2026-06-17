@@ -1,4 +1,4 @@
-# thrift_utils
+'''thrift_utils，最底层的thrift接口，提供登录、注册、获取用户信息等基础功能'''
 
 # RUN .\generator.bat
 # thrift.exe -gen py d:/dotoro/project/#python/BCZ-Automata/src/thriftAPI
@@ -11,12 +11,12 @@ from thrift.protocol import TCompactProtocol
 # 第一阶段：初始化
 try:
     from src.thriftAPI.ttypes import *
-    from src.thriftAPI import *
+    from src.thriftAPI import advertise_service, assistant_service, bcz_report_service, bcz_system_service, notify_service, report_event_service, resource_api_service, social_service, UnifiedUserService, UserStudyApiService
     from src.get_headers import getHeaders, bcz_info, get_device_str
     from src.http2_client import http2_client
 except:
     from thriftAPI.ttypes import *
-    from thriftAPI import *
+    from thriftAPI import advertise_service, assistant_service, bcz_report_service, bcz_system_service, notify_service, report_event_service, resource_api_service, social_service, UnifiedUserService, UserStudyApiService
     from get_headers import getHeaders, bcz_info, get_device_str
     from http2_client import http2_client
 # import requests
@@ -35,7 +35,7 @@ class user_dict:
     user_cookie_path = "user_cookie.json"
     def __init__(self):
         try:
-            with open(user_dict.user_cookie_path, 'r', encoding='utf-8') as f:
+            with open(self.user_cookie_path, 'r', encoding='utf-8') as f:
                 self.__user_dict_list = json.load(f)
         except:
             print("账号信息为空，请访问/append/添加账号信息！")
@@ -46,20 +46,26 @@ class user_dict:
         self.subscriber_unique_ids = set()
         self.unique_id_index = {}
         # 给用户分配索引（从0开始）
-        for i in range(len(self.__user_dict_list)):
-            self.__user_dict_list[i]['config']['user_index'] = i
-            unique_id = self.__user_dict_list[i]['config']['unique_id']
-            if self.__user_dict_list[i]['config']['arbiter']:
+        for i, user_dict in enumerate(self.__user_dict_list):
+            user_config = user_dict['config']
+            user_config['user_index'] = i
+            unique_id = user_config['unique_id']
+            if user_config['arbiter']:
                 self.arbiter_unique_ids.add(unique_id)
-            if self.__user_dict_list[i]['config'].get('subscribe_notice', 0):
+            if user_config['subscribe_notice']:
                 self.subscriber_unique_ids.add(unique_id)
             self.unique_id_index[unique_id] = i
 
-    def get_index_by_unique_id(self, unique_id:int =0):
-        return self.unique_id_index.get(int(unique_id), 0) # 找不到就返回第一个
+    def get_index_by_unique_id(self, unique_id:int=0):
+        '''根据unique_id获取用户索引'''
+        if unique_id == 0:
+            return 0 # 默认第一个用户
+        return self.unique_id_index.get(int(unique_id), None) # 找不到就返回None
     
     def get_access_token_by_unique_id(self, unique_id:int =0):
         index = self.get_index_by_unique_id(unique_id)
+        if index is None:
+            return None
         return self.__user_dict_list[index]['cookie']['access_token']
     
     def get_except_from_arbiter(self, dakaing_unique_ids: set, cnt, except_unique_id: set, daka_pk_status: dict, include_subscriber=False): # return the dict
@@ -77,9 +83,29 @@ class user_dict:
             if cnt == 0:
                 break
         return results
-            
+    
+    def format_user_strs(self, idx_start: int = 1, unique_ids:list = None):
+        results = []
+        if unique_ids:
+            for uid in unique_ids:
+                user_dict = self.__user_dict_list[self.unique_id_index.get(uid, 0)]
+                user_config = user_dict['config']
+                results.append(f"{idx_start}. {user_config.get('name', '未命名')}({uid}) 铜板{user_config.get('cooper', '未知')} 总班位{user_config.get('group_limit', '未知')} 可用{user_config.get('group_vacant', '未知')} 拥有小班{user_config.get('leader_group_cnt', '未知')}个 已授权{user_config.get('auth_group_cnt', '未知')}个")
+                idx_start += 1
+        return results
+    
+    def get_unique_ids(self, subscribe=True) -> set:
+        '''返回unique_id列表，subscribe=True返回订阅用户，subscribe=False返回所有用户（包括订阅用户）'''
+        if subscribe:
+            return self.subscriber_unique_ids.copy()
+        else:
+            return set(self.unique_id_index.keys())
+
     def get_count(self):
         return len(self.__user_dict_list)
+    
+    def get_user_dict(self, index=0):
+        return self.__user_dict_list[index]
     
     def get_config(self, index=0):
         return self.__user_dict_list[index]['config']
@@ -132,7 +158,7 @@ class user_dict:
         }
         self.__user_dict_list.append(new_user)
         self.modified = True
-        self.close()
+        self.save()
     
     def del_user(self, unique_id):
         for i in range(len(self.__user_dict_list)):
@@ -140,7 +166,7 @@ class user_dict:
                 del self.__user_dict_list[i]
                 self.modified = True
                 break
-        self.close()
+        self.save()
 
 
     def save(self): # 默认不保存退出，需要手动调用save()保存
@@ -149,13 +175,6 @@ class user_dict:
                 json.dump(self.__user_dict_list, f, indent=4, ensure_ascii=False)
             self.modified = False
     
-    def update_book_id(self, unique_id, book_id):
-        _, user = self.find(unique_id)
-        if user:
-            user['config']['book_id'] = book_id
-            self.modified = True
-
-
 
 report_json = [
     {# 0
@@ -923,31 +942,6 @@ class advertise:
         transport.close()
 
         return result
-
-
-    def advertise_get_practice_popup_adv(self, user_cookie, user_config):
-        '''get_practice_popup_adv'''
-        transport = TTransport.TMemoryBuffer()
-        protocol = TCompactProtocol.TCompactProtocol(transport)
-        client = advertise_service.Client(protocol)
-        client.send_get_practice_popup_adv()
-        content = transport.getvalue()
-        time_long = int(time.time() * 1000)
-        headers = getHeaders("$advertise", user_cookie, int(time.time()))
-        url = f'https://{headers["Host"]}/rpc/advertise/get_practice_popup_adv/{time_long}'
-        content = gzip.compress(struct.pack("!i", len(content)) + content)
-        response = self.send_http2_request('POST', url, headers, content)
-        transport.close()
-
-        result = response.content[4:]
-        transport = TTransport.TMemoryBuffer(result)
-        protocol = TCompactProtocol.TCompactProtocol(transport)
-        client = advertise_service.Client(protocol)
-        result = client.recv_get_practice_popup_adv()
-        transport.close()
-
-        return result
-    
 
     def advertise_get_practice_banner_adv(self, user_cookie, user_config):
         '''get_practice_banner_adv'''
@@ -1966,16 +1960,16 @@ if __name__ == '__main__':
     http2_client_obj = http2_client()
 
 
-    unified_user = unified_user(http2_client_obj)
-    result = unified_user.unified_user_update_role_extra(user_cookie, user_config, grade=1, role_up=8)
-    print_thrift_object(result)
-    exit()
+    # unified_user = unified_user(http2_client_obj)
+    # result = unified_user.unified_user_update_role_extra(user_cookie, user_config, grade=1, role_up=8)
+    # print_thrift_object(result)
+    # exit()
     # cold_launch_ = cold_launch(http2_client_obj)
     # cold_launch_.example(user_cookie, user_config)
     # exit()
-    # user_study_ = user_study(http2_client_obj)
-    # result = user_study_.user_study_user_daka_v2(user_cookie, user_config)
-    # print_thrift_object(result)
-    # exit()
+    user_study_ = user_study(http2_client_obj)
+    result = user_study_.user_study_user_basic_info_v2(user_cookie, user_config)
+    print_thrift_object(result)
+    exit()
 
 

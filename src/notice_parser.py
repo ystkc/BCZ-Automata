@@ -42,30 +42,9 @@ class NoticeParser:
     accept_word_path = '../BCZ-Notice-Examiner/assets/accept_words.bin'
     accept_notice_path = '../BCZ-Notice-Examiner/accept_notice.txt'
     bad_notice_path = '../BCZ-Notice-Examiner/bad_notice.txt'
-
-    replace_dict = {
-        '一': '1',
-        '二': '2',
-        '三': '3',
-        '四': '4',
-        '五': '5',
-        '六': '6',
-        '七': '7',
-        '八': '8',
-        '九': '9',
-        '零': '0',
-        '壹': '1',
-        '贰': '2',
-        '叁': '3',
-        '肆': '4',
-        '伍': '5',
-        '陆': '6',
-        '柒': '7',
-        '捌': '8',
-        '玖': '9',
-        '〇': '0'
-    }
-    replace_keys = set(replace_dict.keys())
+    replace_dict_path = '../BCZ-Notice-Examiner/assets/replace_dict.json'
+    replace_dict = {}
+    
     # Chinese Characters: 4E00–9FA5
     # Dingbats: 0x2700-0x27BF
     # Ornamental Dingbats:  1F650–1F67F
@@ -102,6 +81,35 @@ class NoticeParser:
             with open(self.enhanced_bad_word_path, 'rb') as f:
                 bin_data = f.read()
             self.bad_words.extend(json.loads((bin_data)))
+
+        try:
+            self.replace_dict = json.load(open(self.replace_dict_path))
+        except:
+            print('replace_dict.json not found, using default replace_dict')
+            self.replace_dict = {
+                '一': '1',
+                '二': '2',
+                '三': '3',
+                '四': '4',
+                '五': '5',
+                '六': '6',
+                '七': '7',
+                '八': '8',
+                '九': '9',
+                '零': '0',
+                '壹': '1',
+                '贰': '2',
+                '叁': '3',
+                '肆': '4',
+                '伍': '5',
+                '陆': '6',
+                '柒': '7',
+                '捌': '8',
+                '玖': '9',
+                '〇': '0'
+            }
+    
+        self.replace_keys = set(self.replace_dict.keys())
         self.warn_words = []
         self.invalid_storage = {} # {[]}
         self.notice_dict = {}

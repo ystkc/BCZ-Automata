@@ -6,6 +6,11 @@ import requests
 import argparse
 from textwrap import dedent
 from src.config import Config
+from prompt_toolkit.widgets import TextArea
+from prompt_toolkit.application import Application
+from prompt_toolkit.layout import Layout, HSplit
+from prompt_toolkit.key_binding import KeyBindings
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
 config = Config()
 base_url = f"http://{config.host}:{config.port}"
 
@@ -16,7 +21,7 @@ def fetch_data(url):
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
-        print(f"请求失败: {e}")
+        print(f"请求失败: {e} {response.text}")
         return None
 
 def display_squares(dates):
@@ -32,11 +37,11 @@ def display_squares(dates):
     # 每7个换行显示两周数据
     return '\n'.join([' '.join(squares[i:i+7]) for i in range(0, len(squares), 7)])
 
-def display_info(base_url, force_refresh) -> dict:
+def display_info(base_url, force_refresh, force_id) -> dict:
     # 获取用户信息
     url_str = f"{base_url}/subscribe/data"
     if force_refresh:
-        url_str += '?force_refresh=true'
+        url_str += f'?force_refresh=true&force_refresh_only_id={force_id}'
     user_data = fetch_data(url_str)
     if not user_data:
         print("无效的用户数据")
@@ -63,6 +68,8 @@ def display_info(base_url, force_refresh) -> dict:
         return data
 
     # 获取打卡数据
+    if not data.get('memberlist_required', False):
+        return data
     nickname_url = f"{base_url}/subscribe/get_nickname?unique_id={data['unique_id']}&group_share_key={data['group_share_key']}"
     nick_data = fetch_data(nickname_url)
     if not nick_data:
@@ -101,38 +108,80 @@ def send_reply(data, content, operation_code: int):
             timeout=10
         ).json()
         if response['code'] == 200:
-            print("操作成功！"+response['msg'])
+            print("成功 "+response['msg'])
+            input("按任意键继续...")
+        elif response['code'] == 455:
+            print(response['msg'] + " 正在刷新")
+            input("按任意键继续...")
         else:
-            print(f"操作失败: {response['msg']}")
+            print(f"失败 {response['msg']}")
             input("按任意键继续...")
     except Exception as e:
         print(f"请求错误: {e}")
         input("按任意键继续...")
 
+def edit_text(notice) -> str:
+    text_area = TextArea(
+        scrollbar=True,       # 滚动条
+        line_numbers=True,    # 行号
+        wrap_lines=False,     # 不自动换行
+        multiline=True,
+        width=80,
+        height=20,
+        prompt='请编辑内容（Ctrl+C取消、Ctrl+S确认）\n',
+        text=notice
+    )
+
+    kb = KeyBindings()
+    @kb.add('c-s')
+    def cs(event):
+        event.app.exit()
+    
+    @kb.add('c-c')
+    def cc(event):
+        text_area.text = notice
+        event.app.exit()
+
+    
+    app = Application(
+        layout=Layout(HSplit([text_area])),
+        key_bindings=kb,
+        full_screen=True,
+    )
+    app.run()
+    return text_area.text
+    
+
 def main():
     action = ''
     # 否则显示信息并进入交互模式
     force_refresh = False
+    force_id = ''
     while True:
         os.system('cls')
-        data = display_info(base_url, force_refresh)
+        data = display_info(base_url, force_refresh, force_id)
         force_refresh = False
         
         while True:
-            print(f"操作提示: {data['operation']}")
+            print(f"操作提示: {data.get('operation', '')}")
             action = input("\n请输入：\n数字会被识别为操作\nr. 刷新\nfr. 强制刷新\n请选择（数字/r/fr）: ")
-            if action.isdigit():
+            try:
                 code = int(action)
                 reply_content = None
-                if code == data.get('reply_required'):
-                    reply_content = input("请输入回复内容: ")
+                if code == data.get('reply_required') or code in range(data.get('reply_required_min', -2147483647), data.get('reply_required_max', -2147483647) +1):
+                    if data.get('textarea_required'):
+                        reply_content = edit_text(data['notice'])
+                    else:
+                        reply_content = input("请输入回复内容: ")
                 send_reply(data, reply_content, int(code))
                 break
-            elif action == 'r':
-                break
-            elif action == 'fr':
-                force_refresh = True
-                break
+            except:
+                if action == 'r':
+                    break
+                elif action == 'fr':
+                    force_id = input('请输入强制刷新ID（-1表示所有）:')
+                    force_refresh = True
+                    break
                 
 
 if __name__ == "__main__":

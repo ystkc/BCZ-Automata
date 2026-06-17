@@ -1,5 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager
+import os
 import json
 import sys
 import time
@@ -22,22 +23,23 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import uvicorn
 import requests
-import os
 import hashlib
 import random
 import datetime
 import traceback
 import threading
 
-from src import bcz
+from src.http2_client import http2_client
+from src.thrift_utils import user_dict
+from append import append_user_data, delete_user_data
 from src.config import Config
+from src import bcz
+from src.bcz_group_utils import bczGroup
+from src.schedule import Schedule
 import src.daka_utils as daka_utils
 from src.daka_utils import daka_list_class, notice_subscriber
 from src.daka_utils import getHeaders, daka_all_headless, stargazer_class, send_content
-from src.http2_client import http2_client
-from append import append_user_data, delete_user_data
 
-from src.schedule import Schedule
 
 logging.basicConfig(
     format='%(asctime)s [%(name)s][%(levelname)s] %(message)s',
@@ -49,7 +51,9 @@ logger = logging.getLogger('BCZ-Automata')
 logger.setLevel(level)
 
 http2_client_obj = http2_client()
-daka_list_obj = daka_list_class(logger, http2_client_obj, config)
+user_dict_obj = user_dict()
+bcz_group = bczGroup(http2_client_obj, user_dict_obj, config)
+daka_list_obj = daka_list_class(logger, http2_client_obj, user_dict_obj, config, bcz_group)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
@@ -77,7 +81,7 @@ async def favicon(_: Request):
 
 templates = Jinja2Templates(directory="templates")
 
-notice_subscriber_obj = notice_subscriber(logger, http2_client_obj, config)
+notice_subscriber_obj = notice_subscriber(logger, http2_client_obj, config, bcz_group)
 connected_clients = []
 # 抽象行为：=[WebSocket] (相当于在里面插入一个抽象基类！笨蛋)
 user_messages = queue.Queue()
@@ -241,14 +245,11 @@ async def accounts(request: Request):
 async def get_monitor_classes(_: Request, uid: int):
     '''获取该班长的班级'''
     try:
-        # https://group.baicizhan.com/group/own_groups?uniqueId=
-        headers = getHeaders('$group', daka_list_obj.get_user_dict(0)['cookie'], int(time.time() * 1000), index = 1)
-        response_json = http2_client_obj.send_http2_request('GET', f'https://group.baicizhan.com/group/own_groups?uniqueId={uid}', headers, None).json()
-        monitor_groups = []
+        user_dict_first = daka_list_obj.get_user_dict(0)
+        status, monitor_groups = daka_list_obj.bcz_group.ownGroups(user_dict_first)
         recorded_ids = set()
-        if response_json['code'] == 1:
-            groupsInfo = response_json['data']['list']
-            for group in groupsInfo:
+        if status:
+            for group in monitor_groups:
                 if group['leader']:
                     monitor_groups.append(group)
                     recorded_ids.add(group['id'])
@@ -288,8 +289,11 @@ async def reply_and_ack(_: Request, item: dict):
         return restful(400, '调用方法异常Σ(っ °Д °;)っ')
     user_dict = daka_list_obj.get_user_dict(unique_id)
     try:
-        result_str, _ = notice_subscriber_obj.reply_and_ack(unique_id, user_dict, group_share_key, content)
-        return restful(200, result_str)
+        status, result_str = notice_subscriber_obj.reply_and_ack(unique_id, user_dict['cookie'], group_share_key, content)
+        if status == 1:
+            return restful(200, result_str)
+        else:
+            return restful(400, result_str)
     except Exception as e:
         return restful(400, f'{e}')
 
@@ -304,14 +308,11 @@ async def quit_group(_: Request, item: dict):
             return restful(400, '调用方法异常Σ(っ °Д °;)っ')
         user_dict = daka_list_obj.get_user_dict(unique_id)
         
-        time_long = int(time.time() * 1000)
-        headers = getHeaders('$group', user_dict['cookie'], time_long, index = 1)
-        headers['Content-Type'] = 'application/json; charset=UTF-8'
-        response_json = http2_client_obj.send_http2_request('POST', f'https://group.baicizhan.com/group/quit?shareKey={group_share_key}', headers=headers, content={}).json()
-        if response_json['code'] == 1:
+        success, response_json = bcz_group.groupQuit(user_dict, group_share_key)
+        if success:
             return restful(200, '退出群组成功')
         else:
-            return restful(400, f'退出群组失败{response_json["message"]}')
+            return restful(400, f'退出群组失败{response_json}')
         
     except Exception as e:
         return restful(400, f'{e}')
@@ -327,27 +328,10 @@ async def join_group(_: Request, item: dict):
             print(unique_id, group_share_key, group_invite_key)
             return restful(400, '调用方法异常Σ(っ °Д °;)っ')
         user_dict = daka_list_obj.get_user_dict(unique_id)
-        time_long = int(time.time() * 1000)
-        headers = getHeaders('$group', user_dict['cookie'], time_long, index = 1)
-        headers['Content-Type'] = 'application/json; charset=UTF-8'
-        if group_share_key != '':
-            payload = {
-                'shareKey': group_share_key,
-                'source': 3
-            }
-            response_json = http2_client_obj.send_http2_request('POST', 'https://group.baicizhan.com/group/join', headers=headers, content=payload).json()
-            if response_json['code'] == 1:
-                return restful(200, '加入群组成功')
-            return restful(400, f'加入群组失败{response_json["message"]}')
-        else:
-            payload = {
-                'inviteKey': group_invite_key,
-                'source': 0
-            }
-            response_json = http2_client_obj.send_http2_request('POST', 'https://group.baicizhan.com/group/join', content=(payload), headers=headers).json()
-            if response_json['code'] == 1:
-                return restful(200, '加入群组成功')
-            return restful(400, f'加入群组失败{response_json["message"]}')
+        success, response_json = bcz_group.groupJoin(user_dict, group_share_key, group_invite_key)
+        if success:
+            return restful(200, '加入群组成功')
+        return restful(400, f'加入群组失败{response_json}')
     except Exception as e:
         return restful(400, f'{e}')
 
@@ -577,6 +561,8 @@ async def subscribe(request: Request):
 async def subscribe_data(_: Request, force_refresh: bool=False, force_refresh_only_id: int=0):
     '''返回订阅公告和通知的账号的信息'''
     top_notice = notice_subscriber_obj.get_top_notice(daka_list_obj, force_refresh, force_refresh_only_id=force_refresh_only_id)
+    if top_notice is None:
+        return restful(400, '只能获取账号库中的账号的订阅信息')
     top_notice['introduction'] = top_notice['introduction'].replace('\n', '<br>') if top_notice['introduction'] else ''
     top_notice['notice'] = top_notice['notice'].replace('\n', '<br>') if top_notice['notice'] else ''
     return restful(200, '获取公告成功', top_notice)
@@ -628,13 +614,11 @@ async def own_groups(_: Request, unique_id: str=''):
         if not unique_id:
             return restful(400, '调用方法异常Σ(っ °Д °;)っ')
         user_dict = daka_list_obj.get_user_dict(unique_id)
-        time_long = int(time.time() * 1000)
-        headers=getHeaders('$group', user_dict['cookie'], time_long, index = 1)
-        response = await http2_client_obj.asyncFetch('https://group.baicizhan.com/group/own_groups?uniqueId=0', 'GET', headers=headers, payload=None) # 我的小班
-        response_json = response.json()
-
-        ownGroups = []
-        for group in response_json['data']['list']:
+        status, groups = bcz_group.ownGroups(user_dict)
+        if not status:
+            return restful(400, '获取用户群组失败', groups)
+        groups_final = []
+        for group in groups:
             
             # 要将introduction和notice中的换行符替换成<br>
             if group['introduction'] is None:
@@ -648,7 +632,7 @@ async def own_groups(_: Request, unique_id: str=''):
                 group['notice'] = group['notice'].replace('\n\n\n', '\n')
             introduction = group['introduction'].replace('\n', '<br>')
             noticeInfo = group['notice'].replace('\n', '<br>')
-            ownGroups.append({
+            groups_final.append({
                 'name': f"{group['name']}<br>(加入{group['joinDays']}天)",
                 'share_key': group['shareKey'],
                 'group_id': group['id'],
@@ -683,7 +667,7 @@ async def own_groups(_: Request, unique_id: str=''):
         cooper = user_dict['config'].get('cooper', -1)
         daka_list_obj.update_user_dict(user_dict)
         unique_id = user_dict['config']['unique_id']
-        ownGroups.append({
+        groups_final.append({
             'name': f'<img src="{result.user_info.avatar}" style="width: 30px; height: 30px;" onclick="changeAvatar({unique_id})"/><br>({result.user_info.nickname})<br>年级{data["grade"]}书本{user_dict["config"]["book_id"]}(新学{result.learn_info.daily_plan_count}复习{result.learn_info.review_plan_count})/{user_ip_desc}',
             'share_key': '',
             'rank': f'{today_daka}于{date}<br>+<span class="cooper">{cooper}</span>',
@@ -692,95 +676,9 @@ async def own_groups(_: Request, unique_id: str=''):
             'group_nickname': ''
         })
 
-        return restful(200, '获取用户群组成功', ownGroups)
+        return restful(200, '获取用户群组成功', groups_final)
     except Exception:
         return restful(400, traceback.format_exc())
-
-
-async def get_nickname(main_token, unique_id, group_share_key, user_dict):
-    '''返回班内昵称和打卡情况
-    my_reply: str
-    group_nickname[unique_id]: {
-    "group_nickname": "xxx",
-    "nickname": "xxx",
-    "avatar": "xxx",
-    "two_week_daka_dates": [-2, -2, -2, -2, -2, -2, -2, 1, 1, 0, 0, 1, -1, -1],
-    "completed_times": 3,
-    "duration_days": 5,
-    }'''
-    last_monday = datetime.datetime.now() - datetime.timedelta(days=datetime.datetime.now().weekday() + 7)
-    # 1.从https://group.baicizhan.com/group/get_week_rank?shareKey=xxx&week=1/2获取班内昵称，1本周
-    time_long = int(time.time() * 1000)
-    headers = getHeaders('$group', user_dict['cookie'], time_long, index = 1)
-    # rank = requests.get(f'https://group.baicizhan.com/group/get_week_rank?shareKey={group_share_key}&week=1', headers=headers)
-    rank = await http2_client_obj.asyncFetch(f'https://group.baicizhan.com/group/get_week_rank?shareKey={group_share_key}&week=1', 'GET', headers=headers, payload=None)
-    # last_week_rank = requests.get(f'https://group.baicizhan.com/group/get_week_rank?shareKey={group_share_key}&week=2', headers=headers)
-    last_week_rank = await http2_client_obj.asyncFetch(f'https://group.baicizhan.com/group/get_week_rank?shareKey={group_share_key}&week=2', 'GET', headers=headers, payload=None)
-    member_list = rank.json()['data']['list']
-    last_week_member_list = last_week_rank.json()['data']['list']
-    group_nickname = {}
-    my_reply = ""
-    monitor_reply = ""
-    wd = datetime.datetime.now().weekday()
-    for member in member_list:
-        unique_id = member['uniqueId']
-        nickname = member['nickname']
-        duration_days = member['durationDays']
-        week_daka_dates = member['weekDakaDates']
-        if member['leader'] == 1:
-            monitor_reply = nickname
-        if unique_id == user_dict['config']['unique_id']:
-            my_reply = nickname
-        # two_week_daka_dates是14个0、1，表示两周内每天的打卡情况
-        two_week_daka_dates = [0] * 14
-        # 如果duration_days不够两周，后面的标记-2
-        if duration_days < 8 + wd:
-            for i in range(8 + wd - duration_days):
-                two_week_daka_dates[i] = -2
-        # 将本周未到达的日期设置为-1
-        for i in range(6-wd):
-            two_week_daka_dates[-1-i] = -1
-        for date in week_daka_dates:
-            # 计算距离上周一的天数
-            delta = (datetime.datetime.strptime(date, '%Y-%m-%d') - last_monday).days + 1
-            two_week_daka_dates[delta] = 1
-
-        group_nickname[unique_id] = {
-            "group_nickname": nickname,
-            "two_week_daka_dates": two_week_daka_dates
-        }
-
-    # 2.再获取默认昵称https://group.baicizhan.com/group/information?shareKey=xxx
-    main_cookie = user_dict['cookie'].copy()
-    main_cookie['access_token'] = main_token
-    headers = getHeaders('$group', main_cookie, time_long, index = 1)
-    response = await http2_client_obj.asyncFetch(f'https://group.baicizhan.com/group/information?shareKey={group_share_key}', 'GET', headers=headers, payload=None)
-    response_json = response.json()
-    group_member_list = response_json['data']['members']
-    # 遍历，如果有人的async default_nickname和昵称相同，则是没改过昵称。
-    for member in group_member_list:
-        unique_id = member['uniqueId']
-        if unique_id in group_nickname:
-            if group_nickname[unique_id]['group_nickname'] == member['nickname']:
-                del group_nickname[unique_id]
-            else:
-                group_nickname[unique_id]['nickname'] = member['nickname']
-                group_nickname[unique_id]['avatar'] = member['avatar']
-                group_nickname[unique_id]['completed_times'] = member['completedTimes']
-                group_nickname[unique_id]['duration_days'] = member['durationDays']
-
-
-    # 3.补全上周打卡情况
-    for member in last_week_member_list:
-        unique_id = member['uniqueId']
-        if unique_id in group_nickname:
-            last_week_daka_dates = member['weekDakaDates']
-            two_week_daka_dates = group_nickname[unique_id]['two_week_daka_dates']
-            for date in last_week_daka_dates:
-                # 计算距离上周一的天数
-                delta = (datetime.datetime.strptime(date, '%Y-%m-%d') - last_monday).days + 1
-                two_week_daka_dates[delta] = 1
-    return my_reply, monitor_reply, group_nickname
 
 @app.get('/subscribe/get_nickname')
 @app.get('/api/get_nickname')
@@ -788,7 +686,7 @@ async def get_nickname_(_: Request, unique_id: str='', group_share_key: str=''):
     '''（改公告时）获取班内改昵称的列表'''
     try:
         user_dict = daka_list_obj.get_user_dict(unique_id)
-        my_reply, monitor_reply, group_nickname = await get_nickname(config.main_token, unique_id, group_share_key, user_dict)
+        my_reply, monitor_reply, group_nickname = bcz_group.get_nickname(unique_id, group_share_key, user_dict)
         return restful(200, '获取班内改昵称的列表成功', {'my_reply': my_reply, 'monitor_reply': monitor_reply, 'group_nickname': group_nickname})
     except Exception as e:
         traceback.print_exc()
@@ -800,26 +698,25 @@ async def get_roll(_: Request, days: int=0, unique_id: str='', group_share_key: 
     try:
         user_dict = daka_list_obj.get_user_dict(unique_id)
         # 获取班内主页
-        time_long = int(time.time() * 1000)
-        headers = getHeaders('$group', user_dict['cookie'], time_long, index = 1)
-        response = await http2_client_obj.asyncFetch(f'https://group.baicizhan.com/group/information?shareKey={group_share_key}', 'GET', headers=headers, payload=None)
-        response_json = response.json()
+        success, response_data = bcz_group.getGroupInfo(group_share_key, user_dict['cookie'])
+        if not success:
+            return restful(400, f'获取班内主页失败{response_data}')
 
         # 用主令牌再获取一次
         main_cookie = user_dict['cookie'].copy()
         main_cookie['access_token'] = config.main_token
-        headers = getHeaders('$group', main_cookie, time_long, index = 1)
-        response_main = await http2_client_obj.asyncFetch(f'https://group.baicizhan.com/group/information?shareKey={group_share_key}', 'GET', headers=headers, payload=None)
-        response_main_json = response_main.json()
+        success, response_main_data = bcz_group.getGroupInfo(group_share_key, main_cookie)
+        if not success:
+            return restful(400, f'获取班内主页失败{response_main_data}')
         
         # 建立用户id到昵称的表
-        main_group_member_list = response_main_json['data']['members']
+        main_group_member_list = response_main_data['members']
         user_id_to_nickname = {}
         for member in main_group_member_list:
             user_id_to_nickname[member['uniqueId']] = member['nickname']
 
         # 建立排行榜
-        group_member_list = response_json['data']['members']
+        group_member_list = response_data['members']
         roll = []
         maxDays = 0
         for member in group_member_list:
@@ -837,14 +734,8 @@ async def apply_auth(_: Request, groupId: int, licensorUniqueId: str='', unique_
     '''申请授权'''
     try:
         user_dict = daka_list_obj.get_user_dict(unique_id)
-        # https://group.baicizhan.com/group/apply_authorization
-        time_long = int(time.time() * 1000)
-        headers = getHeaders('$group', user_dict['cookie'], time_long, index = 1)
-        headers['Content-Type'] = 'application/json; charset=UTF-8'
-        response = await http2_client_obj.asyncFetch(f'https://group.baicizhan.com/group/apply_authorization', 'POST', headers=headers, payload={'groupId': int(groupId), 'licensorUniqueId': int(licensorUniqueId), 'type': 1})
-        response_json = response.json()
-        print(response_json)
-        if response_json['code'] == 1:
+        success, response_json = bcz_group.authApply(user_dict['cookie'], groupId, int(licensorUniqueId))
+        if success:
             return restful(200, '申请授权成功，请前往/subscribe扫描通过申请')
         return restful(400, f'申请授权失败{response_json["message"]}')
     except Exception as e:
@@ -856,15 +747,10 @@ async def cancel_auth(_: Request, groupShareKey: str, unique_id: str=''):
     # https://group.baicizhan.com/group/authorization_handle
     try:
         user_dict = daka_list_obj.get_user_dict(unique_id)
-        time_long = int(time.time() * 1000)
-        headers = getHeaders('$group', user_dict['cookie'], time_long, index = 1)
-        headers['Content-Type'] = 'application/json; charset=UTF-8'
-        response = await http2_client_obj.asyncFetch(f'https://group.baicizhan.com/group/authorization_handle', 'POST', headers=headers, payload={'shareKey': groupShareKey, 'type': 3})
-        response_json = response.json()
-        print(response_json)
-        if response_json['code'] == 1:
+        success, response_json = bcz_group.authHandle(user_dict, groupShareKey, 3)
+        if success:
             return restful(200, '解除授权成功')
-        return restful(400, f'解除授权失败{response_json["message"]}')
+        return restful(400, f'解除授权失败{response_json}')
     except Exception as e:
         return restful(400, f'{e}')
 
@@ -913,14 +799,10 @@ async def more_groups(_: Request, item):
         if not unique_id:
             return restful(400, '调用方法异常Σ(っ °Д °;)っ')
         user_dict = daka_list_obj.get_user_dict(unique_id)
-        time_long = int(time.time() * 1000)
-        headers = getHeaders('$group', user_dict['cookie'], time_long, index = 1)
-        headers['Content-Type'] = 'application/json; charset=UTF-8'
-        response = http2_client_obj.send_http2_request('POST', 'https://group.baicizhan.com/group/add_group_limit_num', headers=headers, content={})
-        response_json = response.json()
-        if response_json['code'] == 1:
+        success, response_json = bcz_group.increaseGroupLimit(user_dict)
+        if success:
             return restful(200, '开班位成功')
-        return restful(400, f'开班位失败{response_json["message"]}')
+        return restful(400, f'开班位失败{response_json}')
     except Exception as e:
         return restful(400, f'{e}')
 

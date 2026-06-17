@@ -6,9 +6,7 @@ import time
 import certifi
 import httpx
 import importlib
-winreg_exists = importlib.find_loader('winreg')
-if winreg_exists:
-    import winreg
+import winreg
 
 
 FULL_ASYNC = False
@@ -44,9 +42,6 @@ class http2_client:
         
     def set_proxy(self, enable=True, proxy_server="http://127.0.0.1:8080"):
         '''因为某人总是忘记取消代理，服务器环境一般不需要的'''
-        if not winreg_exists:
-            print("winreg module not found, proxy setting ignored")
-            return
         if enable:
             print("Setting proxy to:", proxy_server)
         else:

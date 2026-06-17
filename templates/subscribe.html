@@ -11,7 +11,7 @@
 }
 .item {
     display: grid;
-    grid-template-columns: 200px auto; /* 设置nickname的宽度为200px，squares自动调整 */
+    grid-template-columns: 250px auto; /* 设置nickname的宽度为250px，squares自动调整 */
     grid-gap: 10px;
     margin-bottom: 10px;
 }
@@ -49,7 +49,7 @@
 }
 </style>
 <body>
-班长<span id="user_name"></span>(<span id="unique_id"></span>)的组 <span id="group_name"></span>[<span id="group_share_key"></span>](<span id="group_id"></span>)<br>
+用户<span id="user_name"></span>(<span id="unique_id"></span>)的组 <span id="group_name"></span>[<span id="group_share_key"></span>](<span id="group_id"></span>)<br>
 (来自<span id="from_unique_id"></span>)
 介绍：<span id="introduction"></span><br>
 剩余<span id="remain_count"></span>订阅<br><br>
@@ -58,10 +58,7 @@
 <div id="reply-container"></div>
 <div id="operations"></div>
 
-<div style="display: none;">
-    <span id="latest_timestamp"></span>
-    <span id="reply_required"></span>
-</div>
+<textarea style="display: none;width:760px;height:270px" id="reply_content"></textarea>
 <button onclick="reply()">操作(Space)</button>
 <button onclick="window.location.reload()">刷新页面</button>
 <button onclick="reload_id()">刷新指定ID</button>
@@ -74,7 +71,7 @@
 //         {nickname: "李四", group_nickname:"2", completed_times: 3, duration_days: 7, two_week_daka_dates: [1, 1, -2, 0, 0, 0, 1,1, 0, 1, -1, 0, 1, 0]}
 //     ]
 // };
-let currentHash = '';
+let memberData = '';
 function reload_id() {
     let unique_id = prompt("请输入要刷新的ID:");
     if (unique_id == null || unique_id == "")
@@ -93,12 +90,13 @@ function createSquare(value) {
     }
     return `<div class="${className}"></div>`;
 }
-function displayData(data) {
+function displayData(initData) {
     const container = document.getElementById('data-container');
+    container.innerHTML = '';
 
-    data = data.data;
-    for (var i in data.group_nickname) {
-        const item = data.group_nickname[i];
+    memberData = initData.data;
+    for (var i in memberData.group_nickname) {
+        const item = memberData.group_nickname[i];
         let squaresHtml = '';
         item.two_week_daka_dates.forEach((date, index) => {
             squaresHtml += createSquare(date);
@@ -111,8 +109,8 @@ function displayData(data) {
             </div>
         `;
     };
-    document.querySelector("#reply-container").innerHTML = `<div class="my-reply">我的回复：${data.my_reply}</div><br>
-    <div class="monitor-reply">组长回复：${data.monitor_reply}</div>`;
+    document.querySelector("#reply-container").innerHTML = `<div class="my-reply">我的回复：${memberData.my_reply}</div><br>
+    <div class="monitor-reply">组长回复：${memberData.monitor_reply}</div>`;
 }
 function load_data(force_refresh=false, force_refresh_only_id=-1) {
     if (force_refresh) {
@@ -123,8 +121,12 @@ function load_data(force_refresh=false, force_refresh_only_id=-1) {
     .then(function(response) {
         return response.json();
     })
-   .then(function(data) {
-        data = data.data;
+   .then(function(initData) {
+        if (initData.code != 200) {
+            alert(initData.msg);
+            return;
+        }
+        data = initData.data;
         document.getElementById("user_name").innerHTML = data.user_name;
         document.getElementById("unique_id").innerHTML = data.unique_id;
         document.getElementById("from_unique_id").innerHTML = data.from_unique_id;
@@ -133,9 +135,6 @@ function load_data(force_refresh=false, force_refresh_only_id=-1) {
         document.getElementById("introduction").innerHTML = data.introduction;
         document.getElementById("notice").innerHTML = data.notice;
         document.getElementById("notice_hash").innerHTML = data.notice_hash;
-        document.getElementById("latest_timestamp").innerHTML = data.timestamp || 0;
-        document.getElementById("reply_required").innerHTML = data.reply_required || -1;
-        currentHash = data.notice_hash;
         document.getElementById("operations").innerHTML = data.operation;
         if (data.notice_hash == 'auth') {
             alert("发现了新的授权请求！ʕ⊙ᴥ⊙ʔ");
@@ -144,12 +143,14 @@ function load_data(force_refresh=false, force_refresh_only_id=-1) {
         document.getElementById("remain_count").innerHTML = data.remain_count;
         if (data.unique_id == -1)
             return;
+        if (!data.memberlist_required)
+            return;
         fetch(window.location.href + "/get_nickname?unique_id=" + data.unique_id + "&group_share_key=" + data.group_share_key)
         .then(function(response) {
             return response.json();
         })
-        .then(function(data) {
-            displayData(data);
+        .then(function(initData) {
+            displayData(initData);
         });
     });
 }
@@ -165,16 +166,29 @@ function reply() {
 let operationCode = prompt("请输入操作码:");
 if (operationCode == null || operationCode == "")
     return;
-reply_required = document.getElementById("reply_required").innerHTML;
+reply_required = data.reply_required;
 let content = null;
-if (operationCode == reply_required)
-    content = prompt("请输入回复内容(留空=只收到不回复/不附加文本，其他场景无需填写):");
-user_id = document.getElementById("unique_id").innerHTML;
-from_unique_id = document.getElementById("from_unique_id").innerHTML;
-class_id = document.getElementById("group_id").innerHTML;
-group_share_key = document.getElementById("group_share_key").innerHTML;
-notice_hash = document.getElementById("notice_hash").innerHTML;
-latest_timestamp = document.getElementById("latest_timestamp").innerHTML;
+if (operationCode == reply_required || (operationCode > (data.reply_required_min || -2147483647) && operationCode <= (data.reply_required_max || -2147483647))) {
+    if (data.textarea_required) {
+        const reply_content = document.getElementById("reply_content");
+        if (reply_content.style.display == "none") {
+            reply_content.style.display = "block";
+            reply_content.textContent = data.notice.replaceAll("<br>", "\n");
+            alert("请在文本框中修改要提交的内容，修改完毕后再操作一次");
+            return;
+        } else {
+            reply_content.style.display = "none";
+            content = reply_content.value;
+        }
+    }
+    else content = prompt("请输入回复内容");
+}
+user_id = data.unique_id;
+from_unique_id = data.from_unique_id || 0;
+class_id = data.group_id;
+group_share_key = data.group_share_key;
+notice_hash = data.notice_hash;
+latest_timestamp = data.timestamp || 0;
 
 content = {reply_content: content, code: operationCode};
 url = window.location.href + "/reply?unique_id=" + user_id + "&from_unique_id=" + from_unique_id + "&group_id=" + class_id + "&notice_hash=" + notice_hash + "&group_share_key=" + group_share_key + "&operation_code=" + operationCode + "&latest_timestamp=" + latest_timestamp;
@@ -185,12 +199,17 @@ fetch(encodeURI(url), {
     },
     body: JSON.stringify(content)
 }).then(response => response.json())
-.then(data => {
-    if (data.code == 200) {
-        alert("成功"+data.msg);
+.then(respData => {
+    console.log(respData);
+    if (respData.code == 200) {
+        alert("成功 "+respData.msg);
+        location.reload();
+    } else if (respData.code == 455) {
+        alert(respData.msg + " 正在刷新");
         location.reload();
     } else {
-        alert("失败"+data.msg);
+        alert("失败 "+respData.msg);
+        location.reload();
     }
 });
 }

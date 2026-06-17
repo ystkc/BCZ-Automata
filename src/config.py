@@ -53,6 +53,8 @@ class Config:
         self.host = self.raw.get('host', '127.0.0.1')
         self.port = self.raw.get('port', 8850)
         self.main_token = self.raw.get('main_token', '')
+        if not self.main_token:
+            raise Exception('请在config.json中设置main_token，最好不要加入任何小班，可用试用账号令牌')
         self.database_path = self.raw.get('database_path', '../BCZ-Notice-Examiner/bcz_notice.db')
         self.notice_backup_db_dir = self.raw.get('notice_backup_db_dir', '../BCZ-Notice-Examiner/notice_backup')
         self.local = self.raw.get('local', False)

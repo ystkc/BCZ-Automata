@@ -1,3 +1,4 @@
+'''bcz_thrift相关接口，相比thrift_util更上层'''
 import re
 import gzip
 import time
@@ -9,6 +10,9 @@ import httpx
 import random
 from thrift.transport import TTransport
 from thrift.protocol import TCompactProtocol
+
+from src.http2_client import http2_client
+from src.thrift_utils import unified_user
 try:
     from src.thrift_utils import print_thrift_object
     from src.thriftAPI.ttypes import UserSelectedBookInfo, select_book_args, update_done_data_args, login_with_phone_args, send_sms_verify_code_args, bcz_login_args, BczLoginRequest
@@ -512,6 +516,11 @@ def getRandomWordIDInBook(db_path: str, book_id: int, count: int, word_learnt: l
     words = [i[0] for i in result]
     return words
     
+    
+def changeRoleUp(user_cookie, user_config, target_role_up, http2_client_obj: http2_client = None):
+    '''为用户改变年级（以便在不同区使用招新卡）'''
+    unified_user_obj = unified_user(http2_client_obj)
+    return unified_user_obj.unified_user_update_role_extra(user_cookie, user_config, 1, target_role_up)
 
 if __name__ == "__main__":
     ...
