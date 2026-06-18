@@ -6,10 +6,11 @@ import requests
 import argparse
 from textwrap import dedent
 from src.config import Config
-from prompt_toolkit.widgets import TextArea
+from prompt_toolkit.widgets import TextArea, Label
 from prompt_toolkit.application import Application
 from prompt_toolkit.layout import Layout, HSplit
 from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.layout.dimension import D
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 config = Config()
 base_url = f"http://{config.host}:{config.port}"
@@ -124,13 +125,23 @@ def edit_text(notice) -> str:
     text_area = TextArea(
         scrollbar=True,       # 滚动条
         line_numbers=True,    # 行号
-        wrap_lines=False,     # 不自动换行
+        wrap_lines=True,     # 自动换行
         multiline=True,
         width=80,
-        height=20,
-        prompt='请编辑内容（Ctrl+C取消、Ctrl+S确认）\n',
-        text=notice
+        height=D(preferred=20),
+        prompt='',
+        text=notice,
     )
+
+    # 创建字符计数器标签
+    char_count_label = Label(
+        text=f' 当前字符数: {len(notice)}  上限150  Ctrl+C取消并退出  Ctrl+S确认并退出',
+        style='bg:blue fg:white',
+    )
+
+    # 定义文本变化回调函数
+    def update_char_count(event):
+        char_count_label.text = f' 当前字符数: {len(text_area.text)}  上限150  Ctrl+C取消并退出  Ctrl+S确认并退出'
 
     kb = KeyBindings()
     @kb.add('c-s')
@@ -140,11 +151,15 @@ def edit_text(notice) -> str:
     @kb.add('c-c')
     def cc(event):
         text_area.text = notice
+        update_char_count(None)
         event.app.exit()
+
+    # 绑定文本变化事件
+    text_area.buffer.on_text_changed += update_char_count
 
     
     app = Application(
-        layout=Layout(HSplit([text_area])),
+        layout=Layout(HSplit([text_area, char_count_label])),
         key_bindings=kb,
         full_screen=True,
     )
@@ -175,7 +190,7 @@ def main():
                         reply_content = input("请输入回复内容: ")
                 send_reply(data, reply_content, int(code))
                 break
-            except:
+            except ValueError:
                 if action == 'r':
                     break
                 elif action == 'fr':

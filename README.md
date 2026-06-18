@@ -162,7 +162,7 @@ Templates 目录包含前端页面模板，用于 Web 界面展示：
 | **`main_token`** | `''` | 主账号令牌，可用试用账号令牌（必填） |
 | **`database_path`** | `../BCZ-Notice-Examiner/bcz_notice.db` | archiever 储存库，含公告、用户、班级、连胜信息 |
 | **`archiever_enable`** | `False` | archiever 开关，开启时每天固定时间爬取信息并储存 |
-| **`class_list_2048`** | - | 如果要 archiever 额外爬取不在榜上的小班，可以加入此处。不受 archiever 开关控制 |
+| **`class_list_2048`** | - | 如果要 archiever 额外爬取不在榜上的小班，可以将sharekey加入此处。不受 archiever 开关控制 |
 | **`dict_patch_db_path`** | `./lookup_patch.db` | PK 补丁包，记录做过的题，减少查询和错误 |
 | **`puzzle_path`** | `./puzzle.db` | YZDD 记录表 |
 | **`local`** | `False` | 本地模式。开启时会每天固定时间执行同步、阻止休眠、允许休眠和关机命令 |

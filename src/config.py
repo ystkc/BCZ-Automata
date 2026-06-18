@@ -11,7 +11,8 @@ logger = logging.getLogger(__name__)
 class Config:
     def __init__(self) -> None:
         '''配置类'''
-        self.config_file = f'config.json'
+        self.config_file = 'config.json'
+        self.generated_config_file = 'generated.json'
         self.default_config_dict = {
             'host': '127.0.0.1',
             'port': 8850,
@@ -50,6 +51,9 @@ class Config:
             'whitelist_users': [],
             'base_group': 0
         }
+        self.default_generated_config_dict = {
+            'subscribe_class_list': []
+        }
         self.initConfig()
         self.raw = self.read()
         self.host = self.raw.get('host', '127.0.0.1')
@@ -72,7 +76,6 @@ class Config:
         self.dict_patch_db_path = self.raw.get('dict_patch_db_path', 'lookup_patch.db')
         self.archiever_enable = self.raw.get('archiever_enable', False)
         self.class_list_2048 = self.raw.get('class_list_2048', [])
-        self.class_list_2048_sharekey_source = self.raw.get('class_list_2048_sharekey_source', 'http://127.0.0.1:8840')
         self.pk_blacklist = self.raw.get('pk_blacklist', [])
         self.pk_whitelist = self.raw.get('pk_whitelist', [])
         self.stargazer_enable = self.raw.get('stargazer_enable', True)
@@ -90,6 +93,8 @@ class Config:
         self.whitelist_groups = self.raw.get('whitelist_groups', [])
         self.whitelist_users = self.raw.get('whitelist_users', [])
         self.base_group = self.raw.get('base_group', 0)
+        # generated
+        self.subscribe_class_list = self.raw.get('subscribe_class_list', [])
         self.verify()
 
     def initConfig(self):
@@ -98,8 +103,10 @@ class Config:
             if path := os.path.dirname(self.config_file):
                 os.makedirs(path, exist_ok=True)
             open(self.config_file, encoding='utf-8')
+            open(self.generated_config_file, encoding='utf-8')
         except:
             json.dump(self.default_config_dict, open(self.config_file, mode='w', encoding='utf-8'), ensure_ascii=False, indent=2)
+            json.dump(self.default_generated_config_dict, open(self.generated_config_file, mode='w', encoding='utf-8'), ensure_ascii=False, indent=2)
             logger.info('初次启动，已在当前执行目录生成配置文件，请修改配置后再次启动，程序会在5秒后自动退出')
             time.sleep(5)
             sys.exit(0)
@@ -108,6 +115,7 @@ class Config:
         '''获取指定配置'''
         try:
             json_data = json.load(open(self.config_file, encoding='utf-8'))
+            json_data.update(json.load(open(self.generated_config_file, encoding='utf-8')))
             if key:
                 json_data = json.load(open(self.config_file, encoding='utf-8')).get(key)
             return json_data
@@ -119,9 +127,18 @@ class Config:
     def save(self, key, value: list | dict | str | int | bool = '') -> None:
         '''保存指定配置文件'''
         try:
-            json_data = json.load(open(self.config_file, encoding='utf-8'))
-            json_data[key] = value
-            json.dump(json_data, open(self.config_file, mode='w', encoding='utf-8'), ensure_ascii=False, indent=2)
+            # 判断key属于哪个文件
+            if key not in self.__dict__:
+                raise AttributeError(f'配置项 {key} 不存在')
+            self.__setattr__(key, value)
+            if key in self.default_config_dict:
+                json_data = json.load(open(self.config_file, encoding='utf-8'))
+                json_data[key] = value
+                json.dump(json_data, open(self.config_file, mode='w', encoding='utf-8'), ensure_ascii=False, indent=2)
+            else:
+                json_data = json.load(open(self.generated_config_file, encoding='utf-8'))
+                json_data[key] = value
+                json.dump(json_data, open(self.generated_config_file, mode='w', encoding='utf-8'), ensure_ascii=False, indent=2)
         except Exception as e:
             logger.error(f'保存配置文件发生错误\n {e}')
 

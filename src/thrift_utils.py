@@ -105,13 +105,13 @@ class user_dict:
         return len(self.__user_dict_list)
     
     def get_user_dict(self, index=0):
-        return self.__user_dict_list[index]
+        return self.__user_dict_list[index].copy()
     
     def get_config(self, index=0):
-        return self.__user_dict_list[index]['config']
+        return self.__user_dict_list[index]['config'].copy()
     
     def get_cookie(self, index=0):
-        return self.__user_dict_list[index]['cookie']
+        return self.__user_dict_list[index]['cookie'].copy()
     
     def get_user_dict_list(self):
         return self.__user_dict_list.copy()

@@ -129,10 +129,9 @@ class daka_list_class:
         self.is_king = {}
         self.logs = []
         self.warnings = []
-        self.class_list_2048_sharekey_source = config.class_list_2048_sharekey_source
-        self.class_list_2048 = []
-        for group_id in config.class_list_2048:
-            self.class_list_2048.append({'groupId': group_id, 'score': None})
+        self.class_list_2048_sharekey = []
+        for share_key in config.class_list_2048:
+            self.class_list_2048_sharekey.append({'shareKey': share_key})
         self.anticheat_power = config.anticheat_power
         self.do_not_charge_pk_energy = config.do_not_charge_pk_energy
         self.lock = threading.Lock()
@@ -144,6 +143,7 @@ class daka_list_class:
         self.user_dict_obj = user_dict_obj
         logger.info(f'加载了{self.get_user_cnt()}个用户')
         self.bcz_group = bcz_group
+        self.config = config
 
         # 初始化数据储存信息
         self.notice_and_rank_path = config.database_path
@@ -636,20 +636,6 @@ class daka_list_class:
         # 初始化数据库内存缓冲区
         self.clear_buffer()
         self.logger.info('\033[32m数据库初始化完毕\033[0m')
-        
-        # 将2048列表中的班级ID转换为shareKey
-        valid_class_list_2048 = []
-        for group_ in self.class_list_2048:
-            group_id = group_['groupId']
-            group = []
-            if group_id not in self.group_infos:
-                self.add_warning(f'2048列表中班级{group_id}不存在(可能是没上榜)尝试从BCZ-Group-Manager获取中')
-                group = self.get_group_info_from_group_manager(group_id)
-            else:
-                group = self.group_infos[group_id]
-            valid_class_list_2048.append({'groupId': group[0],'shareKey': group[1], 'name': group[3], 'introduction': group[4].replace('\n','\\n'), 'avatar': group[5], 'score': None})
-        self.class_list_2048_sharekey = valid_class_list_2048
-        self.logger.info(f'2048列表共加载{len(self.class_list_2048_sharekey)}班')
 
         self.__not_prepared = False
 
@@ -1221,9 +1207,11 @@ class daka_list_class:
                 return
             new_tp = (group_id, share_key, monitor_id, class_name, introduction, group_avatar)
             self.group_infos[group_id] = new_tp
-            # if group_id not in self.monitor_id_dict[monitor_id] :
-            #     self.monitor_id_dict[monitor_id].append(group_id)
-            # self.sharekey_to_id[share_key] = group_id
+            if monitor_id not in self.monitor_id_dict:
+                self.monitor_id_dict[monitor_id] = []
+            if group_id not in self.monitor_id_dict[monitor_id]:
+                self.monitor_id_dict[monitor_id].append(group_id)
+            self.sharekey_to_id[share_key] = group_id
             self.group_info_buffer.append(new_tp)
 
     def store_notice(self, group_id, rank_type_rank, content, data_time, score, week_daka_days) -> int: # 0被清空，1新增，2已存在
@@ -1486,7 +1474,7 @@ class daka_list_class:
     def get_class_list(self, rank, user_cookie): # 此函数无需等待初始化完成
         if rank == 2048:
             self.wait()
-            return self.class_list_2048_sharekey
+            return self.class_list_2048_sharekey + self.config.subscribe_class_list
         class_list = []
         current_data_time = datetime.datetime.now().strftime('%Y-%m-%d')
         if rank not in self.class_list or current_data_time != self.class_list[rank]['data_time']:
@@ -1977,6 +1965,8 @@ class notice_subscriber:
         self.get_last_hash()
         self.new_notice = []
         self.bcz_group = bcz_group
+        self.config = config
+        self.new_subscribe_class_set = set()
 
     def get_last_hash(self):
         '''先获取上次公告哈希值(初始化以及距离上次更新时间超过1h)'''
@@ -2007,7 +1997,7 @@ class notice_subscriber:
 
         
     MAX_NOTIFY_CNT = 9 # 最多读取通知数（因为第一次没有上一个已读通知时间）
-    MIN_SUBGROUP_TIMEDELTA = 172800 # 最小支援时间间隔，单位秒
+    MIN_SUBGROUP_TIMEDELTA = 43200 # 最小支援时间间隔，单位秒
     def _process_user_subscription(self, user, is_monday, result_queue):
         time.sleep(random.randint(0, 64) / 10) # 不要一起开始，降低网络负担
         time_long = int(time.time() * 1000)
@@ -2047,6 +2037,7 @@ class notice_subscriber:
                 continue
             group_id = group['id']
             group_share_key = group['shareKey']
+            self.new_subscribe_class_set.add(group_share_key)
             group_name = group['name']
             notice = group['notice']
             introduction = group['introduction']
@@ -2059,9 +2050,13 @@ class notice_subscriber:
             
             if need_update:
                 self.logger.info(f'发现{unique_id}的{group_id}有更新(*^o^*)')
+                status, group_intro = self.bcz_group.formatGroupInfo(group_share_key, user_cookie)
+                if not status:
+                    self.logger.error(f'获取{unique_id}的{group_id}的班级介绍失败，请检查 {group_intro}')
+                    continue
                 user_results['new_notice_count'] += 1
                 user_results['new_notice_items'].append({'user_name': user_name, 
-                                                         'group_name': group_name, 
+                                                         'group_name': group_intro, 
                                                           'notice': notice, 
                                                            'introduction': introduction, 
                                                              'group_id': group_id, 
@@ -2075,8 +2070,12 @@ class notice_subscriber:
                     self.last_hash[(unique_id, group_id)] = notice_hash
             
             if is_monday and group['leader']:
+                status, group_intro = self.bcz_group.formatGroupInfo(group_share_key, user_cookie)
+                if not status:
+                    self.logger.error(f'获取{unique_id}的{group_id}的班级介绍失败，请检查 {group_intro}')
+                    continue
                 user_results['new_notice_items'].append({'user_name': user_name, 
-                                                         'group_name': group_name, 
+                                                         'group_name': group_intro, 
                                                           'notice': f'【招新提醒】今天是周一({datetime.datetime.now().strftime("%H:%M:%S")})，班级人数{group["memberCount"]}/{group["countLimit"]}，完成率{group["finishingRate"]*100}%\n现有招新卡{prop_card_cnt}张，铜板{cooper_cnt}个，招新卡每张{prop_card_price}铜板。要发招新卡吗？', 
                                                            'introduction': introduction, 
                                                              'group_id': group_id,
@@ -2096,9 +2095,6 @@ class notice_subscriber:
         processed_count = 1
         
         while True:
-            if last_notify_t <= min_notify_t or (processed_count > self.MAX_NOTIFY_CNT and min_notify_t == 0):
-                break
-            
             payload = {
                 "lastMessageId": min_msg_id if min_msg_id != float('inf') else 0, 
                 "messageType": 4
@@ -2113,14 +2109,16 @@ class notice_subscriber:
             if messages == []:
                 self.logger.info(f"出现错误，当前最后读到的时间是{last_notify_t}，当前已处理{processed_count}条消息")
                 break
-            
+
+            is_quitting = False
             for msg in messages:
                 processed_count += 1
                 min_msg_id = min(min_msg_id, msg["messageId"])
                 timestamp = msg["timestamp"]
                 last_notify_t = min(last_notify_t, timestamp)
                 
-                if last_notify_t < min_notify_t or processed_count > self.MAX_NOTIFY_CNT:
+                if last_notify_t <= min_notify_t or (processed_count > self.MAX_NOTIFY_CNT and min_notify_t == 0):
+                    is_quitting = True
                     break
                 
                 if msg["title"] == "\u5206\u73ed\u6388\u6743\u7533\u8bf7":
@@ -2145,8 +2143,12 @@ class notice_subscriber:
                     
                     user_results['apply_count'] += 1
                     has_pending_message = True
+                    status, group_intro = self.bcz_group.formatGroupInfo(appliant_sharekey, user_cookie)
+                    if not status:
+                        self.logger.error(f'获取{unique_id}的{group_id}的班级介绍失败，请检查 {group_intro}')
+                        continue
                     user_results['new_notice_items'].append({'user_name': user_name, 
-                                                        'group_name': f'{leader_name}({leader_id})的【授权申请】小班 \n' + self.bcz_group.formatGroupInfo(appliant_sharekey, user_cookie), 
+                                                        'group_name': f'{leader_name}({leader_id})的【授权申请】小班 \n' + group_intro, 
                                                         'notice': group_notice, 
                                                         'introduction': group_introduction, 
                                                             'group_id': group_id, 
@@ -2192,33 +2194,49 @@ class notice_subscriber:
                                                              'notice_hash': 'poster',
                                                              'timestamp': latest_timestamp,
                                                              'operation': '1点赞 2已读'})
-            
+            if is_quitting:
+                break
             time.sleep(random.randint(12, 18) / 10)
         
         if not has_pending_message:
             user_results['last_notify_timestamp'] = {unique_id: latest_timestamp}
         
         self.logger.info('开始访问授权分班')
-        subgroup_id, subgroup_timedelta, subgroup_info = self.get_auth_group(user_cookie, unique_id)
+        subgroup_id, subgroup_timedelta, subgroup_info, all_group_sharekey = self.get_auth_group(user_cookie, unique_id)
+        self.new_subscribe_class_set = self.new_subscribe_class_set.union(all_group_sharekey)
         if subgroup_id != -1:
             subgroup_sharekey = subgroup_info['shareKey']
             self.logger.info(f'最长时间没访问的授权分班 {subgroup_info["name"]}({subgroup_id})，上次访问：{self.bcz_group.humanize_second_ago(subgroup_timedelta//1000)}')
             
             if subgroup_timedelta // 1000 > self.MIN_SUBGROUP_TIMEDELTA:
                 status, leader_id, leader_name = self.bcz_group.getGroupLeader(subgroup_sharekey, user_cookie)
-                if status:
-                    user_results['new_notice_items'].append({'user_name': user_name, 
-                                                        'group_name': self.bcz_group.formatGroupInfo(subgroup_info['shareKey'], user_cookie),
-                                                        'notice': f'【授权分班管理】最长时间没访问的授权分班 {subgroup_info["name"]}({subgroup_id})，班长{leader_name}({leader_id})，上次访问：{self.bcz_group.humanize_second_ago(subgroup_timedelta//1000)}\n订阅账号信息：请输入操作码2查询\n\n班级公告：{subgroup_info["notice"]}\n\n要访问分班吗？',
-                                                        'introduction': subgroup_info['introduction'],
-                                                        'group_id': subgroup_id, 
-                                                        'unique_id': unique_id,
-                                                        'from_unique_id': leader_id,
-                                                        'group_share_key': subgroup_info['shareKey'],
-                                                        'notice_hash': 'subgroup',
-                                                        'timestamp': latest_timestamp,
-                                                        'memberlist_required': True,
-                                                        'operation': '1点赞班长 2管理账号(加/退/改名/海报/申授) 3结束访问 4稍后访问 -9999解除授权'})
+                if not status:
+                    self.logger.error(f'获取授权分班 {subgroup_info["name"]}({subgroup_id}) 的班长失败')
+                    result_queue.put(user_results)
+                    return
+                status, subgroup_info_detailed = self.bcz_group.getGroupInfo(subgroup_sharekey, user_cookie)
+                if not status:
+                    self.logger.error(f'获取授权分班 {subgroup_info["name"]}({subgroup_id}) 的详细信息失败')
+                    result_queue.put(user_results)
+                    return
+                auth_time_str = self.bcz_group.humanize_timestr_ago(subgroup_info_detailed['authorizationInfo']['authorizationTime'])
+                status, group_intro = self.bcz_group.formatGroupInfo(subgroup_info['shareKey'], user_cookie)
+                if not status:
+                    self.logger.error(f'获取授权分班 {subgroup_info["name"]}({subgroup_id}) 的班级介绍失败')
+                    result_queue.put(user_results)
+                    return
+                user_results['new_notice_items'].append({'user_name': user_name, 
+                                                    'group_name': group_intro,
+                                                    'notice': f'【授权分班管理】最长时间没访问的授权分班 {subgroup_info["name"]}({subgroup_id})，班长{leader_name}({leader_id})，授权于{auth_time_str}，上次访问：{self.bcz_group.humanize_second_ago(subgroup_timedelta//1000)}\n订阅账号信息：请输入操作码2查询\n\n班级公告：{subgroup_info["notice"]}\n\n要访问分班吗？',
+                                                    'introduction': subgroup_info['introduction'],
+                                                    'group_id': subgroup_id, 
+                                                    'unique_id': unique_id,
+                                                    'from_unique_id': leader_id,
+                                                    'group_share_key': subgroup_info['shareKey'],
+                                                    'notice_hash': 'subgroup',
+                                                    'timestamp': latest_timestamp,
+                                                    'memberlist_required': True,
+                                                    'operation': '1点赞班长 2管理账号(加/退/改名/海报/申授) 3结束访问 4稍后访问 -9999解除授权(不可撤销!)'})
         
         time.sleep(random.randint(15, 18) / 10)
         result_queue.put(user_results)
@@ -2229,6 +2247,8 @@ class notice_subscriber:
         new_notice_count = 0
         apply_count = 0
         new_poster_count = 0
+        if len(users) > 1:
+            self.new_subscribe_class_set = set() # 每次全量扫描订阅清空一次，获取所有订阅用户小班和授权分班
         
         is_monday = datetime.datetime.now().weekday() == 0
         
@@ -2261,6 +2281,9 @@ class notice_subscriber:
                     self.last_notify_timestamp.update(result['last_notify_timestamp'])
         
         self.new_notice.sort(key=lambda x: x.get('notice_hash', '') == 'auth', reverse=True)
+        # 保存所有订阅用户小班和授权分班到config
+        if len(users) > 1:
+            self.config.save('subscribe_class_list', [{'shareKey': share_key} for share_key in self.new_subscribe_class_set])
         self.logger.info(f'发现{new_notice_count}条新的订阅公告，{apply_count}条小班授权申请，{new_poster_count}条新的海报')
 
     def get_top_notice(self, daka_list_obj: daka_list_class, force_refresh = False, force_refresh_only_id = -1):
@@ -2283,18 +2306,20 @@ class notice_subscriber:
         '''获取用户自己的授权分班最久没有访问过的那个，返回group_id、上次访问时间差（秒）和group_name'''
         max_time_delta = 0
         max_time_group_id = -1
+        all_group_sharekey = []
         max_time_group_info = None
         current_timestamp = int(time.time() * 1000)
         status, groups = self.bcz_group.getAuthGroups(user_cookie, unique_id)
         if not status:
             return -1, -1, None
         for group in groups:
+            all_group_sharekey.append(group['shareKey'])
             timedelta = current_timestamp - self.last_subgroup_timestamp.get((unique_id, group['id']), 0)
             if timedelta > max_time_delta:
                 max_time_delta = timedelta
                 max_time_group_id = group['id']
                 max_time_group_info = group
-        return max_time_group_id, max_time_delta, max_time_group_info
+        return max_time_group_id, max_time_delta, max_time_group_info, all_group_sharekey
 
     DEFAULT_PROMPT = {
         'propcard_2': {
@@ -2305,12 +2330,12 @@ class notice_subscriber:
         'propcard_3': {
             'notice_hash': 'propcard_3',
             'notice': "【招新卡池预览】", # + self.bcz_group.preview_recommended_ordinary_groups
-            'operation': '0切换年级或取消、1刷新、1400确认发送'
+            'operation': '0切换年级或取消、1刷新、1400确认发送(无法撤回)'
         },
         'subgroup_account_select':{
             'notice_hash': 'subgroup_account_select',
             'notice': '【小班支援】请选择要操作的账号和操作类型\n', # 在班账号' + '\n'.join(joined_user_str) + '\n不在班账号' + '\n'.join(not_joined_user_str),
-            'operation': '0取消 1加入 2退出 3改名+收到 4海报 5申授 9刷新账号\n操作数【千位】表示操作类型，【后三位】表示账号索引。',
+            'operation': '0取消 1加入 2退出(不可撤销!) 3改名+收到 4海报 5申授 9刷新账号\n操作数【千位】表示操作类型，【后三位】表示账号索引。',
             'reply_required_min': 3000,
             'reply_required_max': 3999,
             'memberlist_required': False
@@ -2327,14 +2352,14 @@ class notice_subscriber:
             'notice_hash': 'subgroup_poster_3',
             'introduction': "【海报内容和预览】现有海报预览：\n", # + self.bcz_group.preview_posters(user_cookie)
             'notice': None, # poster_content
-            'operation': '输入0切换年级或取消、1刷新、2修改海报内容、1400确认发送',
+            'operation': '输入0切换年级或取消、1刷新、2修改海报内容、1400确认发送(无法撤回)\n提醒：内容不符合规定的意思是长度超过150，违禁词会直接说存在违规信息\n海报修改后保存在后台，可返回切换页面',
             'reply_required': 2,
             'textarea_required': True
         },
         'auth_apply': {
             'notice_hash': 'auth_apply',
             'notice': '【授权分班申请】当前账户信息：', # + user_info_str + self.bcz_group.inProcessAuthApply + OwnGroups
-            'operation': '0取消、其他数字表示用对应小班申请(注意\n⚠️如果已申请，授权将被解除！\n⚠️同一用户同一时间只能有一个申请，进行中的其他申请将被撤销)'
+            'operation': '0取消、其他数字表示用对应小班申请(注意\n⚠️如果该班已申请其他授权，授权将被解除！(不可撤销!)\n⚠️同一用户同一时间只能有一个申请，进行中的其他申请将被撤销)'
         }
     }
     def get_grade(self, user_cookie):
@@ -2344,8 +2369,10 @@ class notice_subscriber:
     def operate(self, unique_id, from_unique_id, user_dict, group_share_key, group_id, notice_hash, reply_content, operation_code, latest_timestamp):
         '''操作'''
         
-        if unique_id == -1:
+        if unique_id == -1 or user_dict is None or len(self.new_notice) == 0:
             return 400, "没有订阅，不需要回复"
+        if notice_hash != self.new_notice[0]['notice_hash']:
+            return 400, "订阅消息过期，请刷新页面"
         result_str = ''
         try:
             operation_code = int(operation_code)
@@ -2533,69 +2560,69 @@ class notice_subscriber:
                 self.new_notice.pop(0) # subgroup_account_select一定是插入到subgroup事件前面的，无需标记已读
                 return 200, '已取消操作'
             # 获取账号列表、操作账户信息
-            status, user_str, unique_id = self.bcz_group.getGroupJoinedAccounts(group_share_key, user_cookie, account_idx-1)
+            status, user_str, s_unique_id = self.bcz_group.getGroupJoinedAccounts(group_share_key, user_cookie, account_idx-1)
             def refresh():
                 status, user_str = self.bcz_group.getGroupJoinedAccounts(group_share_key, user_cookie)
                 self.new_notice[0].update(self.DEFAULT_PROMPT['subgroup_account_select'])
                 self.new_notice[0]['notice'] += user_str
                 return status, user_str
             if not status:
-                return 400, f'获取在小班的账号失败 {unique_id}'
-            user_info_str = self.bcz_group.user_dict_obj.format_user_strs(1, [unique_id])[0]
-            user_dict_idx = self.bcz_group.user_dict_obj.get_index_by_unique_id(unique_id)
-            user_dict = self.bcz_group.user_dict_obj.get_user_dict(user_dict_idx)
-            user_cookie = user_dict['cookie']
+                return 400, f'获取在小班的账号失败 {s_unique_id}'
+            user_info_str = self.bcz_group.user_dict_obj.format_user_strs(1, [s_unique_id])[0]
+            user_dict_idx = self.bcz_group.user_dict_obj.get_index_by_unique_id(s_unique_id)
+            s_user_dict = self.bcz_group.user_dict_obj.get_user_dict(user_dict_idx)
+            s_user_cookie = s_user_dict['cookie']
 
             if operation_code == 1: # 加入
-                status, message_str = self.bcz_group.groupJoin(user_dict, group_share_key)
+                status, message_str = self.bcz_group.groupJoin(s_user_dict, group_share_key)
                 status1, user_str = refresh()
                 if not status1:
-                    return 400, f'获取在小班的账号失败 {unique_id}'
+                    return 400, f'获取在小班的账号失败 {s_unique_id}'
                 if status:
                     # self.new_notice.pop(0)
                     return 200, f'加入成功 {message_str}'
                 else:
                     return 455, f'加入失败 {message_str}'
             elif operation_code == 2: # 退出
-                status, message_str = self.bcz_group.groupQuit(user_dict, group_share_key)
+                status, message_str = self.bcz_group.groupQuit(s_user_dict, group_share_key)
                 status1, user_str = refresh()
                 if not status1:
-                    return 400, f'获取在小班的账号失败 {unique_id}'
+                    return 400, f'获取在小班的账号失败 {s_unique_id}'
                 if status:
                     # self.new_notice.pop(0)
                     return 200, f'退出成功 {message_str}'
                 else:
                     return 455, f'退出失败 {message_str}'
             elif operation_code == 3: # 改名
-                status, message_str = self.reply_and_ack(unique_id, user_cookie, group_share_key, reply_content)
+                status, message_str = self.reply_and_ack(s_unique_id, s_user_cookie, group_share_key, reply_content)
                 if status:
                     return 200, f'成功 {message_str}'
                 else:
                     return 400, f'失败 {message_str}'
             elif operation_code == 4: # 修改为海报事件
                 self.new_notice[0].update(self.DEFAULT_PROMPT['subgroup_poster_2'])
-                self.new_notice[0]['unique_id'] = user_dict['config']['unique_id']
-                self.new_notice[0]['user_name'] = user_dict['config']['name']
-                self.new_notice[0]['notice'] += user_info_str + f'\n当前年级{self.get_grade(user_cookie)}'
+                self.new_notice[0]['unique_id'] = s_user_dict['config']['unique_id']
+                self.new_notice[0]['user_name'] = s_user_dict['config']['name']
+                self.new_notice[0]['notice'] += user_info_str + f'\n当前年级{self.get_grade(s_user_cookie)}'
                 return 200, '请继续选择年级'
             elif operation_code == 5: # 申请授权
                 self.new_notice[0].update(self.DEFAULT_PROMPT['auth_apply'])
-                self.new_notice[0]['unique_id'] = user_dict['config']['unique_id']
-                self.new_notice[0]['user_name'] = user_dict['config']['name']
+                self.new_notice[0]['unique_id'] = s_user_dict['config']['unique_id']
+                self.new_notice[0]['user_name'] = s_user_dict['config']['name']
                 self.new_notice[0]['notice'] += user_info_str
                 # 扫描当前正在进行的
-                status, in_process_auth = self.bcz_group.inProcessAuthApply(user_cookie)
+                status, in_process_auth = self.bcz_group.inProcessAuthApply(s_user_cookie)
                 if not status:
                     return 400, '获取正在进行的授权失败：' + message_str
                 monitor_id = in_process_auth['licensorUniqueId']
                 apply_group_id = in_process_auth['applyGroupId']
                 if apply_group_id != 0:
-                    status, group_info = self.bcz_group.getGroupInfobyId(apply_group_id, user_cookie)
+                    status, group_info = self.bcz_group.getGroupInfobyId(apply_group_id, s_user_cookie)
                     if not status:
                         return 400, '获取班级信息失败：' + message_str
                     group_name = group_info['name']
 
-                    status, monitor_info = self.bcz_group.getUserInfo(user_cookie, monitor_id)
+                    status, monitor_info = self.bcz_group.getUserInfo(s_user_cookie, monitor_id)
                     if not status:
                         return 400, '获取班长信息失败：' + message_str
                     monitor_name = monitor_info['name']
@@ -2603,7 +2630,7 @@ class notice_subscriber:
                     self.new_notice[0]['notice'] += f'\n正在进行的授权 目标班长{monitor_name}({monitor_id})，通过{group_name}({apply_group_id})申请授权\n'
                 # 扫描已有的
                 self.new_notice[0]['notice'] += '\n现有小班\n'
-                status, groups = self.bcz_group.ownGroups(user_dict)
+                status, groups = self.bcz_group.ownGroups(s_user_dict)
                 if not status:
                     return 400, '获取自己的小班失败：' + message_str
                 leader_group_cnt = 1
@@ -2611,7 +2638,7 @@ class notice_subscriber:
                     if group['leader']:
                         auth_group_info = "未授权"
                         if group['authorization']:
-                            status, auth_group_info = self.bcz_group.getGroupInfo(group['shareKey'], user_cookie)
+                            status, auth_group_info = self.bcz_group.getGroupInfo(group['shareKey'], s_user_cookie)
                             if not status:
                                 return 400, '获取班级信息失败：' + message_str
                             licensor = auth_group_info['authorizationInfo']['licensor']
@@ -2623,12 +2650,12 @@ class notice_subscriber:
                         leader_group_cnt += 1
                 return 200, '请继续选择需要申请的班级'
             elif operation_code == 9: # 刷新账号
-                status, groups = self.bcz_group.ownGroups(user_dict)
+                status, groups = self.bcz_group.ownGroups(s_user_dict)
                 if not status:
                     return 400, '获取自己的小班失败：' + message_str
                 status1, user_str = refresh()
                 if not status1:
-                    return 400, f'获取在小班的账号失败 {unique_id}'
+                    return 400, f'获取在小班的账号失败 {s_unique_id}'
                 self.new_notice[0].update(self.DEFAULT_PROMPT['subgroup_account_select'])
                 self.new_notice[0]['notice'] += user_str
                 return 200, '刷新成功'
@@ -2685,19 +2712,19 @@ class notice_subscriber:
                 if not status:
                     return 400, f'获取待发送的海报失败：{message_str}'
                 status, result_str = self.bcz_group.sendPoster(user_cookie, group_id, poster)
+                if not status:
+                    return 400, f'发送海报失败：{result_str}'
                 time.sleep(1)
                 # 刷新海报区
                 self.new_notice[0].update(self.DEFAULT_PROMPT['subgroup_poster_3'])
-                status, poster_preview = self.bcz_group.preview_posters(user_cookie)
-                if not status:
+                status1, poster_preview = self.bcz_group.preview_posters(user_cookie)
+                if not status1:
                     return 400, f'获取海报池失败：{message_str}'
                 self.new_notice[0]['introduction'] += poster_preview
-                status, poster = self.bcz_group.getGroupPoster(user_cookie, group_share_key)
-                if not status:
+                status1, poster = self.bcz_group.getGroupPoster(user_cookie, group_share_key)
+                if not status1:
                     return 400, f'获取待发送的海报失败：{message_str}'
                 self.new_notice[0]['notice'] = poster
-                if not status:
-                    return 400, f'发送海报失败：{result_str}'
                 return 200, '发送海报成功'
             return 400, '无效的操作码'
         elif notice_hash == 'auth_apply':

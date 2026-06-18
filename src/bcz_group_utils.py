@@ -271,19 +271,21 @@ class bczGroup:
         return True, response_json['data']
     
     def formatGroupInfo(self, share_key: str, user_cookie: dict, buffer_time: int = 60000):
-        '''简短的班级介绍'''
+        '''简短的班级介绍
+        返回：头像\n班级名称(班级id)[分享码]\n班级类型 人数/人数上限 完成率% 【仅邀请码加入】/公开'''
         status, data = self.getGroupInfo(share_key, user_cookie, buffer_time)
         if not status:
             return False, None
         group_info = data['groupInfo']
         group_name = group_info['name']
         group_id = group_info['id']
+        group_avatar = 'https://vol-v6.bczcdn.com' + group_info['avatar']
         group_type = self.num_to_rank(group_info['rank']-1)
         group_count = group_info['memberCount']
         group_limit = group_info['countLimit']
         group_finishing_rate = group_info['finishingRate']
         only_public_key_join = group_info['onlyPublicKeyJoin']
-        return f"{group_name}({group_id})[{share_key}]\n{group_type} 人数{group_count}/{group_limit} 完成率{group_finishing_rate*100:.2f}% {'【仅邀请码加入】' if only_public_key_join else '公开'}"
+        return True, f"<img src='{group_avatar}'>\n{group_name}({group_id})[{share_key}]\n{group_type} 人数{group_count}/{group_limit} 完成率{group_finishing_rate*100:.2f}% {'【仅邀请码加入】' if only_public_key_join else '公开'}"
     
     def getGroupLeader(self, share_key: str, user_cookie: dict, buffer_time: int = 60000):
         '''获取当前班级的班长->(id, name)
@@ -734,7 +736,7 @@ class bczGroup:
     # 海报
     # ---------------------------
     def getGroupPoster(self, user_cookie, share_key: str):
-        '''获取当前小班的海报'''
+        '''获取当前小班的海报，如果没有，则根据小班信息生成一个模板，长度135字'''
         if share_key in self.poster_buffer:
             return True, self.poster_buffer[share_key]
         status, data = self.getGroupInfo(share_key, user_cookie)
@@ -748,14 +750,16 @@ class bczGroup:
         group_introduction = group_info['introduction']
         group_notice = group_info['notice']
         group_finishing_rate = int(group_info['finishingRate']*100)
-        self.poster_buffer[share_key] = f'🌟麦花的授权分班(๑>ᴗ<๑)🌟{group_finishing_rate}+高完成率精品{group_type}小班「{group_name}」招新！最后{group_limit-group_count+1}个空位✧(≖◡≖✿)\n\n{group_introduction}\n💗\n{group_notice[:50]}'
+        poster_intro = f'🌟麦花的授权分班(๑>ᴗ<๑)🌟{group_finishing_rate}+高完成率精品{group_type}小班「{group_name}」招新！最后{group_limit-group_count+1}个空位✧(≖◡≖✿)\n\n{group_introduction}\n💗\n'
+        poster_notice = group_notice[:(135-len(poster_intro))]
+        self.poster_buffer[share_key] = poster_intro + poster_notice
         return True, self.poster_buffer[share_key]
     
     def setGroupPoster(self, share_key: str, poster: str):
         '''设置当前小班的海报'''
         self.poster_buffer[share_key] = poster
 
-    def preview_posters(self, user_cookie, cnt_limit=10):
+    def preview_posters(self, user_cookie, cnt_limit=20):
         '''查看当前用户这个年级下的海报'''
         # GET https://group.baicizhan.com/group/get_recruitment_post_list?anchorId=0&direction=1
         headers = getHeaders("$group", user_cookie, int(time.time()), index=1)

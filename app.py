@@ -40,7 +40,7 @@ from src.bcz_group_utils import bczGroup
 from src.schedule import Schedule
 import src.daka_utils as daka_utils
 from src.daka_utils import daka_list_class, notice_subscriber
-from src.daka_utils import getHeaders, daka_all_headless, stargazer_class, send_content
+from src.daka_utils import getHeaders, daka_all_headless, stargazer_class, send_content, get_leader_info
 
 
 logging.basicConfig(
@@ -161,12 +161,45 @@ async def index(request: Request):
     '''跳转到/accounts'''
     return templates.TemplateResponse('index.html', {'request': request})
 
+
+def complete_infos(infos):
+    '''补全小组信息，输入[{shareKey}]，返回[{shareKey, groupId, monitorId, name, introduction, avatar}]'''
+    daka_list_obj.wait() # 等待daka_list_obj完全加载好sharekey和groupid的对应关系，以及后续存储器的就绪
+    for info in infos:
+        share_key = info['shareKey']
+        group_id = None
+        if share_key not in daka_list_obj.sharekey_to_id:
+            # 获取并保存到数据库
+            user_cookie_default = user_dict_obj.get_cookie(0)
+            user_cookie_default['access_token'] = config.main_token
+            status, data = bcz_group.getGroupInfo(share_key, user_cookie_default)
+            if not status:
+                logger.error(f'获取小组信息失败{share_key} {data}')
+                continue
+            group_info = data['groupInfo']
+            group_id = group_info['id']
+            monitor_id, monitor_name = get_leader_info(data['members'])
+            daka_list_obj.store_group_info(group_id, share_key, monitor_id, group_info['name'], group_info['introduction'], group_info['avatar'])
+        else:
+            group_id = daka_list_obj.sharekey_to_id[share_key]
+        info_tp = daka_list_obj.group_infos[group_id]
+        info.update({
+            'groupId': group_id,
+            'monitorId': info_tp[2],
+            'name': info_tp[3],
+            'introduction': info_tp[4],
+            'avatar': info_tp[5]
+        })
+    return infos
+
 @app.get('/groups')
 async def groups(request: Request):
     try:
-        infos = daka_list_obj.class_list_2048_sharekey
+        infos = daka_list_obj.class_list_2048_sharekey + config.subscribe_class_list
+        infos = complete_infos(infos)
         return templates.TemplateResponse('groups.html', {'request': request, 'groups': infos})
     except Exception:
+        raise
         return templates.TemplateResponse('groups.html', {'request': request, 'groups': []})
 
 @app.get('/notice')
@@ -578,6 +611,8 @@ async def subscribe_reply(_: Request, item: dict, unique_id: str='', from_unique
     if not unique_id or not group_id:
         return restful(400, '调用方法异常Σ(っ °Д °;)っ')
     user_dict = daka_list_obj.get_user_dict(unique_id)
+    if not user_dict:
+        return restful(400, '用户不存在')
     code, result_str = notice_subscriber_obj.operate(unique_id, from_unique_id, user_dict, group_share_key, group_id, notice_hash, reply_content, code, latest_timestamp)
     return restful(code, result_str)
 

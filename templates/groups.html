@@ -12,6 +12,11 @@
         display: flex;
         gap: 10px;
         padding: 10px;
+        flex-wrap: wrap;
+      }
+      button {
+        width: 90px;
+        height: 40px;
       }
       .group-header {
         display: flex;
@@ -65,6 +70,7 @@
         <button
           class="group-btn"
           id="group-{{ group.groupId }}"
+          data-monitor-id="{{ group.monitorId }}"
           data-id="{{ group.groupId }}"
           data-name="{{ group.name }}"
           data-share-key="{{ group.shareKey }}"
@@ -292,6 +298,7 @@
             html += `<div>
               <img id="group-avatar" class="avatar hide" src="${currentDataset.avatar}" />
               <h2 id="group-name">${currentDataset.name}</h2>
+              <span id="group-monitor-id">${currentDataset.monitorId}的小班</span>
               <p id="group-introduction">${currentDataset.introduction}</p></div>
             `;
           }
@@ -410,15 +417,16 @@
             if (point[0] <= prevPoint[1]) return false;
             return true;
           });
+          const maxPeriod = utils.dateDiff(state.globalStart, state.globalEnd);
           for (const point of points) {
             const color = utils.getColor(1, 1);
             const period = utils.dateDiff(point[0], point[1]);
             total_period += period;
             html += `<div class="data-point" style="background-color: ${color}; width: ${
-              period << 1
-            }px; margin-left: ${
-              utils.dateDiff(state.globalStart, point[0]) * 2
-            }px">${period}天</div>`;
+              period / maxPeriod * 100
+            }%; margin-left: ${
+              utils.dateDiff(state.globalStart, point[0]) / maxPeriod * 100
+            }%">${period}天</div>`;
           }
           user.total_period = total_period;
           user.html = html;
