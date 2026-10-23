@@ -4,6 +4,7 @@ from src.config import Config
 from src.thrift_utils import user_dict
 from src.daka_utils import daka_list_class, stargazer_class, open_console_window
 from src.http2_client import http2_client
+from src.bcz_group_utils import bczGroup
 import logging
 import datetime
 import traceback
@@ -16,7 +17,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 config = Config()
 http2_client_obj = http2_client()
 user_dict_obj = user_dict()
-daka_list_obj = daka_list_class(logger, http2_client_obj, user_dict_obj, config)
+bcz_group = bczGroup(http2_client_obj, user_dict_obj, config)
+daka_list_obj = daka_list_class(logger, http2_client_obj, user_dict_obj, config, bcz_group)
 print("默认订阅账号：", daka_list_obj.user_dict_obj.subscriber_unique_ids)
 print("默认虚拟账号：", daka_list_obj.user_dict_obj.arbiter_unique_ids)
 print("请输入指定id(多个请用英文逗号分隔)，不输入默认全部订阅、虚拟账号")

@@ -44,7 +44,7 @@ class NoticeParser:
     accept_word_path = '../BCZ-Notice-Examiner/assets/accept_words.bin'
     accept_notice_path = '../BCZ-Notice-Examiner/accept_notice.txt'
     bad_notice_path = '../BCZ-Notice-Examiner/bad_notice.txt'
-    replace_dict_path = '../BCZ-Notice-Examiner/assets/replace_dict.json'
+    replace_dict_path = '../BCZ-Notice-Examiner/assets/replace_map.jsonl'
     replace_dict = {}
     
     # Chinese Characters: 4E00–9FA5
@@ -84,32 +84,7 @@ class NoticeParser:
                 bin_data = f.read()
             self.bad_words.extend(json.loads((bin_data)))
 
-        try:
-            self.replace_dict = json.load(open(self.replace_dict_path))
-        except:
-            print('replace_dict.json not found, using default replace_dict')
-            self.replace_dict = {
-                '一': '1',
-                '二': '2',
-                '三': '3',
-                '四': '4',
-                '五': '5',
-                '六': '6',
-                '七': '7',
-                '八': '8',
-                '九': '9',
-                '零': '0',
-                '壹': '1',
-                '贰': '2',
-                '叁': '3',
-                '肆': '4',
-                '伍': '5',
-                '陆': '6',
-                '柒': '7',
-                '捌': '8',
-                '玖': '9',
-                '〇': '0'
-            }
+        self.replace_dict = json.load(open(self.replace_dict_path, encoding='utf-8'))
     
         self.replace_keys = set(self.replace_dict.keys())
         self.warn_words = []
@@ -128,7 +103,7 @@ class NoticeParser:
     def slice_invalid_char(self, text: str):
         # 去除并存储无效字符的位置
         # invalid_chars = [',', '.', '!', '?', ':', ';', '，', '。', '！', '？', '：', '；','\n',' ','/','"',"'",'、','‘','’','“','”','(',')','（','）','-','—','_']
-        invalid_chars = ['_','丨','✔','\n',' ']
+        invalid_chars = ['\n',' ', '/']
         self.invalid_storage = {}
         position = 0
         new_text = ""
@@ -200,7 +175,7 @@ class NoticeParser:
 
         # 传统方式
         # invalid_chars = [',', '.', '!', '?', ':', ';', '，', '。', '！', '？', '：', '；','\n',' ','/','"',"'",'、','‘','’','“','”','(',')','（','）','~','*','@','～','【','】','《','》','[',']','%','％','=','\\','\t','|','<','>','#','『','』','^','…']
-        invalid_chars = ['_','丨','✔','\n',' ']
+        invalid_chars = ['.','\n',' ']
 
         for char in invalid_chars:
             filtered_string = filtered_string.replace(char, '')

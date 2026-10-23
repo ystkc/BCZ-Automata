@@ -47,9 +47,9 @@ class Config:
             'bot_uin': 123456789, # 机器人QQ号，用于自动回复
             'ws_uri': "ws://localhost:6100", # NapCat websocket服务器 地址
             'napcat_token': '', # NapCat登录令牌
-            'whitelist_groups': [], 
-            'whitelist_users': [],
-            'base_group': 0
+            'whitelist_groups': [], # 允许使用的QQ群号列表
+            'whitelist_users': [], # 允许使用的用户QQ号列表
+            'base_group': 0 # 用于管理机器人的QQ群组
         }
         self.default_generated_config_dict = {
             'subscribe_class_list': []

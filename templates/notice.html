@@ -97,7 +97,7 @@
                 return;
             }
             const userId = document.getElementById('userId').value;
-            const response = await fetch(`/get_monitor_classes?id=${userId}`);
+            const response = await fetch(`/get_monitor_classes?uid=${userId}`);
             const data = await response.json();
             
             const classList = document.getElementById('classList');

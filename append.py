@@ -167,7 +167,7 @@ def append_user_data(text=None, delete=False):
 
     tidal_result_list = []
     for unique_id, config in current_user_config.items():
-        if config.get('tidal_group_limit', 0) <= 0:
+        if config.get('tidal_group_limit', 0) == 0:
             continue
         tidal_result_list.append({
             "unique_id": unique_id,

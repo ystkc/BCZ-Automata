@@ -104,8 +104,11 @@ class user_dict:
     def get_count(self):
         return len(self.__user_dict_list)
     
-    def get_user_dict(self, index=0):
-        return self.__user_dict_list[index].copy()
+    def get_user_dict(self, unique_id=0):
+        index = self.get_index_by_unique_id(unique_id)
+        if index is None:
+            return None
+        return {'cookie': self.get_cookie(index), 'config': self.get_config(index)}
     
     def get_config(self, index=0):
         return self.__user_dict_list[index]['config'].copy()
@@ -123,6 +126,10 @@ class user_dict:
             self.__user_dict_list[index] = user_dict
             if save_to_db:
                 self.modified = True
+
+    def replace_user_dict_list(self, user_dict_list):
+        self.__user_dict_list = user_dict_list
+        self.save()
     
     def delete_user(self, unique_id):
         index = self.get_index_by_unique_id(unique_id)

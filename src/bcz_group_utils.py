@@ -272,7 +272,7 @@ class bczGroup:
     
     def formatGroupInfo(self, share_key: str, user_cookie: dict, buffer_time: int = 60000):
         '''简短的班级介绍
-        返回：头像\n班级名称(班级id)[分享码]\n班级类型 人数/人数上限 完成率% 【仅邀请码加入】/公开'''
+        返回：头像\n班级名称(班级id)[分享码]\n班级类型 人数/人数上限 完成率% 【仅邀请码加入】/公开\n班长: 班长昵称(班长id)\n授权信息(formatGroupAuthInfo)'''
         status, data = self.getGroupInfo(share_key, user_cookie, buffer_time)
         if not status:
             return False, None
@@ -285,7 +285,14 @@ class bczGroup:
         group_limit = group_info['countLimit']
         group_finishing_rate = group_info['finishingRate']
         only_public_key_join = group_info['onlyPublicKeyJoin']
-        return True, f"<img src='{group_avatar}'>\n{group_name}({group_id})[{share_key}]\n{group_type} 人数{group_count}/{group_limit} 完成率{group_finishing_rate*100:.2f}% {'【仅邀请码加入】' if only_public_key_join else '公开'}"
+        status, leader_id, leader_name = self.getGroupLeader(share_key, user_cookie)
+        if not status:
+            return False, None
+        status, auth_info = self.formatGroupAuthInfo(share_key, user_cookie)
+        if not status:
+            return False, None
+        time_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
+        return True, f"<img src='{group_avatar}'>\n{group_name}({group_id})[{share_key}]\n{group_type} 人数{group_count}/{group_limit} 完成率{group_finishing_rate*100:.2f}% {'【仅邀请码加入】' if only_public_key_join else '公开'}\n班长: {leader_name}({leader_id})\n{auth_info}\n获取于{time_str}"
     
     def getGroupLeader(self, share_key: str, user_cookie: dict, buffer_time: int = 60000):
         '''获取当前班级的班长->(id, name)
@@ -393,20 +400,26 @@ class bczGroup:
         my_reply = ""
         monitor_reply = ""
         my_unique_ids = set(self.user_dict_obj.get_unique_ids())
+        my_unique_ids_full = set(self.user_dict_obj.get_unique_ids(subscribe=False))
+        force_reserve_ids = my_unique_ids_full.copy()  # 保留我、班长、订阅者、托管者，无论有没有改名都显示
         wd = datetime.datetime.now().weekday()
         for member in member_list:
-            unique_id = member['uniqueId']
+            member_unique_id = member['uniqueId']
             nickname = member['nickname']
             duration_days = member['durationDays']
             week_daka_dates = member['weekDakaDates']
+            if member_unique_id in my_unique_ids:
+                nickname = '【订阅】' + nickname
+            elif member_unique_id in force_reserve_ids:
+                nickname = '【托管】' + nickname
             if member['leader'] == 1:
                 monitor_reply = nickname
                 nickname = '【班长】' + nickname
-            if unique_id == user_dict['config']['unique_id']:
+                force_reserve_ids.add(member_unique_id)
+            if member_unique_id == unique_id:
                 my_reply = nickname
                 nickname = '【我】' + nickname
-            if unique_id in my_unique_ids:
-                nickname = '【订阅】' + nickname
+                force_reserve_ids.add(member_unique_id)
             # two_week_daka_dates是14个0、1，表示两周内每天的打卡情况
             two_week_daka_dates = [0] * 14
             # 如果duration_days不够两周，后面的标记-2
@@ -421,7 +434,7 @@ class bczGroup:
                 delta = (datetime.datetime.strptime(date, '%Y-%m-%d') - last_monday).days + 1
                 two_week_daka_dates[delta] = 1
 
-            group_nickname[unique_id] = {
+            group_nickname[member_unique_id] = {
                 "group_nickname": nickname,
                 "two_week_daka_dates": two_week_daka_dates
             }
@@ -433,11 +446,12 @@ class bczGroup:
         if not status:
             return False, group_info
         group_member_list = group_info['members']
-        # 遍历，如果有人的default_nickname和昵称相同，则是没改过昵称。
+
+        # 遍历，如果有人的default_nickname和昵称相同，则是没改过昵称。删除之
         for member in group_member_list:
             unique_id = member['uniqueId']
             if unique_id in group_nickname:
-                if group_nickname[unique_id]['group_nickname'] == member['nickname'] and member['leader'] == 0: # 无论班长有没有改名都显示
+                if group_nickname[unique_id]['group_nickname'] == member['nickname'] and unique_id not in force_reserve_ids:
                     del group_nickname[unique_id]
                 else:
                     group_nickname[unique_id]['nickname'] = member['nickname']
@@ -456,6 +470,19 @@ class bczGroup:
                     # 计算距离上周一的天数
                     delta = (datetime.datetime.strptime(date, '%Y-%m-%d') - last_monday).days + 1
                     two_week_daka_dates[delta] = 1
+        
+        # 4.保存订阅账号的打卡情况到user_dict
+        today = datetime.datetime.now().strftime('%Y-%m-%d')
+        for member in member_list:
+            current_unique_id = member['uniqueId']
+            if current_unique_id not in my_unique_ids_full:
+                continue
+            current_user_dict = self.user_dict_obj.get_user_dict(current_unique_id)
+            current_user_dict['config']['two_week_daka_dates'] = group_nickname[current_unique_id]['two_week_daka_dates']
+            current_user_dict['config']['two_week_daka_dates_update_date'] = today
+            self.user_dict_obj.update_user_dict(current_user_dict)
+        
+
         return my_reply, monitor_reply, group_nickname
     
     # ---------------------------
@@ -482,6 +509,22 @@ class bczGroup:
             return False, f'使用{user_cookie["access_token"][:10]}...获取小班段位报告失败{response_json.status_code} {response_json.text}'
         return True, response_json['data']['list']
     
+    def formatGroupAuthInfo(self, share_key, user_cookie):
+        '''获取班级授权分班信息
+        返回：班级名称(班级id)[分享码]\n授权班：[授权班id]'''
+        status, data = self.getGroupInfo(share_key, user_cookie)
+        if not status:
+            return False, data
+        groupInfo = data['groupInfo']
+        authInfo = data['authorizationInfo']
+        if groupInfo['authorization']:
+            licensorInfo = authInfo['licensor']
+            auth_licensor_unique_id = licensorInfo['uniqueId']
+            auth_licensor_nickname = licensorInfo['nickname']
+            auth_ago_str = self.humanize_timestr_ago(authInfo['authorizationTime'])
+            return True, f"已授权 班长{auth_licensor_nickname}({auth_licensor_unique_id})，授权于{auth_ago_str}"
+        return True, "未授权"
+    
     # ---------------------------
     # 通知功能
     # ---------------------------
@@ -492,7 +535,7 @@ class bczGroup:
         headers = getHeaders('$group', user_cookie, time_long, index=1)
         response_json = self.http2_client_obj.send_http2_request('GET', f'https://group.baicizhan.com/group/notice?shareKey={share_key}', headers=headers, content=None).json()
         if response_json.get('code') != 1:
-            return False, f'使用{user_cookie["access_token"][:10]}...获取分享码为{share_key}的通知收到列表失败{response_json.status_code} {response_json.text}', None
+            return False, f'使用{user_cookie["access_token"][:10]}...获取分享码为{share_key}的通知收到列表失败{response_json}', None
         # 将memberIdList转换为uniqueIdList
         memberIds = set(response_json['data']['memberIdList'])
         meAcked = response_json['data']['received']
@@ -563,7 +606,7 @@ class bczGroup:
             status, own_groups = self.ownGroups(user_dict)
             if not status:
                 return False, own_groups
-            time.sleep(0.5) # 等待0.5秒，确保服务器端成员列表更新
+            time.sleep(0.9) # 等待0.9秒，确保服务器端成员列表更新
             status, data = self.getGroupInfo(group_share_key, user_cookie, -1)
             if not status:
                 return False, data
@@ -580,7 +623,7 @@ class bczGroup:
             status, own_groups = self.ownGroups(user_dict)
             if not status:
                 return False, own_groups
-            time.sleep(0.5) # 等待0.5秒，确保服务器端成员列表更新
+            time.sleep(0.9) # 等待0.9秒，确保服务器端成员列表更新
             status, data = self.getGroupInfo(group_invite_key, user_cookie, -1)
             if not status:
                 return False, data
@@ -681,11 +724,12 @@ class bczGroup:
         header['Content-Type'] = 'application/json; charset=UTF-8'
         response_json = self.http2_client_obj.send_http2_request('POST', 'https://group.baicizhan.com/group/get_recommend_ordinary_groups', headers=header, content = payload).json()
         results = []
-        if response_json['code'] == 1:
-            groups = response_json['data']['groupVoList']
-            for group in groups:
-                results.append(f'{self.num_to_rank(group["rank"]-1)} {group["memberCount"]}/{group["countLimit"]} {group["finishingRate"]*100:.2f}% {self.humanize_timestr_ago(group["buyTime"])}发布 {"[需要邀请码]"if group["onlyPublicKeyJoin"] else ""}{"[我的班级]"if group["leader"] else ""}{group["name"]} {group["introduction"]}')
-        return '\n<br>'.join(results)
+        if response_json['code'] != 1:
+            return False, response_json
+        groups = response_json['data']['groupVoList']
+        for group in groups:
+            results.append(f'{self.num_to_rank(group["rank"]-1)} {group["memberCount"]}/{group["countLimit"]} {group["finishingRate"]*100:.2f}% {self.humanize_timestr_ago(group["buyTime"])}发布 {"[需要邀请码]"if group["onlyPublicKeyJoin"] else ""}{"[我的班级]"if group["leader"] else ""}{group["name"]} {group["introduction"]}')
+        return True, '\n'.join(results)
 
     def get_prop_card_cnt(self, user_cookie):
         '''获取用户当前拥有招新卡的数量'''

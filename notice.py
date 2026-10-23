@@ -5,6 +5,8 @@
  - BCZ-Notice-Examiner
 '''
 from src.notice_parser import NoticeParser
+import os
+os.chdir(os.path.dirname(__file__))
 notice_parser = NoticeParser()
 while True:
     text = input("请输入要检查的通知（#结束）：")

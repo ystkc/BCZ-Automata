@@ -1,9 +1,9 @@
 # extract.py
-'''【独立工具】导出指定账号的铜板数'''
+'''【独立工具】导出指定账号的铜板数、IP、词书名、设备序列、绑定账号'''
 import pyperclip
 
-print("格式：can_daka(0/1)\tunique_id\tname\tword_count(新学词数)\tcooper(None)\n后面的字段会保留")
-input("请拷贝 需要导出的账号 数据表格。按回车继续。")
+print("格式：can_daka(0/1)\tunique_id\tname\tword_count(新学词数)\tcooper、ip、book_name、last_device、bind_info\n后面的字段会保留")
+input("请拷贝 需要导出的账号 数据表格。按回车继续。\n")
 template = {
         "cookie": {
             # "access_token": "",
@@ -56,6 +56,9 @@ try:
 except:
     pass
 
+def format_extract(config):
+    return f"铜{config['cooper']}、{config['ip_desc']}、{config['book_name']}、设备{config['last_device']}、绑定{config['bind_info']}"
+
 cnt = 0
 for i in data:
     if len(i) < 9:
@@ -69,7 +72,7 @@ for i in data:
         continue
     if current_user_config.get(unique_id) is not None:
         print(f"用户{unique_id}数据导出成功")
-        i[4] = current_user_config[unique_id].get('cooper', -1) # 导出原有数据
+        i[4] = format_extract(current_user_config[unique_id]) # 导出原有数据
     else:
         print(f"找不到用户{unique_id}")
         continue

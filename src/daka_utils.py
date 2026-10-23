@@ -139,6 +139,7 @@ class daka_list_class:
         self.status = [] # 标记每个patch_list中的检查状态：0未检查，1已从后检查，2已双向检查
         self.class_list = {}
         self.time_start = int(time.time())
+        self.is_sunday = datetime.datetime.now().weekday() == 6
         # 加载用户字典
         self.user_dict_obj = user_dict_obj
         logger.info(f'加载了{self.get_user_cnt()}个用户')
@@ -376,49 +377,6 @@ class daka_list_class:
                 pass
         print(f'最近日志文件名{max_logname}')
         return max_logname
-    
-    def get_group_info_from_group_manager(self, group_id):
-        '''从小班管理器获取小班信息'''
-        # {config.class_list_2048_sharekey_source}/query_group_details
-        # POST {"group_id": 123456,"week": "2025-W19"}
-        payload = {
-            "id": group_id,
-            "week": datetime.datetime.now().strftime('%Y-W%W')
-        }
-        headers = {"Content-Type": "application/json"}
-        default_group_info = [group_id, '', '', '待获取', '待获取', '/group/avatar/default0.png']
-        try:
-            response = self.http2_client_obj.send_http2_request("POST", f"{self.class_list_2048_sharekey_source}/query_group_details", headers=headers, content=payload, retry=False)
-            if response.status_code != 200:
-                raise Exception(f'请求失败，状态码{response.status_code}')
-            data = response.json()
-            if data['code'] != 200 or data['retcode'] != 0:
-                raise Exception(f'请求出错，返回值{data}<br>')
-        except Exception as e:
-            self.add_warning(f'从Group-Manager获取小班{group_id}信息失败 {e}')
-            return default_group_info
-        try:
-            group = data['data'][0]
-            # 储存到数据库
-            share_key = group['share_key']
-            name = group['name']
-            introduction = group['introduction']
-            avatar = group['avatar']
-            monitor_id = group['leader_id']
-            self.store_group_info(group_id, share_key, monitor_id, name, introduction, avatar)
-            data_time = int(datetime.datetime.now().timestamp())
-            rank = group['rank']
-            notice = group['notice']
-            self.store_notice(group_id, rank*1000, notice, data_time, 0, 0)
-            today_date_datetime = datetime.datetime.now() # 不用%m%d是为了方便计算start_date，不用%m%d%Y是为了方便strptime
-            today_date = int(today_date_datetime.strftime('%Y%m%d')) # MEMBERS_GROUPS表的日期字段
-            today_date_mmdd = int(today_date_datetime.strftime('%m%d')) # MEMBERS表的日期字段
-            for member in group['members']:
-                self.store_member(member['id'], group_id, member.get('completed_time_stamp', 0), today_date, today_date_mmdd, today_date_datetime, member['today_word_count'], member['today_study_cheat'] == '是', member['completed_times'], member['duration_days'], member['book_name'], member['nickname'], member['avatar'])
-            return [group_id, share_key, monitor_id, name, introduction, avatar]
-        except Exception as e:
-            self.add_warning(f'解析Group-Manager返回数据失败 {e}\n数据如下\n{data}<br>')
-        return default_group_info
     
     def stopper_thread(self):
         '''停止加载备份'''
@@ -1349,13 +1307,46 @@ class daka_list_class:
                     self.member_groups[(user_id, group_id)] = (1, completed_times, today_date, today_date, duration_days)
                     self.member_groups_buffer.append((user_id, group_id, 1, completed_times, today_date, today_date, duration_days))
 
-                    
+    def check_if_daka_advance(self, user_dict_, sharekey: str=None):
+        '''检查两周的打卡情况'''
+        today = datetime.datetime.now()
+        today_str = today.strftime('%Y-%m-%d %H:%M:%S')
+        wd = today.weekday()
+        user_config = user_dict_['config']
+        unique_id = user_config['unique_id']
+        if not sharekey:
+            # 获取第一个班级
+            status, groups = self.bcz_group.ownGroups(user_dict_)
+            if not status or len(groups) == 0:
+                self.add_warning(f'用户{user_config["name"]}获取失败或没有班级')
+                return False
+            sharekey = groups[0]['shareKey']
+        self.bcz_group.get_nickname(unique_id, sharekey, user_dict_)
+        user_dict_ = self.get_user_dict(unique_id)
+        # 检查是否有未打卡
+        record = user_dict_['config'].get('two_week_daka_dates')
+        if not record:
+            self.add_warning(f'获取用户{user_config["name"]}的两周打卡信息失败{record}')
+            return False
+        for i in range(14):
+            if record[i] == 0:
+                that_day_str = (today - datetime.timedelta(days=7+wd-i)).strftime('%Y-%m-%d')
+                self.add_warning(f"用户{unique_id}在{that_day_str}未打卡，查验班级({sharekey})查验时间{today_str}")
+                return False
+        return True
+
     # 打卡状态检查链接：https://group.baicizhan.com/group/study_words_together_home_page
-    def check_if_daka(self, user_cookie):
+    def check_if_daka(self, user_dict_):
+        '''检查用户今天是否打卡'''
+        user_cookie = user_dict_['cookie']
         headers = getHeaders('$group', user_cookie, int(time.time()), index = 1)
         url = 'https://group.baicizhan.com/group/study_words_together_home_page'
         response = self.http2_client_obj.send_http2_request('GET', url, headers=headers, content=None)
         response_json = response.json()
+        # 如果是周日，额外检查两周的打卡情况
+        if self.is_sunday:
+            print('a')
+            return response_json['data']['todayDaka'] and self.check_if_daka_advance(user_dict_)
         return response_json['data']['todayDaka']
     
     def check_not_daka_users(self, include_not_daka: bool):
@@ -1367,8 +1358,8 @@ class daka_list_class:
 
         not_daka_users = []
         def delayed_check_if_daka(user_dict, total_user_cnt, index):
-            time.sleep(random.randint(0, total_user_cnt * 5) / 10)
-            daka_check[index] = self.check_if_daka(user_dict['cookie'])
+            time.sleep(random.randint(0, total_user_cnt) / 10)
+            daka_check[index] = self.check_if_daka(user_dict)
             if not daka_check[index]:
                 not_daka_users.append(user_dict)
 
@@ -1432,10 +1423,7 @@ class daka_list_class:
         return self.user_dict_obj.get_access_token_by_unique_id(unique_id)
 
     def get_user_dict(self, unique_id=0):
-        index = self.user_dict_obj.get_index_by_unique_id(unique_id)
-        if index is None:
-            return None
-        return {'cookie': self.user_dict_obj.get_cookie(index), 'config': self.user_dict_obj.get_config(index)}
+        return self.user_dict_obj.get_user_dict(unique_id)
 
     def get_user_dict_list(self):
         return self.user_dict_obj.get_user_dict_list()
@@ -1716,11 +1704,11 @@ class stargazer_class:
                 self.stargazers[bcz_id]['active'] = current_timestamp # 首次出现在排行榜，视为一次活跃
                 self.stargazers[bcz_id]['stars'] = stars
                 self.stargazers[bcz_id]['rank'] = item['rank']
-                if prev_stars + 2 == stars:
+                if prev_stars - 1 != stars: # 刚匹配上抵押1星，此时在匹配也匹配不到了
                     modified_users.append(bcz_id) # 此处不save到数据库，交给后面的处理器
                 else:
                     self.save_to_db(current_timestamp, bcz_id, -1)
-        self.logger.info(f'刷新星星数成功：{self.stargazers}')
+        self.logger.info(f'刷新星星数成功（仅前{len(data["rank_users"])}名）：{self.stargazers} {modified_users}')
         return modified_users
     
     def save_to_db(self, timestamp, target_id, action):
@@ -1770,10 +1758,11 @@ class stargazer_class:
                         except:
                             rival_id = -1
                         if rival_id == -2:
-                            self.logger.info(f'体力不足')
+                            self.logger.info(f'体力不足') # NO_ENERGY
+                            check_and_charge_pk_energy(user_cookie, user_config, self.http2_client_obj, self.get_session_id())
                             self.save_to_db(start_time, target_id, 3)
                         elif rival_id == target_id:
-                            self.logger.info(f'匹配到目标rival_id:{rival_id}')
+                            self.logger.info(f'匹配到目标rival_id:{rival_id}') # CAUGHT
                             self.success_timestamp.add(start_time)
                             self.save_to_db(start_time, target_id, 2)
                         else:
@@ -2172,6 +2161,8 @@ class notice_subscriber:
                         continue
                     
                     poster_data = self.http2_client_obj.send_http2_request('GET', f'https://group.baicizhan.com/group/get_recruitment_post?id={poster_id}', headers=groupHeader, content=None).json()['data']
+                    if poster_data is None:
+                        continue
                     poster_content = poster_data['content']
                     group_id = poster_data['groupId']
                     user_id = poster_data['uniqueId']
@@ -2209,17 +2200,11 @@ class notice_subscriber:
             self.logger.info(f'最长时间没访问的授权分班 {subgroup_info["name"]}({subgroup_id})，上次访问：{self.bcz_group.humanize_second_ago(subgroup_timedelta//1000)}')
             
             if subgroup_timedelta // 1000 > self.MIN_SUBGROUP_TIMEDELTA:
-                status, leader_id, leader_name = self.bcz_group.getGroupLeader(subgroup_sharekey, user_cookie)
+                status, leader_id, _ = self.bcz_group.getGroupLeader(subgroup_sharekey, user_cookie)
                 if not status:
                     self.logger.error(f'获取授权分班 {subgroup_info["name"]}({subgroup_id}) 的班长失败')
                     result_queue.put(user_results)
                     return
-                status, subgroup_info_detailed = self.bcz_group.getGroupInfo(subgroup_sharekey, user_cookie)
-                if not status:
-                    self.logger.error(f'获取授权分班 {subgroup_info["name"]}({subgroup_id}) 的详细信息失败')
-                    result_queue.put(user_results)
-                    return
-                auth_time_str = self.bcz_group.humanize_timestr_ago(subgroup_info_detailed['authorizationInfo']['authorizationTime'])
                 status, group_intro = self.bcz_group.formatGroupInfo(subgroup_info['shareKey'], user_cookie)
                 if not status:
                     self.logger.error(f'获取授权分班 {subgroup_info["name"]}({subgroup_id}) 的班级介绍失败')
@@ -2227,7 +2212,7 @@ class notice_subscriber:
                     return
                 user_results['new_notice_items'].append({'user_name': user_name, 
                                                     'group_name': group_intro,
-                                                    'notice': f'【授权分班管理】最长时间没访问的授权分班 {subgroup_info["name"]}({subgroup_id})，班长{leader_name}({leader_id})，授权于{auth_time_str}，上次访问：{self.bcz_group.humanize_second_ago(subgroup_timedelta//1000)}\n订阅账号信息：请输入操作码2查询\n\n班级公告：{subgroup_info["notice"]}\n\n要访问分班吗？',
+                                                    'notice': f'【授权分班管理】最长时间没访问的授权分班 {subgroup_info["name"]}({subgroup_id})，上次访问：{self.bcz_group.humanize_second_ago(subgroup_timedelta//1000)}\n订阅账号信息：请输入操作码2查询\n\n班级公告：{subgroup_info["notice"]}\n\n要访问分班吗？',
                                                     'introduction': subgroup_info['introduction'],
                                                     'group_id': subgroup_id, 
                                                     'unique_id': unique_id,
@@ -2325,7 +2310,7 @@ class notice_subscriber:
         'propcard_2': {
             'notice_hash': 'propcard_2',
             'notice': '【招新卡年级】请选择要切换到的年级\n义务教育1-9、高中10-12，大学14-19，成人23-24',
-            'operation': '输入0取消 -1不切换'
+            'operation': '输入0取消(查看下一个班级) -1不切换'
         },
         'propcard_3': {
             'notice_hash': 'propcard_3',
@@ -2507,7 +2492,10 @@ class notice_subscriber:
                 time.sleep(1)
                 # 刷新推荐小班
                 self.new_notice[0].update(self.DEFAULT_PROMPT['propcard_3'])
-                status, rec_preview = self.bcz_group.preview_recommended_ordinary_groups(user_cookie)
+                success, rec_preview = self.bcz_group.preview_recommended_ordinary_groups(user_cookie)
+                if not success:
+                    return 400, f'获取推荐小班失败:{rec_preview}'
+                self.new_notice[0]['notice'] += rec_preview
                 if status:
                     return 200, f'发卡成功:{message_str}'
                 else:
@@ -2569,8 +2557,7 @@ class notice_subscriber:
             if not status:
                 return 400, f'获取在小班的账号失败 {s_unique_id}'
             user_info_str = self.bcz_group.user_dict_obj.format_user_strs(1, [s_unique_id])[0]
-            user_dict_idx = self.bcz_group.user_dict_obj.get_index_by_unique_id(s_unique_id)
-            s_user_dict = self.bcz_group.user_dict_obj.get_user_dict(user_dict_idx)
+            s_user_dict = self.bcz_group.user_dict_obj.get_user_dict(s_unique_id)
             s_user_cookie = s_user_dict['cookie']
 
             if operation_code == 1: # 加入
@@ -2595,6 +2582,9 @@ class notice_subscriber:
                     return 455, f'退出失败 {message_str}'
             elif operation_code == 3: # 改名
                 status, message_str = self.reply_and_ack(s_unique_id, s_user_cookie, group_share_key, reply_content)
+                status1, user_str = refresh()
+                if not status1:
+                    return 400, f'获取在小班的账号失败 {s_unique_id}'
                 if status:
                     return 200, f'成功 {message_str}'
                 else:
@@ -2636,16 +2626,9 @@ class notice_subscriber:
                 leader_group_cnt = 1
                 for group in groups:
                     if group['leader']:
-                        auth_group_info = "未授权"
-                        if group['authorization']:
-                            status, auth_group_info = self.bcz_group.getGroupInfo(group['shareKey'], s_user_cookie)
-                            if not status:
-                                return 400, '获取班级信息失败：' + message_str
-                            licensor = auth_group_info['authorizationInfo']['licensor']
-                            auth_licensor_unique_id = licensor['uniqueId']
-                            auth_licensor_nickname = licensor['nickname']
-                            auth_ago_str = self.bcz_group.humanize_timestr_ago(auth_group_info['authorizationInfo']['authorizationTime'])
-                            auth_group_info = f"已授权 班长{auth_licensor_nickname}({auth_licensor_unique_id})，授权于{auth_ago_str}"
+                        status, auth_group_info = self.bcz_group.formatGroupAuthInfo(group['shareKey'], s_user_cookie)
+                        if not status:
+                            return 400, '获取班级信息失败：' + message_str
                         self.new_notice[0]['notice'] += f'{leader_group_cnt}. {group["name"]}({group["id"]}){auth_group_info}\n'
                         leader_group_cnt += 1
                 return 200, '请继续选择需要申请的班级'
@@ -5036,7 +5019,7 @@ def daka_headless(daka_list: daka_list_class, user_cookie, user_config, http2_cl
     time.sleep(delay)
 
     quiting = False
-    if only_not_daka and daka_list.check_if_daka(user_cookie):
+    if only_not_daka and daka_list.check_if_daka({'cookie': user_cookie, 'config': user_config}):
         message = f"{unique_id}#已打卡，跳过"
         quiting = True
     else:

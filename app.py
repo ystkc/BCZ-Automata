@@ -11,6 +11,8 @@ import logging
 import queue
 from urllib import parse
 
+from src.thriftAPI.ttypes import UserBindInfo
+
 debug = True
 if '--debug' in sys.argv:
     level = logging.DEBUG
@@ -32,7 +34,7 @@ import traceback
 import threading
 
 from src.http2_client import http2_client
-from src.thrift_utils import user_dict
+from src.thrift_utils import user_dict, unified_user
 from append import append_user_data, delete_user_data
 from src.config import Config
 from src import bcz
@@ -54,6 +56,7 @@ logger.setLevel(level)
 
 http2_client_obj = http2_client()
 user_dict_obj = user_dict()
+unified_user_obj = unified_user(http2_client_obj)
 bcz_group = bczGroup(http2_client_obj, user_dict_obj, config)
 daka_list_obj = daka_list_class(logger, http2_client_obj, user_dict_obj, config, bcz_group)
 
@@ -644,6 +647,8 @@ async def change_avatar(_: Request, unique_id: str='', img_data: UploadFile=File
     except Exception as e:
         return restful(400, f'{e}')
 
+WEEK_CHECK_DEBUG = True
+GET_FULL_INFO_DEBUG = False
 @app.get("/own_groups")  
 async def own_groups(_: Request, unique_id: str=''):
     # return restful(200, '获取用户群组成功', [{'name': '用户年级组10', 'share_key': '', 'rank': '10已打卡于2022-01-01 00:00:00', 'introduction': '加入上限10', 'notice': '授权上限10', 'group_nickname': ''}])
@@ -655,6 +660,8 @@ async def own_groups(_: Request, unique_id: str=''):
         if not status:
             return restful(400, '获取用户群组失败', groups)
         groups_final = []
+        first = True
+        today = datetime.datetime.now()
         for group in groups:
             
             # 要将introduction和notice中的换行符替换成<br>
@@ -680,6 +687,11 @@ async def own_groups(_: Request, unique_id: str=''):
                 'group_nickname': '未获取',
                 'authorization': group['authorization'],
             })
+            if WEEK_CHECK_DEBUG and first:
+                # 获取第一个组的信息，获取最近两周打卡情况并写入user_dict，若有未打卡，则警告
+                first = False
+                daka_list_obj.check_if_daka_advance(user_dict, group['shareKey'])
+
 
         #  https://group.baicizhan.com/group/study_words_together_home_page
         time_long = int(time.time() * 1000)
@@ -695,9 +707,28 @@ async def own_groups(_: Request, unique_id: str=''):
         result = bcz.userBasicInfo(user_dict['cookie']['access_token'], http2_client_obj.get_http2_client())
         daka_timestamp = result.learn_info.last_sync_done_score_time
         user_dict['config']['book_id'] = result.user_info.current_word_level_id
+        user_dict['config']['book_name'] = result.user_info.current_word_level_name
+        user_dict['config']['ip_desc'] = result.user_info.ip_desc
         user_ip_desc = result.user_info.ip_desc
-        # user_school_name = result.user_info.user_education_info.school_name
-        
+
+        if GET_FULL_INFO_DEBUG:
+            # 获取学习计划信息
+            user_dict['config']['learn_count'] = result.learn_info.daily_plan_count
+            user_dict['config']['review_count'] = result.learn_info.review_plan_count
+            user_school_name = result.user_info.user_education_info.school_name
+
+            # 获取上一个设备信息
+            result_ucat = unified_user_obj.unified_user_check_access_token(user_dict['cookie'], user_dict['config'])
+            user_dict['config']['last_device'] = result_ucat.last_device
+
+            # 获取绑定信息
+            def format_bind_info(info_list: list[UserBindInfo]):
+                result = ''
+                for i, info in enumerate(info_list):
+                    result += f'【{i+1}】{info.nickname}-{info.provider}-{info.unionid} '
+                return result
+            result_ugbi_list = unified_user_obj.unified_user_get_bind_info(user_dict['cookie'], user_dict['config'])
+            user_dict['config']['bind_info'] = format_bind_info(result_ugbi_list)
 
         date = datetime.datetime.fromtimestamp(daka_timestamp).strftime('%Y-%m-%d %H-%M-%S')
         user_dict['config']['grade'] = data['grade']
@@ -715,6 +746,7 @@ async def own_groups(_: Request, unique_id: str=''):
 
         return restful(200, '获取用户群组成功', groups_final)
     except Exception:
+        raise
         return restful(400, traceback.format_exc())
 
 @app.get('/subscribe/get_nickname')
