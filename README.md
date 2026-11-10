@@ -1,6 +1,6 @@
 # BCZ-Automata
 
-账号矩阵管理器（打卡、互动、点赞、海报、招新卡、加退班、公告阅读和修改、授权）
+账号矩阵管理器（打卡、互动、点赞、海报、招新卡、加退班、公告批量阅读和修改、授权）
 
 ## ⚠️ 免责申明
 
@@ -298,14 +298,6 @@ groupmanager：
 
 ## 第六部分：注意事项
 
----
-
-## 第七部分：参考 API（部分活动，使用频率较低，不提供自动化）
-
-- 2024NCSVC_pk 报名：状态查询 - `https://pkonline1.baicizhan.com/api/contest/2024/tournament/status?code=mB5AG9fCzo`
-- 2024NCSVC_pk 报名：报名 - `https://pkonline1.baicizhan.com/api/contest/2024/tournament/preApply?code=mB5AG9fCzo&type=2`
-- 同桌申请 - `https://social.baicizhan.com/api/deskmate/invite_deskmate?uniqueId=xxx`
-- 同桌通过 - `https://social.baicizhan.com/api/deskmate/recv_deskmate?uniqueId=xxx&source=0`
 
 ---
 

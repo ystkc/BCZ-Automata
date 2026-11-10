@@ -68,6 +68,12 @@ class user_dict:
             return None
         return self.__user_dict_list[index]['cookie']['access_token']
     
+    def get_user_dict_by_access_token(self, access_token:str = ""):
+        for user_dict in self.__user_dict_list:
+            if user_dict['cookie']['access_token'] == access_token:
+                return user_dict
+        return None
+    
     def get_except_from_arbiter(self, dakaing_unique_ids: set, cnt, except_unique_id: set, daka_pk_status: dict, include_subscriber=False): # return the dict
         available = self.arbiter_unique_ids.copy()
         if include_subscriber:
